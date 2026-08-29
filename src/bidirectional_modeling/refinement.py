@@ -29,9 +29,11 @@ class ClosureAnalyzer:
         def state_key(state: Mapping[str, Any]) -> Tuple[Any, ...]:
             return tuple(sorted((key, repr(value)) for key, value in state.items()))
 
-        all_declared = [(name, dict(state)) for name, state in model.states.items()]
-        complete = len(all_declared) <= max_states
-        reachable = all_declared[:max_states]
+        initial = [
+            (name, dict(model.states[name])) for name in model.initial_states
+        ]
+        complete = len(initial) <= max_states
+        reachable = initial[:max_states]
         seen = {state_key(state) for _, state in reachable}
         frontier = list(reachable)
         actions = ("noop",) + tuple(

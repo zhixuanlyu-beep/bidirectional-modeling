@@ -78,6 +78,8 @@ class ResourceBudget:
     def __post_init__(self) -> None:
         if self.max_candidates <= 0 or self.max_simulations <= 0:
             raise ValueError("budget limits must be positive")
+        if math.isnan(float(self.max_cost)) or self.max_cost < 0:
+            raise ValueError("max_cost must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -198,6 +200,10 @@ class FieldRequirement:
     aggregation: Aggregation = Aggregation.FINAL
     tolerance: float = 0.0
 
+    def __post_init__(self) -> None:
+        if math.isnan(float(self.tolerance)) or self.tolerance < 0:
+            raise ValueError("requirement tolerance must be non-negative")
+
     def semantic_signature(self) -> Tuple[Any, ...]:
         return (
             "field",
@@ -268,6 +274,10 @@ class ModelMetricRequirement:
     expected: float
     category: RequirementCategory = RequirementCategory.CONSTRAINT
     tolerance: float = 0.0
+
+    def __post_init__(self) -> None:
+        if math.isnan(float(self.tolerance)) or self.tolerance < 0:
+            raise ValueError("requirement tolerance must be non-negative")
 
     def semantic_signature(self) -> Tuple[Any, ...]:
         return (
@@ -410,13 +420,26 @@ class MacroSpec:
     def __post_init__(self) -> None:
         if self.horizon < 1:
             raise ValueError("horizon must be at least one")
+        if math.isnan(float(self.tolerance)) or self.tolerance < 0:
+            raise ValueError("macro tolerance must be non-negative")
         missing = set(self.equivalence.fields) - set(self.observables)
         if missing:
             raise ValueError("equivalence fields must be declared observables: %s" % sorted(missing))
 
     @property
     def requirements(self) -> Tuple[Requirement, ...]:
-        return self.objectives + self.invariants + self.constraints
+        requirements = self.objectives + self.invariants + self.constraints
+        if self.tolerance == 0:
+            return requirements
+        # Macro tolerance is the default numeric error bound.  A non-zero
+        # requirement-local tolerance remains an explicit override.
+        return tuple(
+            replace(requirement, tolerance=self.tolerance)
+            if isinstance(requirement, (FieldRequirement, ModelMetricRequirement))
+            and requirement.tolerance == 0
+            else requirement
+            for requirement in requirements
+        )
 
     def semantic_signature(self) -> Tuple[Any, ...]:
         def canonical(requirements: Tuple[Requirement, ...]) -> Tuple[Any, ...]:
@@ -669,6 +692,10 @@ class Experiment:
     question: str
     cost: float = 0.0
 
+    def __post_init__(self) -> None:
+        if math.isnan(float(self.cost)) or self.cost < 0:
+            raise ValueError("experiment cost must be non-negative")
+
 
 @dataclass(frozen=True)
 class DiscriminatingQuery:
@@ -705,6 +732,8 @@ class InterpretationResult:
     discriminating_query: Optional[DiscriminatingQuery]
     non_identifiable: bool
     score_semantics: str = "uncalibrated ranking score; not a probability"
+    simulations_used: int = 0
+    truncated: bool = False
 
 
 @dataclass(frozen=True)

@@ -50,7 +50,9 @@ class RegistryGenerator:
     def generate(
         self, spec: MacroSpec, context: Context, budget: ResourceBudget
     ) -> Iterable[ExecutableModel]:
-        return iter(self.models)
+        # Preserve the concrete finite collection so Realizer can distinguish
+        # exact completion from candidate-limit truncation.
+        return self.models
 
 
 class ParametricCandidateGenerator:
@@ -139,7 +141,14 @@ class Realizer:
                 break
             searched += 1
             candidate_budget = replace(budget, max_simulations=remaining_simulations)
-            certificate = self.evaluator.evaluate(model, spec, context, candidate_budget)
+            try:
+                certificate = self.evaluator.evaluate(
+                    model, spec, context, candidate_budget
+                )
+            except Exception as error:
+                certificate = self.evaluator.failure_certificate(
+                    model, spec, context, str(error)
+                )
             simulations_used += certificate.verified_scenarios
             remaining_simulations -= certificate.verified_scenarios
             counterexamples = []
@@ -161,9 +170,34 @@ class Realizer:
                         truncated = True
                         break
                     probe_budget = replace(budget, max_simulations=remaining_simulations)
-                    outcome = probe.probe(
-                        model, spec, context, self.evaluator, probe_budget
-                    )
+                    try:
+                        outcome = probe.probe(
+                            model, spec, context, self.evaluator, probe_budget
+                        )
+                    except Exception as error:
+                        counterexamples.append(
+                            Counterexample(
+                                kind="probe-error",
+                                summary="a configured red-team probe failed and could not certify the candidate",
+                                witness={
+                                    "model": getattr(model, "name", type(model).__name__),
+                                    "probe": type(probe).__name__,
+                                    "error": str(error),
+                                },
+                                violated=("complete adversarial verification",),
+                                suggested_refinements=(
+                                    "repair or remove the failing probe before accepting the candidate",
+                                ),
+                                blocking=True,
+                            )
+                        )
+                        # An arbitrary probe may have consumed any portion of the
+                        # budget before raising. Fail closed and reserve all of
+                        # the remaining allowance instead of risking overspend.
+                        simulations_used += remaining_simulations
+                        remaining_simulations = 0
+                        truncated = True
+                        break
                     simulations_used += outcome.simulations_used
                     remaining_simulations -= outcome.simulations_used
                     if outcome.certificate is not None:

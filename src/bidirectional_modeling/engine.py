@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Dict, Iterable, Optional, Sequence, Tuple
 
 from .core import (
@@ -30,10 +30,16 @@ class MacroRoundTripReport:
     realization: RealizationResult
     interpretations: Tuple[InterpretationResult, ...]
     semantic_preservation: Tuple[bool, ...]
+    simulations_used: int = 0
+    truncated: bool = False
 
     @property
     def passed(self) -> bool:
-        return bool(self.semantic_preservation) and all(self.semantic_preservation)
+        return (
+            not self.truncated
+            and bool(self.semantic_preservation)
+            and all(self.semantic_preservation)
+        )
 
 
 @dataclass(frozen=True)
@@ -41,10 +47,12 @@ class MicroRoundTripReport:
     interpretation: InterpretationResult
     realization: RealizationResult
     behaviorally_equivalent_models: Tuple[str, ...]
+    simulations_used: int = 0
+    truncated: bool = False
 
     @property
     def passed(self) -> bool:
-        return bool(self.behaviorally_equivalent_models)
+        return not self.truncated and bool(self.behaviorally_equivalent_models)
 
 
 @dataclass(frozen=True)
@@ -66,17 +74,11 @@ class RefinementLoopReport:
     stopped_reason: str
 
 
-def behaviorally_equivalent(
-    left: ExecutableModel,
-    right: ExecutableModel,
-    spec: MacroSpec,
-    context: Context,
-) -> bool:
-    def grouped_traces(model: ExecutableModel) -> Dict[str, list]:
-        result: Dict[str, list] = defaultdict(list)
-        traces = tuple(model.simulate(context, spec.horizon))
+def _traces_behaviorally_equivalent(left_traces, right_traces, spec: MacroSpec) -> bool:
+    def grouped_traces(traces) -> Dict[Tuple[str, str], list]:
+        result: Dict[Tuple[str, str], list] = defaultdict(list)
         for trace in traces:
-            result[trace.intervention].append(trace)
+            result[(trace.initial_state, trace.intervention)].append(trace)
         return result
 
     def trace_equivalent(left_trace, right_trace) -> bool:
@@ -108,13 +110,26 @@ def behaviorally_equivalent(
 
         return all(augment(index, set()) for index in range(len(left_traces)))
 
-    left_groups = grouped_traces(left)
-    right_groups = grouped_traces(right)
+    left_groups = grouped_traces(left_traces)
+    right_groups = grouped_traces(right_traces)
     if set(left_groups) != set(right_groups):
         return False
     return all(
         has_perfect_matching(left_groups[name], right_groups[name])
         for name in left_groups
+    )
+
+
+def behaviorally_equivalent(
+    left: ExecutableModel,
+    right: ExecutableModel,
+    spec: MacroSpec,
+    context: Context,
+) -> bool:
+    return _traces_behaviorally_equivalent(
+        tuple(left.simulate(context, spec.horizon)),
+        tuple(right.simulate(context, spec.horizon)),
+        spec,
     )
 
 
@@ -286,22 +301,55 @@ class BidirectionalModelingEngine:
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
     ) -> MacroRoundTripReport:
+        budget = budget or ResourceBudget()
         realization = self.realize(spec, context, source, budget)
         interpretations = []
         preservation = []
         hypotheses = tuple(hypotheses)
+        simulations_used = realization.simulations_used
+        remaining_simulations = max(
+            0, budget.max_simulations - simulations_used
+        )
+        truncated = realization.truncated
         for candidate in realization.candidates:
-            result = self.interpret(
-                candidate.model, context, hypotheses, evidence, experiments, budget
-            )
+            if remaining_simulations <= 0:
+                result = InterpretationResult(
+                    model_name=candidate.model.name,
+                    candidates=(),
+                    equivalent_explanations=(),
+                    discriminating_query=None,
+                    non_identifiable=False,
+                    truncated=True,
+                )
+            else:
+                interpretation_budget = replace(
+                    budget, max_simulations=remaining_simulations
+                )
+                result = self.interpret(
+                    candidate.model,
+                    context,
+                    hypotheses,
+                    evidence,
+                    experiments,
+                    interpretation_budget,
+                )
+                simulations_used += result.simulations_used
+                remaining_simulations -= result.simulations_used
             interpretations.append(result)
+            truncated = truncated or result.truncated
             preservation.append(
                 any(
                     item.hypothesis.spec.semantically_equivalent(spec)
                     for item in result.candidates
                 )
             )
-        return MacroRoundTripReport(realization, tuple(interpretations), tuple(preservation))
+        return MacroRoundTripReport(
+            realization,
+            tuple(interpretations),
+            tuple(preservation),
+            simulations_used,
+            truncated,
+        )
 
     def micro_round_trip(
         self,
@@ -313,17 +361,84 @@ class BidirectionalModelingEngine:
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
     ) -> MicroRoundTripReport:
+        budget = budget or ResourceBudget()
         interpretation = self.interpret(
             model, context, hypotheses, evidence, experiments, budget
         )
         if not interpretation.candidates:
             raise ValueError("no compatible macro hypothesis can seed the return realization")
         top_spec = interpretation.candidates[0].hypothesis.spec
-        realization = self.realize(top_spec, context, realization_source, budget)
-        satisfying = realization.candidates + realization.dominated
-        equivalent = tuple(
-            item.model.name
-            for item in satisfying
-            if behaviorally_equivalent(model, item.model, top_spec, context)
+        simulations_used = interpretation.simulations_used
+        remaining_simulations = max(
+            0, budget.max_simulations - simulations_used
         )
-        return MicroRoundTripReport(interpretation, realization, equivalent)
+        truncated = interpretation.truncated
+        if remaining_simulations <= 0:
+            realization = RealizationResult(
+                spec=top_spec,
+                candidates=(),
+                rejected=(),
+                dominated=(),
+                searched_candidates=0,
+                truncated=True,
+                simulations_used=0,
+            )
+        else:
+            realization_budget = replace(
+                budget, max_simulations=remaining_simulations
+            )
+            realization = self.realize(
+                top_spec, context, realization_source, realization_budget
+            )
+            simulations_used += realization.simulations_used
+            remaining_simulations -= realization.simulations_used
+        truncated = truncated or realization.truncated
+        satisfying = realization.candidates + realization.dominated
+        equivalent = []
+        original_batch = None
+        if satisfying and remaining_simulations > 0:
+            trace_budget = replace(
+                budget, max_simulations=remaining_simulations
+            )
+            original_batch = self.realizer.evaluator.collect(
+                model, context, top_spec.horizon, trace_budget
+            )
+            simulations_used += original_batch.simulations_used
+            remaining_simulations -= original_batch.simulations_used
+            if not original_batch.complete:
+                truncated = True
+
+        compared = 0
+        if original_batch is not None and original_batch.complete:
+            for item in satisfying:
+                if item.model is model:
+                    candidate_batch = original_batch
+                else:
+                    if remaining_simulations <= 0:
+                        truncated = True
+                        break
+                    trace_budget = replace(
+                        budget, max_simulations=remaining_simulations
+                    )
+                    candidate_batch = self.realizer.evaluator.collect(
+                        item.model, context, top_spec.horizon, trace_budget
+                    )
+                    simulations_used += candidate_batch.simulations_used
+                    remaining_simulations -= candidate_batch.simulations_used
+                compared += 1
+                if not candidate_batch.complete:
+                    truncated = True
+                    continue
+                if _traces_behaviorally_equivalent(
+                    original_batch.traces, candidate_batch.traces, top_spec
+                ):
+                    equivalent.append(item.model.name)
+        if compared < len(satisfying):
+            truncated = True
+        return MicroRoundTripReport(
+            interpretation,
+            realization,
+            tuple(equivalent),
+            simulations_used,
+            truncated,
+        )

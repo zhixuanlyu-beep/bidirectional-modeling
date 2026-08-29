@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, Mapping, Optional, Protocol, Sequence, Tuple, Union
 
 from .core import (
@@ -18,11 +18,12 @@ from .core import (
     PurposeHypothesis,
     PurposeLevel,
     ResourceBudget,
+    Trace,
     EquivalenceSpec,
     MacroSpec,
     normalized_entropy,
 )
-from .evaluation import SatisfactionEvaluator
+from .evaluation import SatisfactionEvaluator, TraceBatch
 
 
 class HypothesisGenerator(Protocol):
@@ -55,18 +56,21 @@ class ObservedEffectGenerator:
     """
 
     def __init__(self, horizon: int = 1) -> None:
+        if horizon < 1:
+            raise ValueError("horizon must be at least one")
         self.horizon = horizon
 
-    def generate(
-        self, model: ExecutableModel, context: Context
+    def generate_from_traces(
+        self, traces: Sequence[Trace], complete: bool = True
     ) -> Iterable[PurposeHypothesis]:
-        traces = tuple(model.simulate(context, self.horizon))
-        if not traces:
+        """Derive effects from one completely enumerated, reusable trace batch."""
+
+        if not complete or not traces or any(not trace.snapshots for trace in traces):
             return ()
         common_fields = set(traces[0].snapshots[0])
         for trace in traces:
-            common_fields.intersection_update(trace.snapshots[0])
-            common_fields.intersection_update(trace.snapshots[-1])
+            for snapshot in trace.snapshots:
+                common_fields.intersection_update(snapshot)
         hypotheses = []
         for field_name in sorted(common_fields):
             initial_values = [trace.snapshots[0][field_name] for trace in traces]
@@ -113,6 +117,12 @@ class ObservedEffectGenerator:
                 )
             )
         return tuple(hypotheses)
+
+    def generate(
+        self, model: ExecutableModel, context: Context
+    ) -> Iterable[PurposeHypothesis]:
+        traces = tuple(model.simulate(context, self.horizon))
+        return self.generate_from_traces(traces)
 
 
 @dataclass(frozen=True)
@@ -167,9 +177,16 @@ def _is_direct_intent_evidence(item: Evidence, minimum_strength: float) -> bool:
 def _expected_information_gain(
     candidates: Sequence[InterpretationCandidate], experiment: Experiment
 ) -> Tuple[float, Mapping[str, float]]:
-    weights = [max(candidate.ranking_score, 1e-12) for candidate in candidates]
+    # Ranking scores combine fit and evidence for ordering, but are explicitly
+    # uncalibrated. Information gain therefore uses the declared hypothesis
+    # priors and never silently reinterprets a ranking score as a probability.
+    weights = [candidate.hypothesis.prior for candidate in candidates]
     total = sum(weights)
-    priors = [weight / total for weight in weights]
+    priors = (
+        [weight / total for weight in weights]
+        if total > 0
+        else [1.0 / len(candidates)] * len(candidates)
+    )
     predictions = {
         candidate.hypothesis.name: candidate.hypothesis.predictions.get(experiment.name, 0.5)
         for candidate in candidates
@@ -231,14 +248,56 @@ class Interpreter:
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
     ) -> InterpretationResult:
+        budget = budget or ResourceBudget()
         all_evidence = tuple(context.history) + tuple(evidence)
-        if hasattr(hypotheses, "generate"):
+        batches: dict[int, TraceBatch] = {}
+        simulations_used = 0
+        remaining_simulations = budget.max_simulations
+        truncated = False
+
+        trace_generator = getattr(hypotheses, "generate_from_traces", None)
+        if callable(trace_generator):
+            horizon = int(getattr(hypotheses, "horizon"))
+            batch_budget = replace(
+                budget, max_simulations=remaining_simulations
+            )
+            batch = self.evaluator.collect(model, context, horizon, batch_budget)
+            batches[horizon] = batch
+            simulations_used += batch.simulations_used
+            remaining_simulations -= batch.simulations_used
+            truncated = not batch.complete
+            hypothesis_items = trace_generator(batch.traces, batch.complete)
+        elif hasattr(hypotheses, "generate"):
             hypothesis_items = hypotheses.generate(model, context)  # type: ignore[union-attr]
         else:
             hypothesis_items = iter(hypotheses)  # type: ignore[arg-type]
         candidates = []
+        inspected = 0
         for hypothesis in hypothesis_items:
-            certificate = self.evaluator.evaluate(model, hypothesis.spec, context, budget)
+            if inspected >= budget.max_candidates:
+                truncated = True
+                break
+            inspected += 1
+            horizon = hypothesis.spec.horizon
+            batch = batches.get(horizon)
+            if batch is None:
+                if remaining_simulations <= 0:
+                    truncated = True
+                    break
+                batch_budget = replace(
+                    budget, max_simulations=remaining_simulations
+                )
+                batch = self.evaluator.collect(
+                    model, context, horizon, batch_budget
+                )
+                batches[horizon] = batch
+                simulations_used += batch.simulations_used
+                remaining_simulations -= batch.simulations_used
+            if not batch.complete:
+                truncated = True
+            certificate = self.evaluator.evaluate_batch(
+                model, hypothesis.spec, context, batch, budget
+            )
             if not certificate.satisfied:
                 continue
             fit = certificate.confidence.value
@@ -310,4 +369,6 @@ class Interpreter:
             equivalent_explanations=groups,
             discriminating_query=query,
             non_identifiable=non_identifiable,
+            simulations_used=simulations_used,
+            truncated=truncated,
         )

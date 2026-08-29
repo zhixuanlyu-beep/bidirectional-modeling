@@ -39,7 +39,7 @@ from .engine import (
     RefinementStep,
     behaviorally_equivalent,
 )
-from .evaluation import SatisfactionEvaluator
+from .evaluation import SatisfactionEvaluator, TraceBatch
 from .interpretation import (
     CatalogHypothesisGenerator,
     HypothesisGenerator,
@@ -106,9 +106,10 @@ __all__ = [
     "SatisfactionCertificate",
     "SatisfactionEvaluator",
     "Trace",
+    "TraceBatch",
     "InterpretationScoringPolicy",
     "behaviorally_equivalent",
     "pareto_partition",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
