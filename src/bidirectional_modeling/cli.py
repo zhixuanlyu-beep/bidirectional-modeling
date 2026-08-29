@@ -6,7 +6,6 @@ import argparse
 import json
 from typing import Any, Dict
 
-from .core import Concept
 from .engine import BidirectionalModelingEngine
 from .examples import (
     organization_interpretation_scenario,
@@ -28,17 +27,14 @@ def build_demo_report() -> Dict[str, Any]:
 
     science_spec, science_context, science_model = science_closure_scenario()
     closure = engine.check_closure(science_model, science_spec, science_context)
-    engine.concepts.add(
-        Concept(
-            "position state",
-            "states are equivalent when their observed position is equal",
-        )
+    refinement = engine.refine_until_closed(
+        science_model,
+        science_spec,
+        science_context,
+        lambda report, _spec, _model: report.suggested_features[0],
+        concept_name="position state",
     )
-    refined = None
-    if closure.counterexamples:
-        refined = engine.concepts.refine_from_counterexample(
-            "position state", closure.counterexamples[0]
-        )
+    refined = engine.concepts.get("position state")
 
     org_context, org_model, hypotheses, experiments, evidence = (
         organization_interpretation_scenario()
@@ -56,7 +52,7 @@ def build_demo_report() -> Dict[str, Any]:
             "pareto_candidates": [
                 {
                     "model": item.model.name,
-                    "confidence": round(item.confidence, 4),
+                    "verification_score": round(item.verification_score, 4),
                     "metrics": {
                         "cost": item.model.metrics.cost,
                         "complexity": item.model.metrics.complexity,
@@ -80,6 +76,7 @@ def build_demo_report() -> Dict[str, Any]:
                 for item in realized.rejected
             ],
             "dominated": [item.model.name for item in realized.dominated],
+            "simulations_used": realized.simulations_used,
         },
         "interpret": {
             "structure": org_model.name,
@@ -87,12 +84,13 @@ def build_demo_report() -> Dict[str, Any]:
                 {
                     "name": item.hypothesis.name,
                     "level": item.hypothesis.level.value,
-                    "confidence": round(item.confidence, 4),
+                    "ranking_score": round(item.ranking_score, 4),
                     "caveats": list(item.caveats),
                 }
                 for item in interpreted.candidates
             ],
             "non_identifiable": interpreted.non_identifiable,
+            "score_semantics": interpreted.score_semantics,
             "discriminating_query": (
                 {
                     "experiment": interpreted.discriminating_query.experiment.name,
@@ -124,6 +122,8 @@ def build_demo_report() -> Dict[str, Any]:
                 else []
             ),
             "concept_version": refined.version if refined else 1,
+            "closed_after_refinement": refinement.closed,
+            "final_observables": list(refinement.final_spec.observables),
         },
     }
 
@@ -133,8 +133,8 @@ def _print_human(report: Dict[str, Any]) -> None:
     print("宏观目的 → 微观结构：%s" % realized["goal"])
     for candidate in realized["pareto_candidates"]:
         print(
-            "  ✓ %s  confidence=%.4f  metrics=%s"
-            % (candidate["model"], candidate["confidence"], candidate["metrics"])
+            "  ✓ %s  verification_score=%.4f  metrics=%s"
+            % (candidate["model"], candidate["verification_score"], candidate["metrics"])
         )
     for rejected in realized["rejected"]:
         why = rejected["counterexamples"] or rejected["failed_checks"]
@@ -145,8 +145,8 @@ def _print_human(report: Dict[str, Any]) -> None:
     for candidate in interpreted["ranked_hypotheses"]:
         caveat = "；" + "；".join(candidate["caveats"]) if candidate["caveats"] else ""
         print(
-            "  • %s [%s] confidence=%.4f%s"
-            % (candidate["name"], candidate["level"], candidate["confidence"], caveat)
+            "  • %s [%s] ranking_score=%.4f%s"
+            % (candidate["name"], candidate["level"], candidate["ranking_score"], caveat)
         )
     query = interpreted["discriminating_query"]
     if query:
@@ -156,6 +156,7 @@ def _print_human(report: Dict[str, Any]) -> None:
     print("\n闭合性检查：%s" % ("通过" if closure["closed"] else "失败"))
     for suggestion in closure["suggested_refinements"]:
         print("  → %s" % suggestion)
+    print("  闭环细化后：%s" % ("闭合" if closure["closed_after_refinement"] else "仍未闭合"))
 
 
 def main() -> None:
@@ -172,4 +173,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

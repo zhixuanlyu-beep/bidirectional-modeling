@@ -96,7 +96,7 @@ class FrameworkTests(unittest.TestCase):
             "position state", counterexample
         )
 
-        self.assertGreater(updated.version, 1)
+        self.assertEqual(updated.version, 2)
         self.assertTrue(updated.negative_examples)
         self.assertTrue(updated.boundaries)
         self.assertTrue(any("velocity" in item for item in updated.candidate_definitions))
@@ -144,4 +144,3 @@ class FrameworkTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

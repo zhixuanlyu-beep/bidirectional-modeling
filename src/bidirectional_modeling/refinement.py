@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from itertools import combinations
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 
 from .core import ClosureReport, Concept, Context, Counterexample, FiniteStateModel, MacroSpec
 
@@ -13,12 +13,54 @@ class ClosureAnalyzer:
     """Finds x1 ~ x2 but T(x1) !~ T(x2) witnesses."""
 
     def analyze(
-        self, model: FiniteStateModel, spec: MacroSpec, context: Context
+        self,
+        model: FiniteStateModel,
+        spec: MacroSpec,
+        context: Context,
+        max_depth: Optional[int] = None,
+        max_states: int = 1_000,
     ) -> ClosureReport:
+        if max_states < 1:
+            raise ValueError("max_states must be positive")
+        depth_limit = spec.horizon if max_depth is None else max_depth
+        if depth_limit < 0:
+            raise ValueError("max_depth must be non-negative")
+
+        def state_key(state: Mapping[str, Any]) -> Tuple[Any, ...]:
+            return tuple(sorted((key, repr(value)) for key, value in state.items()))
+
+        all_declared = [(name, dict(state)) for name, state in model.states.items()]
+        complete = len(all_declared) <= max_states
+        reachable = all_declared[:max_states]
+        seen = {state_key(state) for _, state in reachable}
+        frontier = list(reachable)
+        actions = ("noop",) + tuple(
+            action for action in model.actions if action != "noop"
+        )
+        for depth in range(1, depth_limit + 1):
+            next_frontier = []
+            for source_name, state in frontier:
+                for action in actions:
+                    next_state = dict(model.step(state, action, context))
+                    key = state_key(next_state)
+                    if key in seen:
+                        continue
+                    if len(reachable) >= max_states:
+                        complete = False
+                        break
+                    seen.add(key)
+                    named = ("%s --%s--> reachable:%d:%d" % (source_name, action, depth, len(reachable)), next_state)
+                    reachable.append(named)
+                    next_frontier.append(named)
+                if not complete:
+                    break
+            frontier = next_frontier
+            if not complete or not frontier:
+                break
+
         violations = []
         checked = 0
-        state_items = tuple(model.states.items())
-        actions = model.actions or ("noop",)
+        state_items = tuple(reachable)
         for (left_name, left), (right_name, right) in combinations(state_items, 2):
             left_observed = model.observe(left, context)
             right_observed = model.observe(right, context)
@@ -81,15 +123,18 @@ class ClosureAnalyzer:
                     },
                     violated=("dynamical closure of %s" % spec.name,),
                     suggested_refinements=tuple(
-                        "promote micro feature %r to a macro observable" % feature
+                        "consider promoting separating micro feature %r to a macro observable" % feature
                         for feature in local_ranked
                     ),
                 )
             )
         return ClosureReport(
-            closed=not counterexamples,
+            closed=not counterexamples and complete,
             checked_pairs=checked,
             counterexamples=tuple(counterexamples),
+            suggested_features=ranked_features,
+            complete=complete,
+            explored_states=len(reachable),
         )
 
 
@@ -122,11 +167,21 @@ class ConceptLibrary:
         negatives = concept.negative_examples
         if accepted and example not in positives:
             positives += (example,)
+        if accepted and example in negatives:
+            negatives = tuple(item for item in negatives if item != example)
         if not accepted and example not in negatives:
             negatives += (example,)
+        if not accepted and example in positives:
+            positives = tuple(item for item in positives if item != example)
         boundaries = concept.boundaries
         if boundary and boundary not in boundaries:
             boundaries += (boundary,)
+        if (
+            positives == concept.positive_examples
+            and negatives == concept.negative_examples
+            and boundaries == concept.boundaries
+        ):
+            return concept
         updated = replace(
             concept,
             positive_examples=positives,
@@ -138,14 +193,35 @@ class ConceptLibrary:
         return updated
 
     def refine_from_counterexample(self, name: str, counterexample: Counterexample) -> Concept:
+        concept = self.get(name)
         boundary = counterexample.summary
         example = repr(dict(counterexample.witness))
-        concept = self.record_judgment(name, example, accepted=False, boundary=boundary)
+        positives = tuple(item for item in concept.positive_examples if item != example)
+        negatives = concept.negative_examples
+        if example not in negatives:
+            negatives += (example,)
+        boundaries = concept.boundaries
+        if boundary not in boundaries:
+            boundaries += (boundary,)
         definitions = concept.candidate_definitions
         for suggestion in counterexample.suggested_refinements:
             if suggestion not in definitions:
                 definitions += (suggestion,)
-        updated = replace(concept, candidate_definitions=definitions, version=concept.version + 1)
+        changed = (
+            positives != concept.positive_examples
+            or negatives != concept.negative_examples
+            or boundaries != concept.boundaries
+            or definitions != concept.candidate_definitions
+        )
+        if not changed:
+            return concept
+        updated = replace(
+            concept,
+            positive_examples=positives,
+            negative_examples=negatives,
+            boundaries=boundaries,
+            candidate_definitions=definitions,
+            version=concept.version + 1,
+        )
         self._concepts[name] = updated
         return updated
-

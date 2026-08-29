@@ -24,6 +24,7 @@ from .core import (
     ModelMetrics,
     PurposeHypothesis,
     PurposeLevel,
+    ProbeOutcome,
     RealizationResult,
     RequirementCategory,
     ResourceBudget,
@@ -34,12 +35,15 @@ from .engine import (
     BidirectionalModelingEngine,
     MacroRoundTripReport,
     MicroRoundTripReport,
+    RefinementLoopReport,
+    RefinementStep,
     behaviorally_equivalent,
 )
 from .evaluation import SatisfactionEvaluator
 from .interpretation import (
     CatalogHypothesisGenerator,
     HypothesisGenerator,
+    InterpretationScoringPolicy,
     Interpreter,
     ObservedEffectGenerator,
 )
@@ -90,18 +94,21 @@ __all__ = [
     "ParametricCandidateGenerator",
     "PurposeHypothesis",
     "PurposeLevel",
+    "ProbeOutcome",
     "RealizationResult",
     "Realizer",
     "RedTeamProbe",
     "RegistryGenerator",
+    "RefinementLoopReport",
+    "RefinementStep",
     "RequirementCategory",
     "ResourceBudget",
     "SatisfactionCertificate",
     "SatisfactionEvaluator",
     "Trace",
+    "InterpretationScoringPolicy",
     "behaviorally_equivalent",
     "pareto_partition",
 ]
 
-__version__ = "0.1.0"
-
+__version__ = "0.2.0"

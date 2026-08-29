@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from itertools import product
 from typing import Any, Callable, Iterable, Mapping, Optional, Protocol, Sequence, Union
 
@@ -11,6 +12,7 @@ from .core import (
     Counterexample,
     ExecutableModel,
     MacroSpec,
+    ProbeOutcome,
     RealizationResult,
     ResourceBudget,
 )
@@ -31,7 +33,8 @@ class RedTeamProbe(Protocol):
         spec: MacroSpec,
         context: Context,
         evaluator: SatisfactionEvaluator,
-    ) -> Optional[Counterexample]:
+        budget: ResourceBudget,
+    ) -> ProbeOutcome:
         ...
 
 
@@ -117,30 +120,77 @@ class Realizer:
         budget = budget or ResourceBudget()
         if hasattr(source, "generate"):
             models = source.generate(spec, context, budget)  # type: ignore[union-attr]
+            source_count = len(models) if hasattr(models, "__len__") else None
         else:
+            source_count = len(source) if hasattr(source, "__len__") else None
             models = iter(source)  # type: ignore[arg-type]
 
         accepted = []
         rejected = []
         searched = 0
         truncated = False
-        for model in models:
-            if searched >= budget.max_candidates:
-                truncated = True
+        simulations_used = 0
+        remaining_simulations = budget.max_simulations
+        model_iterator = iter(models)
+        while searched < budget.max_candidates and remaining_simulations > 0:
+            try:
+                model = next(model_iterator)
+            except StopIteration:
                 break
             searched += 1
-            certificate = self.evaluator.evaluate(model, spec, context, budget)
+            candidate_budget = replace(budget, max_simulations=remaining_simulations)
+            certificate = self.evaluator.evaluate(model, spec, context, candidate_budget)
+            simulations_used += certificate.verified_scenarios
+            remaining_simulations -= certificate.verified_scenarios
             counterexamples = []
+            probe_certificates = []
+            if not certificate.complete:
+                truncated = True
             if certificate.satisfied:
                 for probe in self.probes:
-                    result = probe.probe(model, spec, context, self.evaluator)
-                    if result is not None:
-                        counterexamples.append(result)
-            evaluation = CandidateEvaluation(model, certificate, tuple(counterexamples))
+                    if remaining_simulations <= 0:
+                        counterexamples.append(
+                            Counterexample(
+                                kind="verification-budget-exhausted",
+                                summary="the candidate could not run all configured red-team probes",
+                                witness={"model": model.name},
+                                violated=("complete adversarial verification",),
+                                suggested_refinements=("increase max_simulations",),
+                            )
+                        )
+                        truncated = True
+                        break
+                    probe_budget = replace(budget, max_simulations=remaining_simulations)
+                    outcome = probe.probe(
+                        model, spec, context, self.evaluator, probe_budget
+                    )
+                    simulations_used += outcome.simulations_used
+                    remaining_simulations -= outcome.simulations_used
+                    if outcome.certificate is not None:
+                        probe_certificates.append(outcome.certificate)
+                        if not outcome.certificate.complete:
+                            truncated = True
+                    if outcome.counterexample is not None:
+                        counterexamples.append(outcome.counterexample)
+            evaluation = CandidateEvaluation(
+                model,
+                certificate,
+                tuple(counterexamples),
+                tuple(probe_certificates),
+            )
             if certificate.satisfied and not any(item.blocking for item in counterexamples):
                 accepted.append(evaluation)
             else:
                 rejected.append(evaluation)
+
+        if remaining_simulations <= 0 and (
+            source_count is None or source_count > searched
+        ):
+            truncated = True
+        if searched >= budget.max_candidates and (
+            source_count is None or source_count > searched
+        ):
+            truncated = True
 
         frontier, dominated = pareto_partition(accepted)
         return RealizationResult(
@@ -150,4 +200,5 @@ class Realizer:
             dominated=dominated,
             searched_candidates=searched,
             truncated=truncated,
+            simulations_used=simulations_used,
         )

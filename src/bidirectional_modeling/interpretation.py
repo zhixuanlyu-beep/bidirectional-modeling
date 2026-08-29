@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Protocol, Sequence, Tuple, Union
 
 from .core import (
@@ -73,7 +74,11 @@ class ObservedEffectGenerator:
             if len(set(map(repr, final_values))) != 1:
                 continue
             final_value = final_values[0]
-            if all(initial == final_value for initial in initial_values):
+            remains_constant = all(
+                all(snapshot[field_name] == final_value for snapshot in trace.snapshots)
+                for trace in traces
+            )
+            if all(initial == final_value for initial in initial_values) and remains_constant:
                 label = "maintain %s at %r" % (field_name, final_value)
             elif all(
                 isinstance(initial, (int, float))
@@ -104,10 +109,38 @@ class ObservedEffectGenerator:
                     level=PurposeLevel.EFFECT,
                     spec=spec,
                     prior=0.5,
-                    explanation="generated from a stable observed transition; this is an effect, not actor intention",
+                    explanation="generated from observed task-horizon behavior; this is an effect, not actor intention",
                 )
             )
         return tuple(hypotheses)
+
+
+@dataclass(frozen=True)
+class InterpretationScoringPolicy:
+    coverage_weight: float = 0.20
+    robustness_weight: float = 0.20
+    assumption_weight: float = 0.15
+    simplicity_weight: float = 0.15
+    context_weight: float = 0.30
+    minimum_direct_intent_evidence: float = 0.50
+    unsupported_intent_cap: float = 0.49
+
+    def __post_init__(self) -> None:
+        weights = (
+            self.coverage_weight,
+            self.robustness_weight,
+            self.assumption_weight,
+            self.simplicity_weight,
+            self.context_weight,
+        )
+        if any(weight < 0 for weight in weights):
+            raise ValueError("interpretation weights must be non-negative")
+        if abs(sum(weights) - 1.0) > 1e-9:
+            raise ValueError("interpretation weights must sum to 1")
+        if not 0.0 <= self.minimum_direct_intent_evidence <= 1.0:
+            raise ValueError("minimum direct intent evidence must be in [0, 1]")
+        if not 0.0 <= self.unsupported_intent_cap <= 1.0:
+            raise ValueError("unsupported intent cap must be in [0, 1]")
 
 
 def _clamp(value: float) -> float:
@@ -122,14 +155,19 @@ def _context_support(
     return _clamp(hypothesis.prior + adjustment), relevant
 
 
-def _is_direct_intent_evidence(item: Evidence) -> bool:
-    return item.strength > 0 and item.kind in {"design", "choice", "statement", "selection-history"}
+def _is_direct_intent_evidence(item: Evidence, minimum_strength: float) -> bool:
+    return item.strength >= minimum_strength and item.kind in {
+        "design",
+        "choice",
+        "statement",
+        "selection-history",
+    }
 
 
 def _expected_information_gain(
     candidates: Sequence[InterpretationCandidate], experiment: Experiment
 ) -> Tuple[float, Mapping[str, float]]:
-    weights = [max(candidate.confidence, 1e-12) for candidate in candidates]
+    weights = [max(candidate.ranking_score, 1e-12) for candidate in candidates]
     total = sum(weights)
     priors = [weight / total for weight in weights]
     predictions = {
@@ -176,8 +214,13 @@ def _equivalent_groups(
 class Interpreter:
     """Ranks compatible macro hypotheses without claiming purpose is intrinsic."""
 
-    def __init__(self, evaluator: Optional[SatisfactionEvaluator] = None) -> None:
+    def __init__(
+        self,
+        evaluator: Optional[SatisfactionEvaluator] = None,
+        scoring_policy: Optional[InterpretationScoringPolicy] = None,
+    ) -> None:
         self.evaluator = evaluator or SatisfactionEvaluator()
+        self.scoring_policy = scoring_policy or InterpretationScoringPolicy()
 
     def interpret(
         self,
@@ -203,14 +246,29 @@ class Interpreter:
             simplicity = 1.0 / (1.0 + 0.15 * max(0, requirement_count - 1))
             robustness = certificate.confidence.robustness
             support, relevant_evidence = _context_support(hypothesis, all_evidence)
-            confidence = 0.40 * fit + 0.15 * simplicity + 0.25 * robustness + 0.20 * support
+            policy = self.scoring_policy
+            ranking_score = (
+                policy.coverage_weight * certificate.confidence.coverage
+                + policy.robustness_weight * robustness
+                + policy.assumption_weight
+                * certificate.confidence.assumption_reliability
+                + policy.simplicity_weight * simplicity
+                + policy.context_weight * support
+            )
             caveats = []
             if hypothesis.level == PurposeLevel.INTENTION:
-                direct = any(_is_direct_intent_evidence(item) for item in relevant_evidence)
+                direct = any(
+                    _is_direct_intent_evidence(
+                        item, policy.minimum_direct_intent_evidence
+                    )
+                    for item in relevant_evidence
+                )
                 if not direct:
-                    confidence = min(confidence, 0.49)
+                    ranking_score = min(
+                        ranking_score, policy.unsupported_intent_cap
+                    )
                     caveats.append(
-                        "structure and behavior support compatibility, but no actor/design evidence identifies intention"
+                        "structure and behavior support compatibility, but no sufficiently strong actor/design evidence identifies intention"
                     )
             candidates.append(
                 InterpretationCandidate(
@@ -220,7 +278,7 @@ class Interpreter:
                     simplicity=simplicity,
                     robustness=robustness,
                     context_support=support,
-                    confidence=_clamp(confidence),
+                    ranking_score=_clamp(ranking_score),
                     evidence=relevant_evidence,
                     caveats=tuple(caveats),
                 )

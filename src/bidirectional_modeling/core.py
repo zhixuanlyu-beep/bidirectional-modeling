@@ -8,7 +8,7 @@ observable traces and a few transparent resource metrics.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from statistics import mean
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
@@ -88,6 +88,12 @@ class Context:
     observer: str = "human"
     interventions: Tuple[Intervention, ...] = ()
     assumptions: Tuple[str, ...] = ()
+    include_baseline: bool = True
+
+    def __post_init__(self) -> None:
+        names = [intervention.name for intervention in self.interventions]
+        if len(names) != len(set(names)):
+            raise ValueError("intervention names must be unique")
 
 
 @dataclass(frozen=True)
@@ -192,6 +198,17 @@ class FieldRequirement:
     aggregation: Aggregation = Aggregation.FINAL
     tolerance: float = 0.0
 
+    def semantic_signature(self) -> Tuple[Any, ...]:
+        return (
+            "field",
+            self.category.value,
+            self.field_name,
+            self.operator,
+            _freeze_value(self.expected),
+            self.aggregation.value,
+            self.tolerance,
+        )
+
     def _aggregate(self, values: Sequence[Any]) -> Any:
         if self.aggregation == Aggregation.FINAL:
             return values[-1]
@@ -252,6 +269,16 @@ class ModelMetricRequirement:
     category: RequirementCategory = RequirementCategory.CONSTRAINT
     tolerance: float = 0.0
 
+    def semantic_signature(self) -> Tuple[Any, ...]:
+        return (
+            "model-metric",
+            self.category.value,
+            self.metric,
+            self.operator,
+            self.expected,
+            self.tolerance,
+        )
+
     def evaluate(
         self,
         model: "ExecutableModel",
@@ -276,6 +303,20 @@ class CustomRequirement:
     name: str
     category: RequirementCategory
     checker: Callable[["ExecutableModel", Sequence[Trace], Context], CheckResult]
+    semantic_id: Optional[str] = None
+
+    def semantic_signature(self) -> Tuple[Any, ...]:
+        # A caller-supplied stable ID allows independently constructed custom
+        # requirements to participate in strict semantic round trips.  Without
+        # one, equality is deliberately limited to the same callable object.
+        identity: Any = self.semantic_id
+        if identity is None:
+            identity = (
+                getattr(self.checker, "__module__", ""),
+                getattr(self.checker, "__qualname__", ""),
+                id(self.checker),
+            )
+        return ("custom", self.category.value, identity)
 
     def evaluate(
         self,
@@ -294,13 +335,19 @@ class EquivalenceSpec:
     fields: Tuple[str, ...]
     tolerances: Mapping[str, float] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        unknown = set(self.tolerances) - set(self.fields)
+        if unknown:
+            raise ValueError("tolerances reference undeclared fields: %s" % sorted(unknown))
+        invalid = {key: value for key, value in self.tolerances.items() if value <= 0}
+        if invalid:
+            raise ValueError("equivalence resolutions must be positive: %s" % invalid)
+
     def equivalent(self, left: Snapshot, right: Snapshot) -> bool:
-        for field_name in self.fields:
-            tolerance = self.tolerances.get(field_name, 0.0)
-            passed, _ = _compare(left[field_name], "eq", right[field_name], tolerance)
-            if not passed:
-                return False
-        return True
+        # Equivalence must be transitive.  Numeric resolutions therefore form
+        # deterministic buckets instead of using pairwise |a-b| <= epsilon,
+        # which is not an equivalence relation.
+        return self.signature(left) == self.signature(right)
 
     def signature(self, snapshot: Snapshot) -> Tuple[Any, ...]:
         result = []
@@ -308,9 +355,42 @@ class EquivalenceSpec:
             value = snapshot[field_name]
             tolerance = self.tolerances.get(field_name, 0.0)
             if tolerance and isinstance(value, (int, float)):
-                value = round(float(value) / tolerance)
+                value = math.floor(float(value) / tolerance + 0.5)
             result.append(value)
         return tuple(result)
+
+    def semantic_signature(self) -> Tuple[Any, ...]:
+        return tuple(sorted(self.fields)), tuple(sorted(self.tolerances.items()))
+
+
+def _freeze_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return tuple(sorted((key, _freeze_value(item)) for key, item in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_value(item) for item in value)
+    if isinstance(value, set):
+        return tuple(sorted((_freeze_value(item) for item in value), key=repr))
+    if isinstance(value, Enum):
+        return value.value
+    try:
+        hash(value)
+    except TypeError:
+        return repr(value)
+    return value
+
+
+def requirement_semantic_signature(requirement: Requirement) -> Tuple[Any, ...]:
+    method = getattr(requirement, "semantic_signature", None)
+    if method is not None:
+        return tuple(method())
+    # Unknown third-party requirements fail closed: only the same object is
+    # considered semantically identical during this process.
+    return (
+        "opaque",
+        type(requirement).__module__,
+        type(requirement).__qualname__,
+        id(requirement),
+    )
 
 
 @dataclass(frozen=True)
@@ -338,6 +418,49 @@ class MacroSpec:
     def requirements(self) -> Tuple[Requirement, ...]:
         return self.objectives + self.invariants + self.constraints
 
+    def semantic_signature(self) -> Tuple[Any, ...]:
+        def canonical(requirements: Tuple[Requirement, ...]) -> Tuple[Any, ...]:
+            return tuple(
+                sorted(
+                    (requirement_semantic_signature(item) for item in requirements),
+                    key=repr,
+                )
+            )
+
+        return (
+            tuple(sorted(self.observables)),
+            canonical(self.objectives),
+            self.equivalence.semantic_signature(),
+            canonical(self.invariants),
+            canonical(self.constraints),
+            self.tolerance,
+            self.horizon,
+            _freeze_value(self.ambiguous_terms),
+            tuple(sorted(self.assumptions)),
+            tuple(sorted(self.tags)),
+        )
+
+    def semantically_equivalent(self, other: "MacroSpec") -> bool:
+        return self.semantic_signature() == other.semantic_signature()
+
+    def promote_observable(self, field_name: str, resolution: Optional[float] = None) -> "MacroSpec":
+        observables = self.observables
+        fields = self.equivalence.fields
+        tolerances = dict(self.equivalence.tolerances)
+        if field_name not in observables:
+            observables += (field_name,)
+        if field_name not in fields:
+            fields += (field_name,)
+        if resolution is not None:
+            if resolution <= 0:
+                raise ValueError("resolution must be positive")
+            tolerances[field_name] = resolution
+        return replace(
+            self,
+            observables=observables,
+            equivalence=EquivalenceSpec(fields, tolerances),
+        )
+
 
 class ExecutableModel(Protocol):
     name: str
@@ -347,7 +470,7 @@ class ExecutableModel(Protocol):
     prior_reliability: float
     capabilities: Tuple[str, ...]
 
-    def simulate(self, context: Context, horizon: int) -> Sequence[Trace]:
+    def simulate(self, context: Context, horizon: int) -> Iterable[Trace]:
         ...
 
 
@@ -377,14 +500,26 @@ class FiniteStateModel:
             raise ValueError("prior reliability must be in [0, 1]")
 
     def step(self, state: State, action: str, context: Context) -> State:
+        if action != "noop" and action not in self.actions:
+            raise ValueError("unsupported action %r for model %s" % (action, self.name))
         return self.transition(dict(state), action, context)
 
     def observe(self, state: State, context: Context) -> Snapshot:
         return dict(self.readout(state, context))
 
-    def simulate(self, context: Context, horizon: int) -> Sequence[Trace]:
-        interventions = context.interventions or (Intervention("baseline"),)
-        traces = []
+    def _interventions(self, context: Context) -> Tuple[Intervention, ...]:
+        interventions = context.interventions
+        if context.include_baseline and not any(item.name == "baseline" for item in interventions):
+            interventions = (Intervention("baseline"),) + interventions
+        if not interventions:
+            interventions = (Intervention("baseline"),)
+        return interventions
+
+    def scenario_count(self, context: Context) -> int:
+        return len(self.initial_states) * len(self._interventions(context))
+
+    def simulate(self, context: Context, horizon: int) -> Iterable[Trace]:
+        interventions = self._interventions(context)
         for initial_name in self.initial_states:
             for intervention in interventions:
                 state = dict(self.states[initial_name])
@@ -392,15 +527,32 @@ class FiniteStateModel:
                 for step in range(horizon):
                     state = dict(self.step(state, intervention.action_at(step), context))
                     snapshots.append(self.observe(state, context))
-                traces.append(
-                    Trace(
-                        model_name=self.name,
-                        initial_state=initial_name,
-                        intervention=intervention.name,
-                        snapshots=tuple(snapshots),
-                    )
+                yield Trace(
+                    model_name=self.name,
+                    initial_state=initial_name,
+                    intervention=intervention.name,
+                    snapshots=tuple(snapshots),
                 )
-        return tuple(traces)
+
+    def with_promoted_observables(self, fields: Iterable[str]) -> "FiniteStateModel":
+        promoted = tuple(dict.fromkeys(fields))
+        missing = [
+            field_name
+            for field_name in promoted
+            if any(field_name not in state for state in self.states.values())
+        ]
+        if missing:
+            raise ValueError("cannot promote unavailable state fields: %s" % sorted(set(missing)))
+        original_readout = self.readout
+
+        def promoted_readout(state: State, context: Context) -> Snapshot:
+            observed = dict(original_readout(state, context))
+            for field_name in promoted:
+                observed[field_name] = state[field_name]
+            return observed
+
+        suffix = "+" + "+".join(promoted) if promoted else ""
+        return replace(self, name=self.name + suffix, readout=promoted_readout)
 
 
 @dataclass(frozen=True)
@@ -415,9 +567,15 @@ class ConfidenceBreakdown:
                 raise ValueError("confidence components must be in [0, 1]")
 
     @property
-    def value(self) -> float:
+    def verification_score(self) -> float:
         product = self.coverage * self.robustness * self.assumption_reliability
         return product ** (1.0 / 3.0) if product else 0.0
+
+    @property
+    def value(self) -> float:
+        """Backward-compatible alias; this is a score, not a calibrated probability."""
+
+        return self.verification_score
 
 
 @dataclass(frozen=True)
@@ -430,6 +588,12 @@ class SatisfactionCertificate:
     confidence: ConfidenceBreakdown
     assumptions: Tuple[str, ...]
     failure_boundaries: Tuple[str, ...]
+    complete: bool = True
+    requirements_passed: bool = True
+
+    @property
+    def verification_score(self) -> float:
+        return self.confidence.verification_score
 
 
 @dataclass(frozen=True)
@@ -443,14 +607,32 @@ class Counterexample:
 
 
 @dataclass(frozen=True)
+class ProbeOutcome:
+    counterexample: Optional[Counterexample]
+    certificate: Optional[SatisfactionCertificate] = None
+
+    @property
+    def simulations_used(self) -> int:
+        return self.certificate.verified_scenarios if self.certificate else 0
+
+
+@dataclass(frozen=True)
 class CandidateEvaluation:
     model: ExecutableModel
     certificate: SatisfactionCertificate
     counterexamples: Tuple[Counterexample, ...] = ()
+    probe_certificates: Tuple[SatisfactionCertificate, ...] = ()
+
+    @property
+    def verification_score(self) -> float:
+        certificates = (self.certificate,) + self.probe_certificates
+        return min(item.verification_score for item in certificates)
 
     @property
     def confidence(self) -> float:
-        return self.certificate.confidence.value
+        """Backward-compatible alias for the aggregate verification score."""
+
+        return self.verification_score
 
 
 @dataclass(frozen=True)
@@ -461,6 +643,7 @@ class RealizationResult:
     dominated: Tuple[CandidateEvaluation, ...]
     searched_candidates: int
     truncated: bool
+    simulations_used: int = 0
 
 
 @dataclass(frozen=True)
@@ -503,9 +686,15 @@ class InterpretationCandidate:
     simplicity: float
     robustness: float
     context_support: float
-    confidence: float
+    ranking_score: float
     evidence: Tuple[Evidence, ...]
     caveats: Tuple[str, ...] = ()
+
+    @property
+    def confidence(self) -> float:
+        """Backward-compatible alias for the uncalibrated ranking score."""
+
+        return self.ranking_score
 
 
 @dataclass(frozen=True)
@@ -515,6 +704,7 @@ class InterpretationResult:
     equivalent_explanations: Tuple[Tuple[str, ...], ...]
     discriminating_query: Optional[DiscriminatingQuery]
     non_identifiable: bool
+    score_semantics: str = "uncalibrated ranking score; not a probability"
 
 
 @dataclass(frozen=True)
@@ -522,6 +712,9 @@ class ClosureReport:
     closed: bool
     checked_pairs: int
     counterexamples: Tuple[Counterexample, ...]
+    suggested_features: Tuple[str, ...] = ()
+    complete: bool = True
+    explored_states: int = 0
 
 
 @dataclass(frozen=True)
