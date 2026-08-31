@@ -1,9 +1,10 @@
-"""Three domain examples using the same core interfaces."""
+"""Domain examples using the same core interfaces."""
 
 from __future__ import annotations
 
 from typing import Dict, Tuple
 
+from .correspondence import Correspondence, Scale
 from .core import (
     Aggregation,
     Context,
@@ -18,6 +19,7 @@ from .core import (
     PurposeHypothesis,
     PurposeLevel,
     RequirementCategory,
+    ScenarioKey,
 )
 
 
@@ -283,10 +285,74 @@ def organization_interpretation_scenario():
     return context, model, hypotheses, experiments, evidence
 
 
+def scale_correspondence_scenario():
+    """Two micro partitions coarse-grain to one aggregate dynamic state."""
+
+    lower_context = Context(scale="component-state")
+    upper_context = Context(scale="aggregate-state")
+
+    def lower_transition(state, _action, _context):
+        return {"left": state["left"] + 1, "right": state["right"]}
+
+    def upper_transition(state, _action, _context):
+        return {"total": state["total"] + 1}
+
+    lower_model = FiniteStateModel(
+        "two-component-dynamics",
+        {
+            "partition-a": {"left": 1, "right": 1},
+            "partition-b": {"left": 0, "right": 2},
+        },
+        ("partition-a", "partition-b"),
+        (),
+        lower_transition,
+        lambda state, _context: dict(state),
+        ModelMetrics(cost=2.0, complexity=2.0, risk=0.0),
+    )
+    upper_model = FiniteStateModel(
+        "aggregate-dynamics",
+        {"aggregate": {"total": 2}},
+        ("aggregate",),
+        (),
+        upper_transition,
+        lambda state, _context: dict(state),
+        ModelMetrics(cost=1.0, complexity=1.0, risk=0.0),
+    )
+
+    lower_scale = Scale(
+        "micro",
+        ("left", "right"),
+        EquivalenceSpec(("left", "right")),
+    )
+    upper_scale = Scale(
+        "macro",
+        ("total",),
+        EquivalenceSpec(("total",)),
+    )
+    correspondence = Correspondence(
+        "sum-components",
+        lower_scale,
+        upper_scale,
+        lambda snapshot, _context: {
+            "total": snapshot["left"] + snapshot["right"]
+        },
+        scenario_projection=lambda key: ScenarioKey("aggregate", key.intervention),
+        assumptions=("only the component sum is task-relevant",),
+    )
+    return (
+        correspondence,
+        lower_model,
+        upper_model,
+        lower_context,
+        upper_context,
+    )
+
+
 def all_scenarios() -> Dict[str, object]:
     return {
         "software": software_scenario(),
         "science": science_closure_scenario(),
         "organization": organization_interpretation_scenario(),
+        "correspondence": scale_correspondence_scenario(),
     }
 

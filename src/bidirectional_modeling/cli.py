@@ -9,6 +9,7 @@ from typing import Any, Dict
 from .engine import BidirectionalModelingEngine
 from .examples import (
     organization_interpretation_scenario,
+    scale_correspondence_scenario,
     science_closure_scenario,
     software_scenario,
 )
@@ -45,6 +46,23 @@ def build_demo_report() -> Dict[str, Any]:
     observed_effects = engine.interpret(
         org_model, org_context, ObservedEffectGenerator(horizon=1)
     )
+
+    (
+        correspondence,
+        lower_model,
+        upper_model,
+        lower_context,
+        upper_context,
+    ) = scale_correspondence_scenario()
+    correspondence_certificate = engine.verify_correspondence(
+        correspondence,
+        lower_model,
+        upper_model,
+        lower_context,
+        upper_context,
+        horizon=2,
+    )
+    scale_paths = engine.scale_graph.find_paths("micro", "macro")
 
     return {
         "realize": {
@@ -129,6 +147,31 @@ def build_demo_report() -> Dict[str, Any]:
             "refinement_stopped_reason": refinement.stopped_reason,
             "final_observables": list(refinement.final_spec.observables),
         },
+        "correspondence": {
+            "name": correspondence.name,
+            "lower_scale": correspondence.lower_scale.name,
+            "upper_scale": correspondence.upper_scale.name,
+            "passed": correspondence_certificate.passed,
+            "complete": correspondence_certificate.complete,
+            "commutes": correspondence_certificate.commutes,
+            "lower_scenarios": correspondence_certificate.lower_scenarios,
+            "upper_scenarios": correspondence_certificate.upper_scenarios,
+            "paired_scenarios": correspondence_certificate.paired_scenarios,
+            "simulations_used": correspondence_certificate.simulations_used,
+            "coverage_authorities": [
+                correspondence_certificate.lower_coverage_authority,
+                correspondence_certificate.upper_coverage_authority,
+            ],
+            "paths": [
+                {
+                    "scales": list(path.scales),
+                    "correspondences": list(path.correspondences),
+                    "edgewise_certified": path.edgewise_certified,
+                    "end_to_end_certified": path.end_to_end_certified,
+                }
+                for path in scale_paths
+            ],
+        },
     }
 
 
@@ -161,6 +204,23 @@ def _print_human(report: Dict[str, Any]) -> None:
     for suggestion in closure["suggested_refinements"]:
         print("  → %s" % suggestion)
     print("  闭环细化后：%s" % ("闭合" if closure["closed_after_refinement"] else "仍未闭合"))
+
+    correspondence = report["correspondence"]
+    print(
+        "\n跨尺度对应：%s (%s → %s)"
+        % (
+            "通过" if correspondence["passed"] else "失败",
+            correspondence["lower_scale"],
+            correspondence["upper_scale"],
+        )
+    )
+    print(
+        "  配对 %d 个下层场景到 %d 个上层场景"
+        % (
+            correspondence["paired_scenarios"],
+            correspondence["upper_scenarios"],
+        )
+    )
 
 
 def main() -> None:
