@@ -32,14 +32,19 @@ class MacroRoundTripReport:
     semantic_preservation: Tuple[bool, ...]
     simulations_used: int = 0
     truncated: bool = False
+    independent_recovery: bool = False
 
     @property
-    def passed(self) -> bool:
+    def compatibility_passed(self) -> bool:
         return (
             not self.truncated
             and bool(self.semantic_preservation)
             and all(self.semantic_preservation)
         )
+
+    @property
+    def passed(self) -> bool:
+        return self.independent_recovery and self.compatibility_passed
 
 
 @dataclass(frozen=True)
@@ -206,29 +211,22 @@ class BidirectionalModelingEngine:
                 return RefinementLoopReport(
                     spec, current_spec, current_model, tuple(steps), True, "closed"
                 )
-            if not report.complete:
-                steps.append(
-                    RefinementStep(iteration, current_spec, current_model.name, report, None)
-                )
-                return RefinementLoopReport(
-                    spec,
-                    current_spec,
-                    current_model,
-                    tuple(steps),
-                    False,
-                    "closure-analysis-budget-exhausted",
-                )
             if not report.suggested_features:
                 steps.append(
                     RefinementStep(iteration, current_spec, current_model.name, report, None)
                 )
+                reason = (
+                    "closure-analysis-budget-exhausted"
+                    if not report.complete
+                    else "no-separating-feature"
+                )
                 return RefinementLoopReport(
                     spec,
                     current_spec,
                     current_model,
                     tuple(steps),
                     False,
-                    "no-separating-feature",
+                    reason,
                 )
             selected = feature_selector(report, current_spec, current_model)
             if selected is None:
@@ -296,16 +294,25 @@ class BidirectionalModelingEngine:
         spec: MacroSpec,
         context: Context,
         source: CandidateSource,
-        hypotheses: Iterable[PurposeHypothesis],
+        hypotheses: HypothesisSource,
         evidence: Sequence[Evidence] = (),
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
     ) -> MacroRoundTripReport:
+        """Check semantic recovery, distinguishing inference from injected catalogs."""
+
         budget = budget or ResourceBudget()
         realization = self.realize(spec, context, source, budget)
         interpretations = []
         preservation = []
-        hypotheses = tuple(hypotheses)
+        independent_recovery = bool(
+            getattr(hypotheses, "independent_recovery", False)
+        )
+        hypothesis_source: HypothesisSource
+        if hasattr(hypotheses, "generate"):
+            hypothesis_source = hypotheses
+        else:
+            hypothesis_source = tuple(hypotheses)  # type: ignore[arg-type]
         simulations_used = realization.simulations_used
         remaining_simulations = max(
             0, budget.max_simulations - simulations_used
@@ -328,7 +335,7 @@ class BidirectionalModelingEngine:
                 result = self.interpret(
                     candidate.model,
                     context,
-                    hypotheses,
+                    hypothesis_source,
                     evidence,
                     experiments,
                     interpretation_budget,
@@ -344,11 +351,12 @@ class BidirectionalModelingEngine:
                 )
             )
         return MacroRoundTripReport(
-            realization,
-            tuple(interpretations),
-            tuple(preservation),
-            simulations_used,
-            truncated,
+            realization=realization,
+            interpretations=tuple(interpretations),
+            semantic_preservation=tuple(preservation),
+            simulations_used=simulations_used,
+            truncated=truncated,
+            independent_recovery=independent_recovery,
         )
 
     def micro_round_trip(
@@ -360,7 +368,10 @@ class BidirectionalModelingEngine:
         evidence: Sequence[Evidence] = (),
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
+        allow_identity: bool = False,
     ) -> MicroRoundTripReport:
+        """Re-realize inferred behavior; exclude the original object by default."""
+
         budget = budget or ResourceBudget()
         interpretation = self.interpret(
             model, context, hypotheses, evidence, experiments, budget
@@ -393,7 +404,11 @@ class BidirectionalModelingEngine:
             simulations_used += realization.simulations_used
             remaining_simulations -= realization.simulations_used
         truncated = truncated or realization.truncated
-        satisfying = realization.candidates + realization.dominated
+        satisfying = tuple(
+            item
+            for item in realization.candidates + realization.dominated
+            if allow_identity or item.model is not model
+        )
         equivalent = []
         original_batch = None
         if satisfying and remaining_simulations > 0:

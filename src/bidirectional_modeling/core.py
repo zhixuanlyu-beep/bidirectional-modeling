@@ -69,6 +69,18 @@ class Intervention:
         return self.actions[-1] if self.repeat_last else "noop"
 
 
+@dataclass(frozen=True, order=True)
+class ScenarioKey:
+    """Caller-visible identity for one initial-state/intervention scenario."""
+
+    initial_state: str
+    intervention: str
+
+    def __post_init__(self) -> None:
+        if not self.initial_state or not self.intervention:
+            raise ValueError("scenario identities must be non-empty")
+
+
 @dataclass(frozen=True)
 class ResourceBudget:
     max_candidates: int = 100
@@ -91,11 +103,16 @@ class Context:
     interventions: Tuple[Intervention, ...] = ()
     assumptions: Tuple[str, ...] = ()
     include_baseline: bool = True
+    scenario_manifest: Tuple[ScenarioKey, ...] = ()
 
     def __post_init__(self) -> None:
         names = [intervention.name for intervention in self.interventions]
         if len(names) != len(set(names)):
             raise ValueError("intervention names must be unique")
+        if any(not isinstance(item, ScenarioKey) for item in self.scenario_manifest):
+            raise TypeError("scenario manifest entries must be ScenarioKey instances")
+        if len(self.scenario_manifest) != len(set(self.scenario_manifest)):
+            raise ValueError("scenario manifest entries must be unique")
 
 
 @dataclass(frozen=True)
@@ -118,6 +135,15 @@ class Trace:
     initial_state: str
     intervention: str
     snapshots: Tuple[Snapshot, ...]
+
+    def __post_init__(self) -> None:
+        if not self.model_name:
+            raise ValueError("trace model name must be non-empty")
+        ScenarioKey(self.initial_state, self.intervention)
+
+    @property
+    def scenario_key(self) -> ScenarioKey:
+        return ScenarioKey(self.initial_state, self.intervention)
 
     def values(self, field_name: str) -> Tuple[Any, ...]:
         missing = [index for index, item in enumerate(self.snapshots) if field_name not in item]
@@ -519,6 +545,8 @@ class FiniteStateModel:
         unknown = set(self.initial_states) - set(self.states)
         if unknown:
             raise ValueError("unknown initial states: %s" % sorted(unknown))
+        if len(self.initial_states) != len(set(self.initial_states)):
+            raise ValueError("initial state names must be unique")
         if not 0.0 <= self.prior_reliability <= 1.0:
             raise ValueError("prior reliability must be in [0, 1]")
 
@@ -539,7 +567,15 @@ class FiniteStateModel:
         return interventions
 
     def scenario_count(self, context: Context) -> int:
-        return len(self.initial_states) * len(self._interventions(context))
+        return len(self.scenario_manifest(context))
+
+    def scenario_manifest(self, context: Context) -> Tuple[ScenarioKey, ...]:
+        interventions = FiniteStateModel._interventions(self, context)
+        return tuple(
+            ScenarioKey(initial_name, intervention.name)
+            for initial_name in self.initial_states
+            for intervention in interventions
+        )
 
     def simulate(self, context: Context, horizon: int) -> Iterable[Trace]:
         interventions = self._interventions(context)
@@ -613,6 +649,7 @@ class SatisfactionCertificate:
     failure_boundaries: Tuple[str, ...]
     complete: bool = True
     requirements_passed: bool = True
+    coverage_authority: str = "candidate-enumeration"
 
     @property
     def verification_score(self) -> float:

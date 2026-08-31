@@ -53,6 +53,8 @@ def build_demo_report() -> Dict[str, Any]:
                 {
                     "model": item.model.name,
                     "verification_score": round(item.verification_score, 4),
+                    "complete": item.certificate.complete,
+                    "coverage_authority": item.certificate.coverage_authority,
                     "metrics": {
                         "cost": item.model.metrics.cost,
                         "complexity": item.model.metrics.complexity,
@@ -110,6 +112,7 @@ def build_demo_report() -> Dict[str, Any]:
         "closure": {
             "model": science_model.name,
             "closed": closure.closed,
+            "complete": closure.complete,
             "counterexample_count": len(closure.counterexamples),
             "first_witness": (
                 dict(closure.counterexamples[0].witness)
@@ -123,6 +126,7 @@ def build_demo_report() -> Dict[str, Any]:
             ),
             "concept_version": refined.version if refined else 1,
             "closed_after_refinement": refinement.closed,
+            "refinement_stopped_reason": refinement.stopped_reason,
             "final_observables": list(refinement.final_spec.observables),
         },
     }

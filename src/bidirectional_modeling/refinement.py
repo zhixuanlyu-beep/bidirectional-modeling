@@ -60,6 +60,12 @@ class ClosureAnalyzer:
             if not complete or not frontier:
                 break
 
+        # Reaching the caller's depth bound with an unexpanded frontier proves
+        # only bounded non-refutation, never exhaustion of the reachable state
+        # space.  Keep the report incomplete until the frontier is empty.
+        if complete and frontier:
+            complete = False
+
         violations = []
         checked = 0
         state_items = tuple(reachable)

@@ -28,6 +28,7 @@ from .core import (
     RealizationResult,
     RequirementCategory,
     ResourceBudget,
+    ScenarioKey,
     SatisfactionCertificate,
     Trace,
 )
@@ -103,6 +104,7 @@ __all__ = [
     "RefinementStep",
     "RequirementCategory",
     "ResourceBudget",
+    "ScenarioKey",
     "SatisfactionCertificate",
     "SatisfactionEvaluator",
     "Trace",
@@ -112,4 +114,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
