@@ -1,5 +1,14 @@
 """Verifiable bidirectional macro-purpose ↔ micro-structure modeling."""
 
+from .correspondence import (
+    Correspondence,
+    CorrespondenceCertificate,
+    CorrespondenceCounterexample,
+    CorrespondenceValidator,
+    Scale,
+    ScaleGraph,
+    ScalePath,
+)
 from .core import (
     Aggregation,
     CandidateEvaluation,
@@ -72,6 +81,10 @@ __all__ = [
     "ConceptLibrary",
     "ConfidenceBreakdown",
     "Context",
+    "Correspondence",
+    "CorrespondenceCertificate",
+    "CorrespondenceCounterexample",
+    "CorrespondenceValidator",
     "Counterexample",
     "CustomRequirement",
     "DiscriminatingQuery",
@@ -104,6 +117,9 @@ __all__ = [
     "RefinementStep",
     "RequirementCategory",
     "ResourceBudget",
+    "Scale",
+    "ScaleGraph",
+    "ScalePath",
     "ScenarioKey",
     "SatisfactionCertificate",
     "SatisfactionEvaluator",
@@ -114,4 +130,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

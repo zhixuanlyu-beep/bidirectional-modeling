@@ -6,6 +6,12 @@ from collections import defaultdict
 from dataclasses import dataclass, replace
 from typing import Callable, Dict, Iterable, Optional, Sequence, Tuple
 
+from .correspondence import (
+    Correspondence,
+    CorrespondenceCertificate,
+    CorrespondenceValidator,
+    ScaleGraph,
+)
 from .core import (
     ClosureReport,
     Concept,
@@ -144,11 +150,17 @@ class BidirectionalModelingEngine:
         realizer: Optional[Realizer] = None,
         interpreter: Optional[Interpreter] = None,
         concept_library: Optional[ConceptLibrary] = None,
+        correspondence_validator: Optional[CorrespondenceValidator] = None,
+        scale_graph: Optional[ScaleGraph] = None,
     ) -> None:
         self.realizer = realizer or Realizer()
         self.interpreter = interpreter or Interpreter(self.realizer.evaluator)
         self.closure = ClosureAnalyzer()
         self.concepts = concept_library or ConceptLibrary()
+        self.correspondence_validator = correspondence_validator or CorrespondenceValidator(
+            self.realizer.evaluator
+        )
+        self.scale_graph = scale_graph or ScaleGraph()
 
     def realize(
         self,
@@ -181,6 +193,32 @@ class BidirectionalModelingEngine:
         max_states: int = 1_000,
     ):
         return self.closure.analyze(model, spec, context, max_depth, max_states)
+
+    def verify_correspondence(
+        self,
+        correspondence: Correspondence,
+        lower_model: ExecutableModel,
+        upper_model: ExecutableModel,
+        lower_context: Context,
+        upper_context: Optional[Context] = None,
+        horizon: int = 1,
+        budget: Optional[ResourceBudget] = None,
+        record: bool = True,
+    ) -> CorrespondenceCertificate:
+        """Validate one adjacent-scale link and record it only when proven."""
+
+        certificate = self.correspondence_validator.validate(
+            correspondence,
+            lower_model,
+            upper_model,
+            lower_context,
+            upper_context,
+            horizon,
+            budget,
+        )
+        if record and certificate.passed:
+            self.scale_graph.add_verified(correspondence, certificate)
+        return certificate
 
     def refine_until_closed(
         self,

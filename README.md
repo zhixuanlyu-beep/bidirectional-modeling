@@ -4,6 +4,8 @@
 
 这是“宏观目的 ↔ 介观模型 ↔ 微观结构”的可运行参考实现。它不假设两个方向存在唯一答案，而是返回带验证证书、反例、边界和排序分数的候选集合。
 
+从 `0.5.0` 起，尺度之间的状态投影不再只隐含在模型读出中：`Correspondence` 把粗粒化映射和场景映射声明为一等对象，`CorrespondenceValidator` 用上下层两个可执行模型检查动态交换图是否成立。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │
@@ -22,6 +24,7 @@ Concept refinement <── Counterexample / closure analysis
 - 解释结果中的 `ranking_score` 是未校准的相对分数，不是“目的为真”的概率。区分实验的信息增益只使用显式声明的 `PurposeHypothesis.prior`，不会把排序分数偷换成概率。
 - 模拟预算在候选、红队探测、目的解释、效果生成和双向往返的各阶段全局共享；结果同时报告 `simulations_used` 与 `truncated`。
 - 证书完整性必须相对于独立场景域证明。内置 `FiniteStateModel` 由框架从初态与干预导出场景清单；第三方模型必须由调用者通过 `Context.scenario_manifest` 提供 `ScenarioKey` 清单。候选提供的 `scenario_count()` 只作诊断提示，不能证明覆盖完整。
+- 跨尺度验证允许多个微观场景映射到同一宏观场景，但要求每个微观场景都有映像、每个宏观场景都有原像，并且每个时间步的投影结果都满足上层等价关系；空场景域不能产生真空证明。
 - 默认同时执行基线和显式干预，避免只在干预情形下通过、却在正常运行中失败。
 - 目标是任务相关的最小充分模型，不是还原完整底层世界。
 
@@ -36,6 +39,8 @@ Concept refinement <── Counterexample / closure analysis
 - `ClosureAnalyzer`：只从声明的初始状态探索可达状态，构造 `x₁ ~ x₂` 但未来宏观结果分化的见证，并列出可供人工批准的分离特征。
 - `refine_until_closed`：把闭合性反例接回规格细化；每次提升新可观测量后重新验证，直到闭合、预算耗尽或人工拒绝。
 - `ConceptLibrary`：保存定义、正反例、边界、相关概念、候选细化和一致的版本历史。
+- `CorrespondenceValidator`：在共享模拟预算内分别认证上下层场景域，再检查 `projection(lower_t) ~ upper_t`；失败时返回具体场景、时间步和快照见证。
+- `ScaleGraph`：只接纳验证通过的直接对应边。多跳路径只表示每条边分别通过，不会被偷换成端到端对应证明。
 - 双向往返检查：宏观往返只有在 `HypothesisGenerator.independent_recovery=True` 时才可通过，预先注入的假设目录只能证明兼容性；微观往返默认排除原模型本身，要求另一实现按“初始场景 + 干预”复现任务行为。往返的全部阶段共用一份预算。
 
 ## 安装与运行
@@ -104,13 +109,36 @@ for candidate in interpretation.candidates:
     print(candidate.hypothesis.level.value, candidate.ranking_score)
 ```
 
+显式验证相邻尺度间的对应：
+
+```python
+from bidirectional_modeling.examples import scale_correspondence_scenario
+
+correspondence, lower, upper, lower_context, upper_context = (
+    scale_correspondence_scenario()
+)
+certificate = engine.verify_correspondence(
+    correspondence,
+    lower,
+    upper,
+    lower_context,
+    upper_context,
+    horizon=2,
+)
+print(certificate.passed)          # complete and commutes
+print(certificate.counterexamples)
+```
+
+这里验证的是整个动态交换图，而不只是终态数值相等：对每个下层场景 `s` 和每个时间步 `t`，下层快照经 `projection` 后必须与 `scenario_projection(s)` 指向的上层快照等价。投影与场景映射由调用方持有，因此候选模型不能自行改变判据。
+
 开放式结构搜索可实现 `CandidateGenerator` 或使用 `ParametricCandidateGenerator`；已有设计库可直接传入序列或使用 `RegistryGenerator`。领域目的解释可实现 `HypothesisGenerator`，也可使用 `CatalogHypothesisGenerator` 提供明确候选。
 
-## 三个内置验收场景
+## 四个内置验收场景
 
 1. **软件行为**：多个可靠工作器形成帕累托候选；丢数据的“指标钻空子”方案被不变量拒绝；只在短期可靠的方案被延长时间探测反驳。
 2. **科学动力学**：位置相同但速度不同的状态未来分化；系统给出非闭合见证，人工批准把速度提升为宏观状态。由于该示例状态空间无界，有限搜索在细化后只报告“未发现反例但证明不完整”，不会宣称全局闭合。
 3. **组织机制**：同一审批结构兼容防欺诈、审计和中央控制等多个解释；系统保留不可识别性、限制弱证据意图推断，并选择区分候选的信息增益问题。
+4. **跨尺度对应**：两个不同的微观分量划分映射到同一个宏观总量状态；验证器确认多对一粗粒化在完整时间轨迹上与宏观动力学交换。
 
 ## 扩展接口
 
@@ -121,6 +149,7 @@ for candidate in interpretation.candidates:
 - `HypothesisGenerator`，产生有上下文依据的效果、功能或意图候选；
 - `RedTeamProbe`，表达领域特有的安全、长期性或反事实检查；
 - 自定义 `Requirement`，验证基础字段比较以外的规则。
+- `Correspondence`，声明下层快照到上层快照的投影，以及下层场景到上层场景的映射。
 
 第三方模型的场景域由调用方声明，而不是由候选模型自行决定：
 
@@ -143,6 +172,8 @@ context = Context(
 - 核心给出搜索、验证和闭环协议，不声称解决任意开放世界的模型发现；候选空间、领域先验和实验接口仍需外部提供。
 - 参考模型是确定性有限状态系统。连续、随机或高维系统需要实现相同协议，并提供相应误差界和统计证书。
 - 权威场景清单全部覆盖时，即使惰性迭代器恰好触及模拟上限也可证明任务域完整；没有调用方场景清单的第三方模型，即使返回已耗尽的普通 `tuple` 或 `list` 也不能自行证明场景域完整。
+- 对应证书只覆盖指定的两个模型、上下文、场景域和时间范围；投影函数是调用方声明的待检验假说，不是由有限数据自动识别出的唯一映射。
+- `ScaleGraph` 中的多跳路径只具有逐边证书。若要主张微观到宏观的端到端对应，必须另外声明并直接验证该端到端 `Correspondence`，不能仅凭传递闭包推断。
 - 可达状态搜索受深度和状态数预算限制；预算内未发现反例只会产生不完整报告，不会被误报为闭合证明。
 - 分离特征只是反例相关的候选，不自动等同于因果变量；`refine_until_closed` 要求显式的 `feature_selector` 决策。
 - 结构不能单独证明设计者意图。弱意图证据受到分数上限约束，真正的意图判断需要独立历史或主体证据。
