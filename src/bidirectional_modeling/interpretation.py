@@ -27,6 +27,8 @@ from .evaluation import SatisfactionEvaluator, TraceBatch
 
 
 class HypothesisGenerator(Protocol):
+    independent_recovery: bool
+
     def generate(
         self, model: ExecutableModel, context: Context
     ) -> Iterable[PurposeHypothesis]:
@@ -38,6 +40,8 @@ HypothesisSource = Union[HypothesisGenerator, Iterable[PurposeHypothesis]]
 
 class CatalogHypothesisGenerator:
     """Supplies contextual function/intention hypotheses from a domain catalog."""
+
+    independent_recovery = False
 
     def __init__(self, hypotheses: Iterable[PurposeHypothesis]) -> None:
         self.hypotheses = tuple(hypotheses)
@@ -54,6 +58,8 @@ class ObservedEffectGenerator:
     Function and intention are intentionally not synthesized here: those require
     environmental or actor evidence beyond the structure itself.
     """
+
+    independent_recovery = True
 
     def __init__(self, horizon: int = 1) -> None:
         if horizon < 1:

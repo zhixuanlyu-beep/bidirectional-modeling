@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 from bidirectional_modeling import (
     BidirectionalModelingEngine,
@@ -101,26 +102,40 @@ class FrameworkTests(unittest.TestCase):
         self.assertTrue(updated.boundaries)
         self.assertTrue(any("velocity" in item for item in updated.candidate_definitions))
 
-    def test_macro_and_micro_round_trips_use_semantic_equivalence(self):
+    def test_round_trips_require_independent_recovery_and_a_new_realization(self):
         spec, context, models = software_scenario()
-        hypotheses = (
-            PurposeHypothesis(
-                "reliable operation",
-                PurposeLevel.FUNCTION,
-                spec,
-                prior=0.7,
-            ),
-        )
+        class IndependentRecoveryGenerator:
+            independent_recovery = True
+
+            def generate(self, model, _context):
+                return (
+                    PurposeHypothesis(
+                        "recovered reliable operation",
+                        PurposeLevel.FUNCTION,
+                        replace(spec, name="independently recovered operation"),
+                        prior=0.7,
+                    ),
+                )
+
+        hypotheses = IndependentRecoveryGenerator()
         macro_report = self.engine.macro_round_trip(
             spec, context, models, hypotheses
         )
         self.assertTrue(macro_report.passed)
+        self.assertTrue(macro_report.independent_recovery)
 
+        clone = replace(models[0], name="sequential-safe-worker-clone")
         micro_report = self.engine.micro_round_trip(
-            models[0], context, hypotheses, models
+            models[0],
+            context,
+            tuple(hypotheses.generate(models[0], context)),
+            (clone,),
         )
         self.assertTrue(micro_report.passed)
-        self.assertIn("sequential-safe-worker", micro_report.behaviorally_equivalent_models)
+        self.assertIn(
+            "sequential-safe-worker-clone",
+            micro_report.behaviorally_equivalent_models,
+        )
 
     def test_parametric_generator_and_budget_are_explicit(self):
         spec, context, models = software_scenario()

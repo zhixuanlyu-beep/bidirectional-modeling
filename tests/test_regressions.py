@@ -21,6 +21,7 @@ from bidirectional_modeling import (
     RegistryGenerator,
     RequirementCategory,
     ResourceBudget,
+    ScenarioKey,
     SatisfactionEvaluator,
     Trace,
     behaviorally_equivalent,
@@ -38,6 +39,12 @@ def x_spec(name="x-is-one", operator="eq", expected=1):
         ("x",),
         (FieldRequirement("x objective", "x", operator, expected),),
         EquivalenceSpec(("x",)),
+    )
+
+
+def scenario_context(*pairs):
+    return Context(
+        scenario_manifest=tuple(ScenarioKey(initial, intervention) for initial, intervention in pairs)
     )
 
 
@@ -110,7 +117,7 @@ class RegressionTests(unittest.TestCase):
         model = LazyTwoScenarioModel()
         result = BidirectionalModelingEngine().realize(
             x_spec(),
-            Context(),
+            scenario_context(("good", "baseline"), ("bad", "baseline")),
             (model,),
             ResourceBudget(max_simulations=1),
         )
@@ -122,12 +129,15 @@ class RegressionTests(unittest.TestCase):
         self.assertFalse(certificate.complete)
         self.assertTrue(certificate.requirements_passed)
         self.assertFalse(certificate.satisfied)
-        self.assertEqual(certificate.confidence.coverage, 0.0)
+        self.assertEqual(certificate.confidence.coverage, 0.5)
 
     def test_candidate_cannot_forge_completeness_with_scenario_count(self):
         model = LyingScenarioModel()
         result = BidirectionalModelingEngine().realize(
-            x_spec(), Context(), (model,), ResourceBudget(max_simulations=1)
+            x_spec(),
+            scenario_context(("good", "baseline"), ("bad", "baseline")),
+            (model,),
+            ResourceBudget(max_simulations=1),
         )
 
         certificate = result.rejected[0].certificate
@@ -136,6 +146,38 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(model.produced, 1)
         self.assertTrue(
             any("not trusted" in boundary for boundary in certificate.failure_boundaries)
+        )
+
+    def test_third_party_scenarios_require_a_caller_manifest(self):
+        model = TupleTraceModel(
+            "unmanifested",
+            (Trace("unmanifested", "s", "baseline", ({"x": 0}, {"x": 1})),),
+        )
+        certificate = SatisfactionEvaluator().evaluate(model, x_spec(), Context())
+
+        self.assertFalse(certificate.complete)
+        self.assertFalse(certificate.satisfied)
+        self.assertEqual(certificate.coverage_authority, "none")
+        self.assertTrue(
+            any("scenario manifest" in item for item in certificate.failure_boundaries)
+        )
+
+    def test_manifest_rejects_an_omitted_scenario(self):
+        model = TupleTraceModel(
+            "omitting",
+            (Trace("omitting", "good", "baseline", ({"x": 0}, {"x": 1})),),
+        )
+        certificate = SatisfactionEvaluator().evaluate(
+            model,
+            x_spec(),
+            scenario_context(("good", "baseline"), ("bad", "baseline")),
+        )
+
+        self.assertFalse(certificate.complete)
+        self.assertFalse(certificate.satisfied)
+        self.assertEqual(certificate.confidence.coverage, 0.5)
+        self.assertTrue(
+            any("missing required scenarios" in item for item in certificate.failure_boundaries)
         )
 
     def test_untrusted_scenario_diagnostics_fail_closed(self):
@@ -153,7 +195,7 @@ class RegressionTests(unittest.TestCase):
         partial = SatisfactionEvaluator().evaluate(
             negative,
             x_spec(),
-            Context(),
+            scenario_context(("a", "baseline"), ("b", "baseline")),
             ResourceBudget(max_simulations=1),
         )
         self.assertFalse(partial.complete)
@@ -163,7 +205,7 @@ class RegressionTests(unittest.TestCase):
         mismatch = SatisfactionEvaluator().evaluate(
             LyingScenarioModel(),
             x_spec(),
-            Context(),
+            scenario_context(("good", "baseline"), ("bad", "baseline")),
             ResourceBudget(max_simulations=3),
         )
         self.assertTrue(mismatch.complete)
@@ -181,7 +223,9 @@ class RegressionTests(unittest.TestCase):
                 raise RuntimeError("stream failed")
 
         failed = SatisfactionEvaluator().evaluate(
-            MidStreamFailureModel(), x_spec(), Context()
+            MidStreamFailureModel(),
+            x_spec(),
+            scenario_context(("a", "baseline")),
         )
         self.assertFalse(failed.complete)
         self.assertTrue(any("count unavailable" in item for item in failed.failure_boundaries))
@@ -192,7 +236,7 @@ class RegressionTests(unittest.TestCase):
         second = LazyTwoScenarioModel()
         result = BidirectionalModelingEngine().realize(
             x_spec(),
-            Context(),
+            scenario_context(("good", "baseline"), ("bad", "baseline")),
             (first, second),
             ResourceBudget(max_simulations=1),
         )
@@ -210,7 +254,7 @@ class RegressionTests(unittest.TestCase):
         )
         result = BidirectionalModelingEngine().realize(
             x_spec(),
-            Context(),
+            scenario_context(("good", "baseline"), ("bad", "baseline")),
             (model,),
             ResourceBudget(max_simulations=2),
         )
@@ -255,7 +299,7 @@ class RegressionTests(unittest.TestCase):
         )
         result = BidirectionalModelingEngine().interpret(
             model,
-            Context(),
+            scenario_context(("s", "baseline")),
             hypotheses,
             budget=ResourceBudget(max_simulations=1),
         )
@@ -283,7 +327,7 @@ class RegressionTests(unittest.TestCase):
         )
         result = BidirectionalModelingEngine().interpret(
             model,
-            Context(),
+            scenario_context(("s", "baseline")),
             hypotheses,
             budget=ResourceBudget(max_simulations=1),
         )
@@ -307,7 +351,7 @@ class RegressionTests(unittest.TestCase):
         )
         result = BidirectionalModelingEngine().interpret(
             model,
-            Context(),
+            scenario_context(("s", "baseline")),
             ObservedEffectGenerator(horizon=1),
             budget=ResourceBudget(max_simulations=1),
         )
@@ -327,7 +371,7 @@ class RegressionTests(unittest.TestCase):
         )
         report = BidirectionalModelingEngine().macro_round_trip(
             x_spec(),
-            Context(),
+            scenario_context(("s", "baseline")),
             (model,),
             (hypothesis,),
             budget=ResourceBudget(max_simulations=1),
@@ -338,41 +382,127 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(report.simulations_used, 1)
         self.assertEqual(model.calls, 1)
 
+    def test_injected_hypothesis_catalog_is_not_independent_recovery(self):
+        model = TupleTraceModel(
+            "injected-round-trip",
+            (
+                Trace(
+                    "injected-round-trip",
+                    "s",
+                    "baseline",
+                    ({"x": 0}, {"x": 1}),
+                ),
+            ),
+        )
+        report = BidirectionalModelingEngine().macro_round_trip(
+            x_spec("original"),
+            scenario_context(("s", "baseline")),
+            (model,),
+            (
+                PurposeHypothesis(
+                    "injected equivalent",
+                    PurposeLevel.FUNCTION,
+                    x_spec("repackaged"),
+                ),
+            ),
+        )
+
+        self.assertTrue(report.compatibility_passed)
+        self.assertFalse(report.independent_recovery)
+        self.assertFalse(report.passed)
+
     def test_micro_round_trip_accounts_for_behavior_comparison(self):
         hypothesis = PurposeHypothesis(
             "same semantics", PurposeLevel.FUNCTION, x_spec()
         )
-        insufficient = TupleTraceModel(
-            "insufficient",
-            (Trace("insufficient", "s", "baseline", ({"x": 0}, {"x": 1})),),
+        insufficient_original = TupleTraceModel(
+            "insufficient-original",
+            (
+                Trace(
+                    "insufficient-original",
+                    "s",
+                    "baseline",
+                    ({"x": 0}, {"x": 1}),
+                ),
+            ),
+        )
+        insufficient_replica = TupleTraceModel(
+            "insufficient-replica",
+            (
+                Trace(
+                    "insufficient-replica",
+                    "s",
+                    "baseline",
+                    ({"x": 0}, {"x": 1}),
+                ),
+            ),
         )
         short_report = BidirectionalModelingEngine().micro_round_trip(
-            insufficient,
-            Context(),
+            insufficient_original,
+            scenario_context(("s", "baseline")),
             (hypothesis,),
-            RegistryGenerator((insufficient,)),
+            RegistryGenerator((insufficient_replica,)),
             budget=ResourceBudget(max_simulations=2),
         )
         self.assertFalse(short_report.passed)
         self.assertTrue(short_report.truncated)
         self.assertEqual(short_report.simulations_used, 2)
-        self.assertEqual(insufficient.calls, 2)
+        self.assertEqual(insufficient_original.calls, 1)
+        self.assertEqual(insufficient_replica.calls, 1)
 
-        sufficient = TupleTraceModel(
-            "sufficient",
-            (Trace("sufficient", "s", "baseline", ({"x": 0}, {"x": 1})),),
+        sufficient_original = TupleTraceModel(
+            "sufficient-original",
+            (
+                Trace(
+                    "sufficient-original",
+                    "s",
+                    "baseline",
+                    ({"x": 0}, {"x": 1}),
+                ),
+            ),
+        )
+        sufficient_replica = TupleTraceModel(
+            "sufficient-replica",
+            (
+                Trace(
+                    "sufficient-replica",
+                    "s",
+                    "baseline",
+                    ({"x": 0}, {"x": 1}),
+                ),
+            ),
         )
         full_report = BidirectionalModelingEngine().micro_round_trip(
-            sufficient,
-            Context(),
+            sufficient_original,
+            scenario_context(("s", "baseline")),
             (hypothesis,),
-            RegistryGenerator((sufficient,)),
-            budget=ResourceBudget(max_simulations=3),
+            RegistryGenerator((sufficient_replica,)),
+            budget=ResourceBudget(max_simulations=4),
         )
         self.assertTrue(full_report.passed)
         self.assertFalse(full_report.truncated)
-        self.assertEqual(full_report.simulations_used, 3)
-        self.assertEqual(sufficient.calls, 3)
+        self.assertEqual(full_report.simulations_used, 4)
+        self.assertEqual(sufficient_original.calls, 2)
+        self.assertEqual(sufficient_replica.calls, 2)
+
+    def test_micro_round_trip_excludes_the_original_model_by_default(self):
+        model = TupleTraceModel(
+            "identity",
+            (Trace("identity", "s", "baseline", ({"x": 0}, {"x": 1})),),
+        )
+        hypothesis = PurposeHypothesis(
+            "same semantics", PurposeLevel.FUNCTION, x_spec()
+        )
+        report = BidirectionalModelingEngine().micro_round_trip(
+            model,
+            scenario_context(("s", "baseline")),
+            (hypothesis,),
+            RegistryGenerator((model,)),
+            budget=ResourceBudget(max_simulations=3),
+        )
+
+        self.assertFalse(report.passed)
+        self.assertFalse(report.behaviorally_equivalent_models)
 
     def test_macro_round_trip_does_not_accept_name_only_match(self):
         def transition(state, action, context):
@@ -521,7 +651,7 @@ class RegressionTests(unittest.TestCase):
         self.assertIn(refined.negative_examples[0], switched.positive_examples)
         self.assertNotIn(refined.negative_examples[0], switched.negative_examples)
 
-    def test_human_approved_refinement_closes_the_science_model(self):
+    def test_human_refinement_does_not_overclaim_unbounded_closure(self):
         spec, context, model = science_closure_scenario()
         engine = BidirectionalModelingEngine()
         result = engine.refine_until_closed(
@@ -532,10 +662,11 @@ class RegressionTests(unittest.TestCase):
             concept_name="position state",
             max_iterations=1,
         )
-        self.assertTrue(result.closed)
+        self.assertFalse(result.closed)
         self.assertIn("velocity", result.final_spec.observables)
         self.assertEqual(engine.concepts.get("position state").version, 2)
-        self.assertTrue(result.steps[-1].closure_report.closed)
+        self.assertFalse(result.steps[-1].closure_report.complete)
+        self.assertEqual(result.stopped_reason, "closure-analysis-budget-exhausted")
 
     def test_closure_searches_reachable_states(self):
         spec = MacroSpec(
@@ -609,6 +740,36 @@ class RegressionTests(unittest.TestCase):
         self.assertFalse(report.closed)
         self.assertEqual(report.explored_states, 1)
 
+    def test_depth_limited_closure_never_claims_a_global_proof(self):
+        spec = MacroSpec(
+            "delayed divergence",
+            ("visible",),
+            (),
+            EquivalenceSpec(("visible",)),
+            horizon=1,
+        )
+
+        def transition(state, action, context):
+            return {"counter": state["counter"] + 1}
+
+        model = FiniteStateModel(
+            "delayed-divergence",
+            {"start": {"counter": 0}},
+            ("start",),
+            (),
+            transition,
+            lambda state, context: {"visible": int(state["counter"] >= 3)},
+            ModelMetrics(1, 1, 1),
+        )
+        engine = BidirectionalModelingEngine()
+        shallow = engine.check_closure(model, spec, Context(), max_depth=1)
+        deeper = engine.check_closure(model, spec, Context(), max_depth=2)
+
+        self.assertFalse(shallow.complete)
+        self.assertFalse(shallow.closed)
+        self.assertFalse(deeper.closed)
+        self.assertTrue(deeper.counterexamples)
+
     def test_closure_ignores_declared_but_unreachable_states(self):
         def transition(state, action, context):
             if state["hidden"] == 0:
@@ -632,7 +793,8 @@ class RegressionTests(unittest.TestCase):
             model, x_spec(), Context(), max_depth=0
         )
 
-        self.assertTrue(report.closed)
+        self.assertFalse(report.closed)
+        self.assertFalse(report.complete)
         self.assertEqual(report.explored_states, 1)
         self.assertFalse(report.counterexamples)
 
@@ -644,7 +806,7 @@ class RegressionTests(unittest.TestCase):
         )
         result = BidirectionalModelingEngine().realize(
             x_spec(),
-            Context(),
+            scenario_context(("s", "baseline")),
             (crashing, good),
             ResourceBudget(max_simulations=1),
         )
@@ -731,7 +893,10 @@ class RegressionTests(unittest.TestCase):
         result = BidirectionalModelingEngine(
             realizer=Realizer(probes=(ExplodingProbe(),))
         ).realize(
-            x_spec(), Context(), (model,), ResourceBudget(max_simulations=2)
+            x_spec(),
+            scenario_context(("s", "baseline")),
+            (model,),
+            ResourceBudget(max_simulations=2),
         )
 
         self.assertFalse(result.candidates)
@@ -762,10 +927,11 @@ class RegressionTests(unittest.TestCase):
         )
         experiment = Experiment("distinguish", "Which outcome occurs?")
         engine = BidirectionalModelingEngine()
-        baseline = engine.interpret(model, Context(), hypotheses, experiments=(experiment,))
+        context = scenario_context(("s", "baseline"))
+        baseline = engine.interpret(model, context, hypotheses, experiments=(experiment,))
         skewed = engine.interpret(
             model,
-            Context(),
+            context,
             hypotheses,
             evidence=(Evidence("extra support", "A", 1.0),),
             experiments=(experiment,),
@@ -792,9 +958,10 @@ class RegressionTests(unittest.TestCase):
             EquivalenceSpec(("x",)),
             tolerance=1.0,
         )
-        strict_result = BidirectionalModelingEngine().realize(strict, Context(), (model,))
+        context = scenario_context(("s", "baseline"))
+        strict_result = BidirectionalModelingEngine().realize(strict, context, (model,))
         approximate_result = BidirectionalModelingEngine().realize(
-            approximate, Context(), (model,)
+            approximate, context, (model,)
         )
 
         self.assertFalse(strict_result.candidates)
@@ -813,7 +980,9 @@ class RegressionTests(unittest.TestCase):
             ),
         )
         result = BidirectionalModelingEngine().interpret(
-            model, Context(), ObservedEffectGenerator(horizon=2)
+            model,
+            scenario_context(("s", "baseline")),
+            ObservedEffectGenerator(horizon=2),
         )
         names = tuple(item.hypothesis.name for item in result.candidates)
 
@@ -845,7 +1014,7 @@ class RegressionTests(unittest.TestCase):
         )
         result = BidirectionalModelingEngine().realize(
             x_spec(),
-            Context(),
+            scenario_context(("s", "baseline")),
             RegistryGenerator((model,)),
             ResourceBudget(max_candidates=1, max_simulations=1),
         )
