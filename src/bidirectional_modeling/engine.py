@@ -9,6 +9,8 @@ from typing import Callable, Dict, Iterable, Optional, Sequence, Tuple
 from .correspondence import (
     Correspondence,
     CorrespondenceCertificate,
+    CorrespondenceSuiteCertificate,
+    CorrespondenceValidationCase,
     CorrespondenceValidator,
     ScaleGraph,
 )
@@ -214,6 +216,24 @@ class BidirectionalModelingEngine:
             lower_context,
             upper_context,
             horizon,
+            budget,
+        )
+        if record and certificate.passed:
+            self.scale_graph.add_verified(correspondence, certificate)
+        return certificate
+
+    def verify_correspondence_suite(
+        self,
+        correspondence: Correspondence,
+        cases: Iterable[CorrespondenceValidationCase],
+        budget: Optional[ResourceBudget] = None,
+        record: bool = True,
+    ) -> CorrespondenceSuiteCertificate:
+        """Require complete suite coverage plus an independent holdout case."""
+
+        certificate = self.correspondence_validator.validate_suite(
+            correspondence,
+            cases,
             budget,
         )
         if record and certificate.passed:

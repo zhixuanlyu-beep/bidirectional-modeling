@@ -7,8 +7,10 @@ The validator checks that claim over independently certified scenario domains.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from enum import Enum
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, Union
 
 from .core import (
     Context,
@@ -28,6 +30,13 @@ ScenarioProjection = Callable[[ScenarioKey], ScenarioKey]
 
 def _identity_scenario(key: ScenarioKey) -> ScenarioKey:
     return key
+
+
+def context_fingerprint(context: Context) -> str:
+    """Stable digest for the declared context and scenario domain."""
+
+    payload = repr(context.semantic_signature()).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -112,6 +121,8 @@ class CorrespondenceCertificate:
     boundaries: Tuple[str, ...] = ()
     lower_coverage_authority: str = "none"
     upper_coverage_authority: str = "none"
+    lower_context_fingerprint: str = ""
+    upper_context_fingerprint: str = ""
     simulations_used: int = 0
 
     def __post_init__(self) -> None:
@@ -126,10 +137,143 @@ class CorrespondenceCertificate:
         )
         if min(counts) < 0:
             raise ValueError("correspondence counts must be non-negative")
+        for fingerprint in (
+            self.lower_context_fingerprint,
+            self.upper_context_fingerprint,
+        ):
+            if not fingerprint:
+                continue
+            if len(fingerprint) != 64:
+                raise ValueError("context fingerprints must be SHA-256 digests")
+            try:
+                int(fingerprint, 16)
+            except ValueError as error:
+                raise ValueError(
+                    "context fingerprints must be hexadecimal"
+                ) from error
 
     @property
     def passed(self) -> bool:
         return self.complete and self.commutes
+
+
+class CorrespondenceCaseRole(str, Enum):
+    CALIBRATION = "calibration"
+    HOLDOUT = "holdout"
+
+
+@dataclass(frozen=True)
+class CorrespondenceValidationCase:
+    """One declared domain in a multi-context correspondence test suite."""
+
+    name: str
+    lower_model: ExecutableModel
+    upper_model: ExecutableModel
+    lower_context: Context
+    upper_context: Optional[Context] = None
+    horizon: int = 1
+    role: CorrespondenceCaseRole = CorrespondenceCaseRole.CALIBRATION
+    independent: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("correspondence validation case name must be non-empty")
+        if self.horizon < 1:
+            raise ValueError("correspondence validation horizon must be at least one")
+        if self.independent and self.role != CorrespondenceCaseRole.HOLDOUT:
+            raise ValueError("only a holdout case may claim independent provenance")
+
+    @property
+    def resolved_upper_context(self) -> Context:
+        return self.upper_context or self.lower_context
+
+
+@dataclass(frozen=True)
+class CorrespondenceCaseResult:
+    case_name: str
+    role: CorrespondenceCaseRole
+    independent: bool
+    certificate: CorrespondenceCertificate
+
+    def __post_init__(self) -> None:
+        if not self.case_name:
+            raise ValueError("correspondence case result name must be non-empty")
+        if self.independent and self.role != CorrespondenceCaseRole.HOLDOUT:
+            raise ValueError("only a holdout result may claim independent provenance")
+
+
+@dataclass(frozen=True)
+class CorrespondenceSuiteCertificate:
+    """Cross-context evidence, with independent holdout status kept explicit."""
+
+    correspondence_name: str
+    lower_scale: str
+    upper_scale: str
+    cases: Tuple[CorrespondenceCaseResult, ...]
+    simulations_used: int
+    truncated: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.correspondence_name or not self.lower_scale or not self.upper_scale:
+            raise ValueError("suite certificate identities must be non-empty")
+        if self.simulations_used < 0:
+            raise ValueError("suite simulations_used must be non-negative")
+        names = [item.case_name for item in self.cases]
+        if len(names) != len(set(names)):
+            raise ValueError("suite certificate case names must be unique")
+        for item in self.cases:
+            metadata = (
+                item.certificate.correspondence_name,
+                item.certificate.lower_scale,
+                item.certificate.upper_scale,
+            )
+            if metadata != (
+                self.correspondence_name,
+                self.lower_scale,
+                self.upper_scale,
+            ):
+                raise ValueError("case certificate metadata does not match its suite")
+        if sum(item.certificate.simulations_used for item in self.cases) != (
+            self.simulations_used
+        ):
+            raise ValueError("suite simulation count must equal its case certificates")
+
+    @property
+    def complete(self) -> bool:
+        return bool(self.cases) and all(
+            item.certificate.complete for item in self.cases
+        )
+
+    @property
+    def commutes(self) -> bool:
+        return bool(self.cases) and all(
+            item.certificate.commutes for item in self.cases
+        )
+
+    @property
+    def compatibility_passed(self) -> bool:
+        return (
+            not self.truncated
+            and bool(self.cases)
+            and all(item.certificate.passed for item in self.cases)
+        )
+
+    @property
+    def has_independent_holdout(self) -> bool:
+        return any(
+            item.role == CorrespondenceCaseRole.HOLDOUT and item.independent
+            for item in self.cases
+        )
+
+    @property
+    def passed(self) -> bool:
+        return self.has_independent_holdout and self.compatibility_passed
+
+
+CorrespondenceEvidence = Union[
+    CorrespondenceCertificate,
+    CorrespondenceSuiteCertificate,
+]
 
 
 class CorrespondenceValidator:
@@ -407,7 +551,89 @@ class CorrespondenceValidator:
             boundaries=boundaries,
             lower_coverage_authority=lower_batch.coverage_authority,
             upper_coverage_authority=upper_batch.coverage_authority,
+            lower_context_fingerprint=context_fingerprint(lower_context),
+            upper_context_fingerprint=context_fingerprint(upper_context),
             simulations_used=simulations_used,
+        )
+
+    def validate_suite(
+        self,
+        correspondence: Correspondence,
+        cases: Iterable[CorrespondenceValidationCase],
+        budget: Optional[ResourceBudget] = None,
+    ) -> CorrespondenceSuiteCertificate:
+        """Validate calibration and holdout cases under one shared budget."""
+
+        cases = tuple(cases)
+        if not cases:
+            raise ValueError("a correspondence validation suite cannot be empty")
+        names = [item.name for item in cases]
+        if len(names) != len(set(names)):
+            raise ValueError("correspondence validation case names must be unique")
+
+        budget = budget or ResourceBudget()
+        remaining = budget.max_simulations
+        simulations_used = 0
+        truncated = False
+        results = []
+        for case in cases:
+            upper_context = case.resolved_upper_context
+            if remaining <= 0:
+                certificate = CorrespondenceCertificate(
+                    correspondence_name=correspondence.name,
+                    lower_scale=correspondence.lower_scale.name,
+                    upper_scale=correspondence.upper_scale.name,
+                    lower_model_name=str(getattr(case.lower_model, "name", "")),
+                    upper_model_name=str(getattr(case.upper_model, "name", "")),
+                    horizon=case.horizon,
+                    complete=False,
+                    commutes=True,
+                    lower_scenarios=0,
+                    upper_scenarios=0,
+                    paired_scenarios=0,
+                    covered_upper_scenarios=0,
+                    assumptions=correspondence.assumptions,
+                    boundaries=(
+                        "validation case was not started because the suite simulation "
+                        "budget was exhausted",
+                    ),
+                    lower_context_fingerprint=context_fingerprint(case.lower_context),
+                    upper_context_fingerprint=context_fingerprint(upper_context),
+                )
+                truncated = True
+            else:
+                certificate = self.validate(
+                    correspondence,
+                    case.lower_model,
+                    case.upper_model,
+                    case.lower_context,
+                    upper_context,
+                    case.horizon,
+                    replace(budget, max_simulations=remaining),
+                )
+                simulations_used += certificate.simulations_used
+                remaining -= certificate.simulations_used
+                if not certificate.complete and any(
+                    "budget" in boundary.lower()
+                    for boundary in certificate.boundaries
+                ):
+                    truncated = True
+            results.append(
+                CorrespondenceCaseResult(
+                    case.name,
+                    case.role,
+                    case.independent,
+                    certificate,
+                )
+            )
+
+        return CorrespondenceSuiteCertificate(
+            correspondence_name=correspondence.name,
+            lower_scale=correspondence.lower_scale.name,
+            upper_scale=correspondence.upper_scale.name,
+            cases=tuple(results),
+            simulations_used=simulations_used,
+            truncated=truncated,
         )
 
 
@@ -439,7 +665,7 @@ class ScaleGraph:
     def __init__(self) -> None:
         self._scales: Dict[str, Scale] = {}
         self._correspondences: Dict[str, Correspondence] = {}
-        self._certificates: Dict[str, CorrespondenceCertificate] = {}
+        self._certificates: Dict[str, CorrespondenceEvidence] = {}
 
     @property
     def scales(self) -> Tuple[Scale, ...]:
@@ -452,7 +678,7 @@ class ScaleGraph:
     def add_verified(
         self,
         correspondence: Correspondence,
-        certificate: CorrespondenceCertificate,
+        certificate: CorrespondenceEvidence,
     ) -> None:
         if not certificate.passed:
             raise ValueError("only passed correspondence certificates may enter the graph")
@@ -477,18 +703,30 @@ class ScaleGraph:
 
         existing_correspondence = self._correspondences.get(correspondence.name)
         existing_certificate = self._certificates.get(correspondence.name)
-        if existing_correspondence is not None and (
-            existing_correspondence != correspondence
-            or existing_certificate != certificate
-        ):
+        if existing_correspondence is not None and existing_correspondence != correspondence:
             raise ValueError(
                 "correspondence %r already has a different certified edge"
                 % correspondence.name
             )
+        if existing_certificate is not None and existing_certificate != certificate:
+            if isinstance(
+                existing_certificate,
+                CorrespondenceSuiteCertificate,
+            ) and isinstance(certificate, CorrespondenceCertificate):
+                # Never replace stronger cross-context evidence with one case.
+                return
+            if not (
+                isinstance(existing_certificate, CorrespondenceCertificate)
+                and isinstance(certificate, CorrespondenceSuiteCertificate)
+            ):
+                raise ValueError(
+                    "correspondence %r already has different certified evidence"
+                    % correspondence.name
+                )
         self._correspondences[correspondence.name] = correspondence
         self._certificates[correspondence.name] = certificate
 
-    def certificate(self, correspondence_name: str) -> CorrespondenceCertificate:
+    def certificate(self, correspondence_name: str) -> CorrespondenceEvidence:
         return self._certificates[correspondence_name]
 
     def has_certified_direct(self, lower_scale: str, upper_scale: str) -> bool:

@@ -9,7 +9,7 @@ from typing import Any, Dict
 from .engine import BidirectionalModelingEngine
 from .examples import (
     organization_interpretation_scenario,
-    scale_correspondence_scenario,
+    scale_correspondence_suite,
     science_closure_scenario,
     software_scenario,
 )
@@ -47,20 +47,10 @@ def build_demo_report() -> Dict[str, Any]:
         org_model, org_context, ObservedEffectGenerator(horizon=1)
     )
 
-    (
+    correspondence, correspondence_cases = scale_correspondence_suite()
+    correspondence_certificate = engine.verify_correspondence_suite(
         correspondence,
-        lower_model,
-        upper_model,
-        lower_context,
-        upper_context,
-    ) = scale_correspondence_scenario()
-    correspondence_certificate = engine.verify_correspondence(
-        correspondence,
-        lower_model,
-        upper_model,
-        lower_context,
-        upper_context,
-        horizon=2,
+        correspondence_cases,
     )
     scale_paths = engine.scale_graph.find_paths("micro", "macro")
 
@@ -152,15 +142,41 @@ def build_demo_report() -> Dict[str, Any]:
             "lower_scale": correspondence.lower_scale.name,
             "upper_scale": correspondence.upper_scale.name,
             "passed": correspondence_certificate.passed,
+            "compatibility_passed": correspondence_certificate.compatibility_passed,
+            "independent_holdout": correspondence_certificate.has_independent_holdout,
             "complete": correspondence_certificate.complete,
             "commutes": correspondence_certificate.commutes,
-            "lower_scenarios": correspondence_certificate.lower_scenarios,
-            "upper_scenarios": correspondence_certificate.upper_scenarios,
-            "paired_scenarios": correspondence_certificate.paired_scenarios,
+            "lower_scenarios": sum(
+                item.certificate.lower_scenarios
+                for item in correspondence_certificate.cases
+            ),
+            "upper_scenarios": sum(
+                item.certificate.upper_scenarios
+                for item in correspondence_certificate.cases
+            ),
+            "paired_scenarios": sum(
+                item.certificate.paired_scenarios
+                for item in correspondence_certificate.cases
+            ),
             "simulations_used": correspondence_certificate.simulations_used,
-            "coverage_authorities": [
-                correspondence_certificate.lower_coverage_authority,
-                correspondence_certificate.upper_coverage_authority,
+            "cases": [
+                {
+                    "name": item.case_name,
+                    "role": item.role.value,
+                    "independent": item.independent,
+                    "passed": item.certificate.passed,
+                    "lower_context_fingerprint": (
+                        item.certificate.lower_context_fingerprint
+                    ),
+                    "upper_context_fingerprint": (
+                        item.certificate.upper_context_fingerprint
+                    ),
+                    "coverage_authorities": [
+                        item.certificate.lower_coverage_authority,
+                        item.certificate.upper_coverage_authority,
+                    ],
+                }
+                for item in correspondence_certificate.cases
             ],
             "paths": [
                 {
@@ -220,6 +236,10 @@ def _print_human(report: Dict[str, Any]) -> None:
             correspondence["paired_scenarios"],
             correspondence["upper_scenarios"],
         )
+    )
+    print(
+        "  独立留出复核：%s"
+        % ("通过" if correspondence["independent_holdout"] else "缺失")
     )
 
 
