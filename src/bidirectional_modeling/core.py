@@ -18,6 +18,48 @@ Snapshot = Mapping[str, Any]
 State = Mapping[str, Any]
 
 
+def _freeze_context_value(value: Any) -> Any:
+    """Canonicalize context data or reject values with unstable identities."""
+
+    if value is None:
+        return ("none",)
+    if isinstance(value, bool):
+        return ("bool", value)
+    if isinstance(value, int):
+        return ("int", value)
+    if isinstance(value, float):
+        return ("float", value.hex())
+    if isinstance(value, str):
+        return ("str", value)
+    if isinstance(value, bytes):
+        return ("bytes", value.hex())
+    if isinstance(value, Enum):
+        return (
+            "enum",
+            type(value).__module__,
+            type(value).__qualname__,
+            _freeze_context_value(value.value),
+        )
+    if isinstance(value, Mapping):
+        items = (
+            (_freeze_context_value(key), _freeze_context_value(item))
+            for key, item in value.items()
+        )
+        return ("mapping", tuple(sorted(items, key=repr)))
+    if isinstance(value, (list, tuple)):
+        return (
+            type(value).__name__,
+            tuple(_freeze_context_value(item) for item in value),
+        )
+    if isinstance(value, (set, frozenset)):
+        items = (_freeze_context_value(item) for item in value)
+        return (type(value).__name__, tuple(sorted(items, key=repr)))
+    raise TypeError(
+        "context fingerprints require canonical primitive/container values; got %s.%s"
+        % (type(value).__module__, type(value).__qualname__)
+    )
+
+
 class PurposeLevel(str, Enum):
     EFFECT = "effect"
     FUNCTION = "function"
@@ -113,6 +155,48 @@ class Context:
             raise TypeError("scenario manifest entries must be ScenarioKey instances")
         if len(self.scenario_manifest) != len(set(self.scenario_manifest)):
             raise ValueError("scenario manifest entries must be unique")
+
+    def semantic_signature(self) -> Tuple[Any, ...]:
+        """Canonical identity for the assumptions and domain of one evaluation."""
+
+        history = tuple(
+            sorted(
+                (
+                    item.statement,
+                    item.hypothesis,
+                    item.strength,
+                    item.kind,
+                    item.source,
+                )
+                for item in self.history
+            )
+        )
+        interventions = tuple(
+            sorted(
+                (
+                    item.name,
+                    tuple(item.actions),
+                    item.repeat_last,
+                )
+                for item in self.interventions
+            )
+        )
+        scenarios = tuple(
+            sorted(
+                (item.initial_state, item.intervention)
+                for item in self.scenario_manifest
+            )
+        )
+        return (
+            _freeze_context_value(self.environment),
+            self.scale,
+            history,
+            self.observer,
+            interventions,
+            tuple(sorted(self.assumptions)),
+            self.include_baseline,
+            scenarios,
+        )
 
 
 @dataclass(frozen=True)
@@ -401,7 +485,15 @@ class EquivalenceSpec:
 
 def _freeze_value(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return tuple(sorted((key, _freeze_value(item)) for key, item in value.items()))
+        return tuple(
+            sorted(
+                (
+                    (_freeze_value(key), _freeze_value(item))
+                    for key, item in value.items()
+                ),
+                key=repr,
+            )
+        )
     if isinstance(value, (list, tuple)):
         return tuple(_freeze_value(item) for item in value)
     if isinstance(value, set):

@@ -6,6 +6,8 @@
 
 从 `0.5.0` 起，尺度之间的状态投影不再只隐含在模型读出中：`Correspondence` 把粗粒化映射和场景映射声明为一等对象，`CorrespondenceValidator` 用上下层两个可执行模型检查动态交换图是否成立。
 
+`0.6.0` 进一步把证书绑定到规范化的上下文指纹，并引入校准/留出验证套件：在已知场景上相容只产生 `compatibility_passed`，只有全部用例通过且至少包含一个声明为独立来源的留出用例，套件的 `passed` 才为真。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │
@@ -25,6 +27,7 @@ Concept refinement <── Counterexample / closure analysis
 - 模拟预算在候选、红队探测、目的解释、效果生成和双向往返的各阶段全局共享；结果同时报告 `simulations_used` 与 `truncated`。
 - 证书完整性必须相对于独立场景域证明。内置 `FiniteStateModel` 由框架从初态与干预导出场景清单；第三方模型必须由调用者通过 `Context.scenario_manifest` 提供 `ScenarioKey` 清单。候选提供的 `scenario_count()` 只作诊断提示，不能证明覆盖完整。
 - 跨尺度验证允许多个微观场景映射到同一宏观场景，但要求每个微观场景都有映像、每个宏观场景都有原像，并且每个时间步的投影结果都满足上层等价关系；空场景域不能产生真空证明。
+- 每份对应证书记录上下层 `Context` 的 SHA-256 指纹，防止把一个环境、假设或场景域中的结论冒充到另一个适用域。多用例套件在所有用例间共享同一模拟预算。
 - 默认同时执行基线和显式干预，避免只在干预情形下通过、却在正常运行中失败。
 - 目标是任务相关的最小充分模型，不是还原完整底层世界。
 
@@ -39,7 +42,7 @@ Concept refinement <── Counterexample / closure analysis
 - `ClosureAnalyzer`：只从声明的初始状态探索可达状态，构造 `x₁ ~ x₂` 但未来宏观结果分化的见证，并列出可供人工批准的分离特征。
 - `refine_until_closed`：把闭合性反例接回规格细化；每次提升新可观测量后重新验证，直到闭合、预算耗尽或人工拒绝。
 - `ConceptLibrary`：保存定义、正反例、边界、相关概念、候选细化和一致的版本历史。
-- `CorrespondenceValidator`：在共享模拟预算内分别认证上下层场景域，再检查 `projection(lower_t) ~ upper_t`；失败时返回具体场景、时间步和快照见证。
+- `CorrespondenceValidator`：在共享模拟预算内分别认证上下层场景域，再检查 `projection(lower_t) ~ upper_t`；失败时返回具体场景、时间步和快照见证；`validate_suite` 进一步区分校准兼容性与独立留出复核。
 - `ScaleGraph`：只接纳验证通过的直接对应边。多跳路径只表示每条边分别通过，不会被偷换成端到端对应证明。
 - 双向往返检查：宏观往返只有在 `HypothesisGenerator.independent_recovery=True` 时才可通过，预先注入的假设目录只能证明兼容性；微观往返默认排除原模型本身，要求另一实现按“初始场景 + 干预”复现任务行为。往返的全部阶段共用一份预算。
 
@@ -131,6 +134,20 @@ print(certificate.counterexamples)
 
 这里验证的是整个动态交换图，而不只是终态数值相等：对每个下层场景 `s` 和每个时间步 `t`，下层快照经 `projection` 后必须与 `scenario_projection(s)` 指向的上层快照等价。投影与场景映射由调用方持有，因此候选模型不能自行改变判据。
 
+跨上下文复核使用验证套件：
+
+```python
+from bidirectional_modeling.examples import scale_correspondence_suite
+
+correspondence, cases = scale_correspondence_suite()
+suite = engine.verify_correspondence_suite(correspondence, cases)
+print(suite.compatibility_passed)       # 所有已声明用例相容
+print(suite.has_independent_holdout)    # 至少一个独立留出声明
+print(suite.passed)                     # 两者同时成立
+for result in suite.cases:
+    print(result.case_name, result.certificate.lower_context_fingerprint)
+```
+
 开放式结构搜索可实现 `CandidateGenerator` 或使用 `ParametricCandidateGenerator`；已有设计库可直接传入序列或使用 `RegistryGenerator`。领域目的解释可实现 `HypothesisGenerator`，也可使用 `CatalogHypothesisGenerator` 提供明确候选。
 
 ## 四个内置验收场景
@@ -138,7 +155,7 @@ print(certificate.counterexamples)
 1. **软件行为**：多个可靠工作器形成帕累托候选；丢数据的“指标钻空子”方案被不变量拒绝；只在短期可靠的方案被延长时间探测反驳。
 2. **科学动力学**：位置相同但速度不同的状态未来分化；系统给出非闭合见证，人工批准把速度提升为宏观状态。由于该示例状态空间无界，有限搜索在细化后只报告“未发现反例但证明不完整”，不会宣称全局闭合。
 3. **组织机制**：同一审批结构兼容防欺诈、审计和中央控制等多个解释；系统保留不可识别性、限制弱证据意图推断，并选择区分候选的信息增益问题。
-4. **跨尺度对应**：两个不同的微观分量划分映射到同一个宏观总量状态；验证器确认多对一粗粒化在完整时间轨迹上与宏观动力学交换。
+4. **跨尺度对应**：两个不同的微观分量划分映射到同一个宏观总量状态；验证器先在已知划分上校准，再用未见划分作独立留出复核，确认多对一粗粒化在完整时间轨迹上与宏观动力学交换。
 
 ## 扩展接口
 
@@ -173,6 +190,7 @@ context = Context(
 - 参考模型是确定性有限状态系统。连续、随机或高维系统需要实现相同协议，并提供相应误差界和统计证书。
 - 权威场景清单全部覆盖时，即使惰性迭代器恰好触及模拟上限也可证明任务域完整；没有调用方场景清单的第三方模型，即使返回已耗尽的普通 `tuple` 或 `list` 也不能自行证明场景域完整。
 - 对应证书只覆盖指定的两个模型、上下文、场景域和时间范围；投影函数是调用方声明的待检验假说，不是由有限数据自动识别出的唯一映射。
+- `CorrespondenceValidationCase.independent=True` 是调用方对数据隔离和来源独立性的显式声明，不是安全边界；严格盲测仍需在外部阻止投影构造过程读取留出模型、场景和结果。
 - `ScaleGraph` 中的多跳路径只具有逐边证书。若要主张微观到宏观的端到端对应，必须另外声明并直接验证该端到端 `Correspondence`，不能仅凭传递闭包推断。
 - 可达状态搜索受深度和状态数预算限制；预算内未发现反例只会产生不完整报告，不会被误报为闭合证明。
 - 分离特征只是反例相关的候选，不自动等同于因果变量；`refine_until_closed` 要求显式的 `feature_selector` 决策。

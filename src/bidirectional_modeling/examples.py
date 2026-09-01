@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Dict, Tuple
 
-from .correspondence import Correspondence, Scale
+from .correspondence import (
+    Correspondence,
+    CorrespondenceCaseRole,
+    CorrespondenceValidationCase,
+    Scale,
+)
 from .core import (
     Aggregation,
     Context,
@@ -348,11 +354,75 @@ def scale_correspondence_scenario():
     )
 
 
+def scale_correspondence_suite():
+    """Calibration plus a separately declared holdout partition."""
+
+    (
+        correspondence,
+        lower_model,
+        upper_model,
+        lower_context,
+        upper_context,
+    ) = scale_correspondence_scenario()
+    lower_context = replace(
+        lower_context,
+        environment={"validation_split": "calibration"},
+    )
+    upper_context = replace(
+        upper_context,
+        environment={"validation_split": "calibration"},
+    )
+
+    holdout_lower = replace(
+        lower_model,
+        name="holdout-two-component-dynamics",
+        states={
+            "unseen-partition-a": {"left": 2, "right": 3},
+            "unseen-partition-b": {"left": 4, "right": 1},
+        },
+        initial_states=("unseen-partition-a", "unseen-partition-b"),
+    )
+    holdout_upper = replace(
+        upper_model,
+        name="holdout-aggregate-dynamics",
+        states={"aggregate": {"total": 5}},
+    )
+    holdout_lower_context = replace(
+        lower_context,
+        environment={"validation_split": "holdout"},
+    )
+    holdout_upper_context = replace(
+        upper_context,
+        environment={"validation_split": "holdout"},
+    )
+    cases = (
+        CorrespondenceValidationCase(
+            "known partitions",
+            lower_model,
+            upper_model,
+            lower_context,
+            upper_context,
+            horizon=2,
+        ),
+        CorrespondenceValidationCase(
+            "unseen partitions",
+            holdout_lower,
+            holdout_upper,
+            holdout_lower_context,
+            holdout_upper_context,
+            horizon=2,
+            role=CorrespondenceCaseRole.HOLDOUT,
+            independent=True,
+        ),
+    )
+    return correspondence, cases
+
+
 def all_scenarios() -> Dict[str, object]:
     return {
         "software": software_scenario(),
         "science": science_closure_scenario(),
         "organization": organization_interpretation_scenario(),
         "correspondence": scale_correspondence_scenario(),
+        "correspondence_suite": scale_correspondence_suite(),
     }
-

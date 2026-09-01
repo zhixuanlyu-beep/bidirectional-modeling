@@ -2,12 +2,17 @@
 
 from .correspondence import (
     Correspondence,
+    CorrespondenceCaseResult,
+    CorrespondenceCaseRole,
     CorrespondenceCertificate,
     CorrespondenceCounterexample,
+    CorrespondenceSuiteCertificate,
+    CorrespondenceValidationCase,
     CorrespondenceValidator,
     Scale,
     ScaleGraph,
     ScalePath,
+    context_fingerprint,
 )
 from .core import (
     Aggregation,
@@ -82,8 +87,12 @@ __all__ = [
     "ConfidenceBreakdown",
     "Context",
     "Correspondence",
+    "CorrespondenceCaseResult",
+    "CorrespondenceCaseRole",
     "CorrespondenceCertificate",
     "CorrespondenceCounterexample",
+    "CorrespondenceSuiteCertificate",
+    "CorrespondenceValidationCase",
     "CorrespondenceValidator",
     "Counterexample",
     "CustomRequirement",
@@ -127,7 +136,8 @@ __all__ = [
     "TraceBatch",
     "InterpretationScoringPolicy",
     "behaviorally_equivalent",
+    "context_fingerprint",
     "pareto_partition",
 ]
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
