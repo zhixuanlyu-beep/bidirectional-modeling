@@ -19,8 +19,19 @@ from .core import (
     FiniteStateModel,
     UndefinedTransition,
 )
-from .correspondence import context_fingerprint
-from .structural import FrozenValue, freeze_value, isolated_mapping
+from .provenance import (
+    context_fingerprint,
+    equivalence_fingerprint,
+    safe_context_fingerprint,
+    safe_equivalence_fingerprint,
+)
+from .structural import (
+    FrozenValue,
+    fingerprint_value,
+    freeze_value,
+    isolated_mapping,
+    validate_fingerprint,
+)
 
 
 class _Edge(Enum):
@@ -198,6 +209,93 @@ class ResidualQuotient:
         raise KeyError((source_class, action))
 
 
+def _residual_model_fingerprint(
+    model: FiniteStateModel,
+    states: Sequence[ResidualState],
+    actions: Sequence[str],
+    transitions: Mapping[Tuple[int, str], Any],
+    initial_indices: Sequence[Tuple[str, int]],
+) -> str:
+    """Canonicalize the bounded state/observation/transition evidence."""
+
+    state_keys = {
+        state.index: _state_key(state.micro_state)
+        for state in states
+    }
+    state_evidence = tuple(
+        sorted(
+            freeze_value(
+                (
+                    state_keys[state.index],
+                    dict(state.observation),
+                ),
+                purpose="residual model evidence fingerprint",
+            )
+            for state in states
+        )
+    )
+    transition_evidence = []
+    for (source, action), target in transitions.items():
+        if target is _Edge.UNDEFINED:
+            outcome: Tuple[Any, ...] = ("undefined",)
+        elif target is _Edge.UNKNOWN:
+            outcome = ("unknown",)
+        else:
+            outcome = ("state", state_keys[target])
+        transition_evidence.append(
+            freeze_value(
+                (state_keys[source], action, outcome),
+                purpose="residual model evidence fingerprint",
+            )
+        )
+    initial_evidence = tuple(
+        sorted(
+            freeze_value(
+                (name, state_keys[index]),
+                purpose="residual model evidence fingerprint",
+            )
+            for name, index in initial_indices
+        )
+    )
+    return fingerprint_value(
+        (
+            "residual-observed-model-v1",
+            type(model).__module__,
+            type(model).__qualname__,
+            model.name,
+            tuple(sorted(actions)),
+            state_evidence,
+            tuple(sorted(transition_evidence)),
+            initial_evidence,
+        ),
+        purpose="residual model evidence fingerprint",
+    )
+
+
+def _residual_protocol_fingerprint(
+    model_digest: str,
+    context_digest: str,
+    equivalence_digest: str,
+    max_reachability_depth: Optional[int],
+    max_states: int,
+    max_context_depth: Optional[int],
+    max_context_tests: int,
+) -> str:
+    return fingerprint_value(
+        (
+            "residual-quotient-analyzer-v1",
+            model_digest,
+            context_digest,
+            equivalence_digest,
+            max_reachability_depth,
+            max_states,
+            max_context_depth,
+            max_context_tests,
+        ),
+        purpose="residual quotient protocol fingerprint",
+    )
+
+
 @dataclass(frozen=True)
 class ResidualContextRefinement:
     """One counterexample-guided addition to a finite context basis."""
@@ -219,6 +317,13 @@ class ResidualQuotientReport:
 
     model_name: str
     context_fingerprint: str
+    model_fingerprint: str
+    equivalence_fingerprint: str
+    protocol_fingerprint: str
+    max_reachability_depth: Optional[int]
+    max_states: int
+    max_context_depth: Optional[int]
+    max_context_tests: int
     equivalence_signature: Tuple[Any, ...]
     quotient: ResidualQuotient
     filtration: Tuple[ResidualFiltrationLevel, ...]
@@ -233,6 +338,60 @@ class ResidualQuotientReport:
     context_refinements: Tuple[ResidualContextRefinement, ...] = ()
     context_basis_reproduces_partition: bool = False
 
+    def __post_init__(self) -> None:
+        if not self.model_name:
+            raise ValueError("residual report model name must be non-empty")
+        if self.exploration_depth < 0 or self.transition_evaluations < 0:
+            raise ValueError("residual report counts must be non-negative")
+        for label, value in (
+            ("max_reachability_depth", self.max_reachability_depth),
+            ("max_context_depth", self.max_context_depth),
+        ):
+            if value is not None and (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 0
+            ):
+                raise ValueError("%s must be a non-negative integer or None" % label)
+        for label, value in (
+            ("max_states", self.max_states),
+            ("max_context_tests", self.max_context_tests),
+        ):
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 1
+            ):
+                raise ValueError("%s must be a positive integer" % label)
+        for label, fingerprint in (
+            ("residual context fingerprint", self.context_fingerprint),
+            ("residual model fingerprint", self.model_fingerprint),
+            ("residual equivalence fingerprint", self.equivalence_fingerprint),
+            ("residual protocol fingerprint", self.protocol_fingerprint),
+        ):
+            validate_fingerprint(fingerprint, purpose=label)
+        expected_equivalence = fingerprint_value(
+            ("equivalence-v1", self.equivalence_signature),
+            purpose="equivalence deterministic structural fingerprint",
+        )
+        if expected_equivalence != self.equivalence_fingerprint:
+            raise ValueError(
+                "residual equivalence signature does not match its fingerprint"
+            )
+        expected_protocol = _residual_protocol_fingerprint(
+            self.model_fingerprint,
+            self.context_fingerprint,
+            self.equivalence_fingerprint,
+            self.max_reachability_depth,
+            self.max_states,
+            self.max_context_depth,
+            self.max_context_tests,
+        )
+        if expected_protocol != self.protocol_fingerprint:
+            raise ValueError(
+                "residual report fields do not match its protocol fingerprint"
+            )
+
     @property
     def minimal(self) -> bool:
         """Whether minimality is certified on the declared reachable domain."""
@@ -242,6 +401,21 @@ class ResidualQuotientReport:
     @property
     def explored_states(self) -> int:
         return len(self.quotient.states)
+
+    def binds_context(self, context: Context) -> bool:
+        try:
+            return context_fingerprint(context) == self.context_fingerprint
+        except Exception:
+            return False
+
+    def binds_equivalence(self, equivalence: EquivalenceSpec) -> bool:
+        try:
+            return (
+                equivalence_fingerprint(equivalence)
+                == self.equivalence_fingerprint
+            )
+        except Exception:
+            return False
 
 
 class ResidualQuotientAnalyzer:
@@ -266,6 +440,23 @@ class ResidualQuotientAnalyzer:
         if max_context_tests < 1:
             raise ValueError("max_context_tests must be positive")
 
+        boundaries = []
+        context_digest, context_error = safe_context_fingerprint(context)
+        equivalence_digest, equivalence_error = safe_equivalence_fingerprint(
+            equivalence
+        )
+        binding_complete = True
+        for label, error in (
+            ("context", context_error),
+            ("equivalence", equivalence_error),
+        ):
+            if error is not None:
+                binding_complete = False
+                boundaries.append(
+                    "%s could not be fingerprinted: %s" % (label, error)
+                )
+        equivalence_signature = equivalence.semantic_signature()
+
         actions = tuple(
             dict.fromkeys(
                 ("noop",)
@@ -278,7 +469,6 @@ class ResidualQuotientAnalyzer:
         initial_indices = []
         frontier: Deque[int] = deque()
         transitions: Dict[Tuple[int, str], Any] = {}
-        boundaries = []
         transition_evaluations = 0
         state_limit_hit = False
         reachability_limit_hit = False
@@ -332,19 +522,38 @@ class ResidualQuotientAnalyzer:
                 "the model has no initial states, so no residual domain was enumerated"
             )
             quotient = ResidualQuotient((), (), (), (), actions, ())
+            model_digest = _residual_model_fingerprint(
+                model, states, actions, transitions, initial_indices
+            )
+            protocol_digest = _residual_protocol_fingerprint(
+                model_digest,
+                context_digest,
+                equivalence_digest,
+                max_reachability_depth,
+                max_states,
+                max_context_depth,
+                max_context_tests,
+            )
             return ResidualQuotientReport(
-                model.name,
-                context_fingerprint(context),
-                equivalence.semantic_signature(),
-                quotient,
-                (ResidualFiltrationLevel(0, ()),),
-                (),
-                False,
-                False,
-                False,
-                0,
-                0,
-                tuple(boundaries),
+                model_name=model.name,
+                context_fingerprint=context_digest,
+                model_fingerprint=model_digest,
+                equivalence_fingerprint=equivalence_digest,
+                protocol_fingerprint=protocol_digest,
+                max_reachability_depth=max_reachability_depth,
+                max_states=max_states,
+                max_context_depth=max_context_depth,
+                max_context_tests=max_context_tests,
+                equivalence_signature=equivalence_signature,
+                quotient=quotient,
+                filtration=(ResidualFiltrationLevel(0, ()),),
+                distinguishing_contexts=(),
+                complete=False,
+                stable=False,
+                congruent=False,
+                exploration_depth=0,
+                transition_evaluations=0,
+                boundaries=tuple(boundaries),
             )
 
         while frontier:
@@ -398,7 +607,7 @@ class ResidualQuotientAnalyzer:
                 % max_reachability_depth
             )
 
-        complete = (
+        complete = binding_complete and (
             not state_limit_hit
             and not reachability_limit_hit
             and len(transitions) == len(states) * len(actions)
@@ -666,10 +875,30 @@ class ResidualQuotientAnalyzer:
                 "domain is incomplete"
             )
 
+        model_digest = _residual_model_fingerprint(
+            model, states, actions, transitions, initial_indices
+        )
+        protocol_digest = _residual_protocol_fingerprint(
+            model_digest,
+            context_digest,
+            equivalence_digest,
+            max_reachability_depth,
+            max_states,
+            max_context_depth,
+            max_context_tests,
+        )
+
         return ResidualQuotientReport(
             model_name=model.name,
-            context_fingerprint=context_fingerprint(context),
-            equivalence_signature=equivalence.semantic_signature(),
+            context_fingerprint=context_digest,
+            model_fingerprint=model_digest,
+            equivalence_fingerprint=equivalence_digest,
+            protocol_fingerprint=protocol_digest,
+            max_reachability_depth=max_reachability_depth,
+            max_states=max_states,
+            max_context_depth=max_context_depth,
+            max_context_tests=max_context_tests,
+            equivalence_signature=equivalence_signature,
             quotient=quotient,
             filtration=tuple(levels),
             distinguishing_contexts=tuple(distinctions),

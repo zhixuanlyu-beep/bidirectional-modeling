@@ -13,7 +13,13 @@ from enum import Enum
 from statistics import mean
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
 
-from .structural import freeze_value, isolated_mapping
+from .structural import (
+    callable_fingerprint,
+    freeze_value,
+    isolated_copy,
+    isolated_mapping,
+    validate_fingerprint,
+)
 
 
 Snapshot = Mapping[str, Any]
@@ -138,6 +144,14 @@ class Context:
             raise TypeError("scenario manifest entries must be ScenarioKey instances")
         if len(self.scenario_manifest) != len(set(self.scenario_manifest)):
             raise ValueError("scenario manifest entries must be unique")
+        object.__setattr__(
+            self,
+            "environment",
+            isolated_mapping(
+                self.environment,
+                purpose="context environment",
+            ),
+        )
 
     def semantic_signature(self) -> Tuple[Any, ...]:
         """Canonical identity for the assumptions and domain of one evaluation."""
@@ -417,17 +431,15 @@ class CustomRequirement:
     semantic_id: Optional[str] = None
 
     def semantic_signature(self) -> Tuple[Any, ...]:
-        # A caller-supplied stable ID allows independently constructed custom
-        # requirements to participate in strict semantic round trips.  Without
-        # one, equality is deliberately limited to the same callable object.
-        identity: Any = self.semantic_id
-        if identity is None:
-            identity = (
-                getattr(self.checker, "__module__", ""),
-                getattr(self.checker, "__qualname__", ""),
-                id(self.checker),
-            )
-        return ("custom", self.category.value, identity)
+        return (
+            "custom-v2",
+            self.category.value,
+            callable_fingerprint(
+                self.checker,
+                semantic_id=self.semantic_id,
+                purpose="custom requirement fingerprint",
+            ),
+        )
 
     def evaluate(
         self,
@@ -674,7 +686,10 @@ class FiniteStateModel:
         if self.applicable is None:
             return True
         isolated = isolated_mapping(state, purpose="applicability input state")
-        return bool(self.applicable(isolated, action, context))
+        callback_context = isolated_copy(
+            context, purpose="applicability input context"
+        )
+        return bool(self.applicable(isolated, action, callback_context))
 
     def step(self, state: State, action: str, context: Context) -> State:
         if action != "noop" and action not in self.actions:
@@ -685,12 +700,18 @@ class FiniteStateModel:
                 % (action, self.name)
             )
         isolated = isolated_mapping(state, purpose="transition input state")
-        result = self.transition(isolated, action, context)
+        callback_context = isolated_copy(
+            context, purpose="transition input context"
+        )
+        result = self.transition(isolated, action, callback_context)
         return isolated_mapping(result, purpose="transition result state")
 
     def observe(self, state: State, context: Context) -> Snapshot:
         isolated = isolated_mapping(state, purpose="readout input state")
-        result = self.readout(isolated, context)
+        callback_context = isolated_copy(
+            context, purpose="readout input context"
+        )
+        result = self.readout(isolated, callback_context)
         return isolated_mapping(result, purpose="readout result")
 
     def audited_step(self, state: State, action: str, context: Context) -> State:
@@ -850,13 +871,108 @@ class SatisfactionCertificate:
     confidence: ConfidenceBreakdown
     assumptions: Tuple[str, ...]
     failure_boundaries: Tuple[str, ...]
+    horizon: int
+    spec_fingerprint: str
+    model_fingerprint: str
+    context_fingerprint: str
+    trace_batch_fingerprint: str
+    protocol_fingerprint: str
+    max_cost: float
     complete: bool = True
     requirements_passed: bool = True
     coverage_authority: str = "candidate-enumeration"
 
+    def __post_init__(self) -> None:
+        if not self.spec_name or not self.model_name:
+            raise ValueError("satisfaction certificate identities must be non-empty")
+        if not isinstance(self.horizon, int) or isinstance(self.horizon, bool):
+            raise TypeError("satisfaction certificate horizon must be an integer")
+        if self.horizon < 1:
+            raise ValueError("satisfaction certificate horizon must be at least one")
+        if (
+            not isinstance(self.verified_scenarios, int)
+            or isinstance(self.verified_scenarios, bool)
+        ):
+            raise TypeError("verified_scenarios must be an integer")
+        if self.verified_scenarios < 0:
+            raise ValueError("verified_scenarios must be non-negative")
+        if self.satisfied and (not self.complete or not self.requirements_passed):
+            raise ValueError(
+                "a satisfied certificate must be complete and pass its requirements"
+            )
+        for label, fingerprint in (
+            ("macro specification fingerprint", self.spec_fingerprint),
+            ("model evidence fingerprint", self.model_fingerprint),
+            ("context fingerprint", self.context_fingerprint),
+            ("trace batch fingerprint", self.trace_batch_fingerprint),
+            ("satisfaction protocol fingerprint", self.protocol_fingerprint),
+        ):
+            validate_fingerprint(fingerprint, purpose=label)
+        max_cost = float(self.max_cost)
+        if math.isnan(max_cost) or max_cost < 0:
+            raise ValueError("certificate max_cost must be non-negative")
+        object.__setattr__(self, "max_cost", max_cost)
+        from .provenance import satisfaction_protocol_fingerprint
+
+        expected_protocol = satisfaction_protocol_fingerprint(
+            self.spec_fingerprint,
+            self.model_fingerprint,
+            self.context_fingerprint,
+            self.trace_batch_fingerprint,
+            self.max_cost,
+        )
+        if expected_protocol != self.protocol_fingerprint:
+            raise ValueError(
+                "satisfaction certificate fields do not match its protocol fingerprint"
+            )
+
     @property
     def verification_score(self) -> float:
         return self.confidence.verification_score
+
+    def binds_specification(self, spec: MacroSpec) -> bool:
+        from .provenance import macro_spec_fingerprint
+
+        try:
+            return macro_spec_fingerprint(spec) == self.spec_fingerprint
+        except Exception:
+            return False
+
+    def binds_context(self, context: Context) -> bool:
+        from .provenance import context_fingerprint
+
+        try:
+            return context_fingerprint(context) == self.context_fingerprint
+        except Exception:
+            return False
+
+    def binds_evidence(
+        self,
+        model: ExecutableModel,
+        traces: Iterable[Trace],
+    ) -> bool:
+        from .provenance import observed_model_fingerprint
+
+        try:
+            return (
+                observed_model_fingerprint(model, traces, self.horizon)
+                == self.model_fingerprint
+            )
+        except Exception:
+            return False
+
+    def binds_trace_batch(self, batch: Any) -> bool:
+        """Whether this certificate was produced from the supplied trace batch."""
+
+        return (
+            getattr(batch, "protocol_fingerprint", None)
+            == self.trace_batch_fingerprint
+            and getattr(batch, "horizon", None) == self.horizon
+            and getattr(batch, "model_fingerprint", None)
+            == self.model_fingerprint
+            and getattr(batch, "context_fingerprint", None)
+            == self.context_fingerprint
+        )
 
 
 @dataclass(frozen=True)
@@ -908,6 +1024,16 @@ class RealizationResult:
     truncated: bool
     simulations_used: int = 0
 
+    def __post_init__(self) -> None:
+        accepted = self.candidates + self.dominated
+        if any(
+            not item.certificate.binds_specification(self.spec)
+            for item in accepted
+        ):
+            raise ValueError(
+                "accepted realization certificates must bind the result specification"
+            )
+
 
 @dataclass(frozen=True)
 class PurposeHypothesis:
@@ -958,6 +1084,12 @@ class InterpretationCandidate:
     ranking_score: float
     evidence: Tuple[Evidence, ...]
     caveats: Tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.certificate.binds_specification(self.hypothesis.spec):
+            raise ValueError(
+                "interpretation certificate must bind its hypothesis specification"
+            )
 
     @property
     def confidence(self) -> float:

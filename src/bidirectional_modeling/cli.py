@@ -80,6 +80,14 @@ def build_demo_report() -> Dict[str, Any]:
                     "verification_score": round(item.verification_score, 4),
                     "complete": item.certificate.complete,
                     "coverage_authority": item.certificate.coverage_authority,
+                    "horizon": item.certificate.horizon,
+                    "spec_fingerprint": item.certificate.spec_fingerprint,
+                    "model_fingerprint": item.certificate.model_fingerprint,
+                    "context_fingerprint": item.certificate.context_fingerprint,
+                    "trace_batch_fingerprint": (
+                        item.certificate.trace_batch_fingerprint
+                    ),
+                    "protocol_fingerprint": item.certificate.protocol_fingerprint,
                     "metrics": {
                         "cost": item.model.metrics.cost,
                         "complexity": item.model.metrics.complexity,
@@ -112,6 +120,13 @@ def build_demo_report() -> Dict[str, Any]:
                     "name": item.hypothesis.name,
                     "level": item.hypothesis.level.value,
                     "ranking_score": round(item.ranking_score, 4),
+                    "spec_fingerprint": item.certificate.spec_fingerprint,
+                    "model_fingerprint": item.certificate.model_fingerprint,
+                    "context_fingerprint": item.certificate.context_fingerprint,
+                    "trace_batch_fingerprint": (
+                        item.certificate.trace_batch_fingerprint
+                    ),
+                    "protocol_fingerprint": item.certificate.protocol_fingerprint,
                     "caveats": list(item.caveats),
                 }
                 for item in interpreted.candidates
@@ -140,6 +155,16 @@ def build_demo_report() -> Dict[str, Any]:
             "complete": residual.complete,
             "stable": residual.stable,
             "congruent": residual.congruent,
+            "model_fingerprint": residual.model_fingerprint,
+            "context_fingerprint": residual.context_fingerprint,
+            "equivalence_fingerprint": residual.equivalence_fingerprint,
+            "protocol_fingerprint": residual.protocol_fingerprint,
+            "bounds": {
+                "max_reachability_depth": residual.max_reachability_depth,
+                "max_states": residual.max_states,
+                "max_context_depth": residual.max_context_depth,
+                "max_context_tests": residual.max_context_tests,
+            },
             "explored_states": residual.explored_states,
             "class_count": residual.quotient.class_count,
             "context_basis_reproduces_partition": (

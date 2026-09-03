@@ -18,6 +18,8 @@
 
 `0.10.0` 将跨尺度证明绑定到具体对应声明、上下层观测轨迹、上下文和验证协议：替换同名投影、场景映射或证据后，旧证书不能再加入 `ScaleGraph`。投影回调会在隔离副本上重放；输入修改不会泄漏，非确定输出或验证期间变化的身份会失败关闭。
 
+`0.11.0` 把同一证据链扩展到满足性验证和残差商。`TraceBatch` 现在绑定模型观测证据、上下文、时间范围、模拟上限、覆盖权威及批次结果；`evaluate_batch` 在 requirement 执行前后复核绑定，不能再把旧批次跨上下文或 horizon 重放。`SatisfactionCertificate` 进一步绑定具体规范、批次和资源协议，因此同名但语义不同的规范不能复用旧证书。`ResidualQuotientReport` 则绑定有界状态/转移证据、等价关系和全部搜索界。上下文与轨迹在回调边界深度隔离，原地修改不会污染调用方证据。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │
@@ -37,10 +39,12 @@ Concept refinement <── Counterexample / closure analysis
 - 向上推断严格区分效果、功能和意图。仅凭结构通常只能支持效果；功能依赖环境，意图还需要足够强的主体、设计或选择证据。
 - 解释结果中的 `ranking_score` 是未校准的相对分数，不是“目的为真”的概率。区分实验的信息增益只使用显式声明的 `PurposeHypothesis.prior`，不会把排序分数偷换成概率。
 - 模拟预算在候选、红队探测、目的解释、效果生成和双向往返的各阶段全局共享；结果同时报告 `simulations_used` 与 `truncated`。
-- `FiniteStateModel` 深度复制进入和离开 `applicable`、`transition`、`readout` 的状态，避免候选通过嵌套可变对象污染实验或其他候选；残差与闭合证明还会重放同一输入，结果或动作支撑不一致时按未知行为失败关闭。
+- `FiniteStateModel` 深度复制进入和离开 `applicable`、`transition`、`readout` 的状态和上下文，避免候选通过嵌套可变对象污染实验或其他候选；满足性 requirement 也分别接收隔离的轨迹与上下文。残差与闭合证明会重放同一输入，结果或动作支撑不一致时按未知行为失败关闭。
 - 证书完整性必须相对于独立场景域证明。内置 `FiniteStateModel` 由框架从初态与干预导出场景清单；第三方模型必须由调用者通过 `Context.scenario_manifest` 提供 `ScenarioKey` 清单。候选提供的 `scenario_count()` 只作诊断提示，不能证明覆盖完整。
 - 跨尺度验证允许多个微观场景映射到同一宏观场景，但要求每个微观场景都有映像、每个宏观场景都有原像，并且每个时间步的投影结果都满足上层等价关系；空场景域不能产生真空证明。
 - 每份对应证书记录对应声明、上下层观测轨迹、上下文和验证协议的 SHA-256 指纹，防止把一个投影、证据域或预算下的结论重放到另一个声明。多用例套件在所有用例间共享同一模拟预算。
+- 每个满足性批次和证书都记录规范、模型观测证据、上下文、horizon、覆盖权威及实际资源协议的 SHA-256 指纹；`binds_specification`、`binds_context`、`binds_evidence`、`binds_trace_batch` 和 `TraceBatch.binds` 可在消费结论前显式复核。
+- 每份残差商报告记录完整的有界模型证据、上下文、等价关系及搜索界；同名模型产生不同的状态/观察/转移证据时，其 `model_fingerprint` 不同，改变搜索界则会改变 `protocol_fingerprint`。
 - 默认同时执行基线和显式干预，避免只在干预情形下通过、却在正常运行中失败。
 - 目标是任务相关的最小充分模型，不是还原完整底层世界。
 
@@ -51,7 +55,7 @@ Concept refinement <── Counterexample / closure analysis
 - `FiniteStateModel`：有限状态、转移、行动、读出和透明资源指标。
 - `ResidualQuotientAnalyzer`：枚举有限可达状态，构造按上下文深度单调细化的残差分区；合并所有未来观察行为及动作支撑相同的微观状态，并返回最短区分动作序列、反例引导上下文基和可验证的偏商转移。
 - `CompositionRuleSelector`：先用共享操作测试排除观察、支撑或执行不一致的微观组合规则，再要求残差最小性证书，最后按透明的两段描述长度代理量排序；多实验用例必须全部通过。
-- `SatisfactionEvaluator`：惰性消费模拟轨迹，对照调用方或框架持有的场景清单验证身份、去重、轨迹长度和模型归属，不信任候选自报的场景数；同一已认证轨迹批次可被多个规格安全复用。
+- `SatisfactionEvaluator`：惰性消费模拟轨迹，对照调用方或框架持有的场景清单验证身份、去重、轨迹长度和模型归属，不信任候选自报的场景数；批次绑定检查通过时，同一已认证轨迹可被多个相同 horizon 的规格安全复用。
 - `Realizer`：接受设计库或参数化候选生成器，执行验证和红队探测，保留主证书与探测证书，并输出帕累托前沿、被支配候选和被拒候选。
 - `Interpreter`：生成或接收目的假设，按时间范围缓存轨迹、共享模拟预算，用解释力、简洁性、鲁棒性和上下文证据排序，并提出信息增益最高的区分实验。
 - `ClosureAnalyzer`：只从声明的初始状态探索可达状态，构造 `x₁ ~ x₂` 但未来宏观结果分化的见证，并列出可供人工批准的分离特征。
@@ -107,6 +111,9 @@ for candidate in result.candidates:
     certificate = candidate.certificate
     print(candidate.model.name)
     print("complete:", certificate.complete)
+    print("bound to goal:", certificate.binds_specification(goal))
+    print("bound to context:", certificate.binds_context(context))
+    print("protocol:", certificate.protocol_fingerprint)
     print("verification score:", candidate.verification_score)
     for check in certificate.checks:
         print(check.name, check.passed, check.observed)
@@ -129,6 +136,9 @@ for witness in report.distinguishing_contexts:
     print(witness.actions)
 print(report.context_basis)           # ((), ('probe',))
 print(report.context_basis_reproduces_partition)  # 重建当前有界分区
+print(report.binds_context(context))
+print(report.binds_equivalence(equivalence))
+print(report.model_fingerprint, report.protocol_fingerprint)
 ```
 
 第 0 层只按当前 `signal` 观察分组；深度 1 加入 `probe` 上下文后，未来结果不同的隐藏状态被拆开，而仅有无关 `copy` 字段不同的两个状态保持合并。`max_reachability_depth`、`max_states` 或 `max_context_depth` 截断时，报告会保留有界分区，但 `minimal` 必为假。
@@ -213,7 +223,7 @@ print(certificate.counterexamples)
 
 `Correspondence.projection_id` 和 `scenario_projection_id` 可为依赖外部模块、服务或其他不可结构化对象的回调声明稳定版本。普通 Python 函数会自动摘要代码、默认参数、闭包和实际引用的模块级绑定；无法可靠结构化的依赖若没有显式 ID，会拒绝生成证书。调用方必须在外部行为变化时更新 ID。
 
-这些摘要是证书错配和重放防护，不是数字签名，也不证明证书发布者身份。`lower_model_fingerprint` 与 `upper_model_fingerprint` 标识本次协议实际认证的轨迹证据；它们不声称覆盖已声明上下文与时间范围之外的模型行为。
+这些摘要是证书错配和重放防护，不是数字签名，也不证明证书发布者身份。满足性、残差及对应证书中的模型指纹都标识本次协议实际认证的有限观测证据；它们不声称识别任意 Python 实现，也不覆盖已声明上下文、动作、可达域与时间范围之外的模型行为。
 
 跨上下文复核使用验证套件：
 
@@ -254,7 +264,7 @@ for result in suite.cases:
 - `CompositionRule` 与一个或多个 `CompositionExperiment`，比较共享枚举域中的候选微观组合方式；
 - `HypothesisGenerator`，产生有上下文依据的效果、功能或意图候选；
 - `RedTeamProbe`，表达领域特有的安全、长期性或反事实检查；
-- 自定义 `Requirement`，验证基础字段比较以外的规则。
+- 自定义 `Requirement`，验证基础字段比较以外的规则；
 - `Correspondence`，声明下层快照到上层快照的投影，以及下层场景到上层场景的映射。
 
 第三方模型的场景域由调用方声明，而不是由候选模型自行决定：
@@ -272,6 +282,8 @@ context = Context(
 
 `independent_recovery=True` 是生成器对实验隔离的显式声明，不是安全边界；严格盲测仍应在生成阶段隐藏原始 `MacroSpec`，并使用留出的状态、干预和时域复核。
 
+可持久化的自定义 requirement 必须提供稳定语义身份。优先使用 `CustomRequirement(..., semantic_id="domain-rule-v1")`；直接实现 requirement 协议时还必须提供确定性的 `semantic_signature()`。无法建立语义身份的 requirement 仍可执行诊断，但所得满足性证书会失败关闭而不能声明完整。
+
 ## 当前边界
 
 - 自然语言到严格 `MacroSpec` 的展开仍属于领域适配层。模糊词应保留在 `ambiguous_terms` 中供用户选择，核心不会静默替用户定义。
@@ -280,6 +292,7 @@ context = Context(
 - 残差商只相对于声明的读出、观察等价关系、动作集合、上下文和可达状态域成立；它产生操作语义类，不会自动赋予自然语言含义、功能或意图。
 - 只有显式的 `UndefinedTransition`（通常由 `applicable=False` 产生）才是合法 `⊥`；转移函数的其他异常仍是未知边并使完整性证明失败，避免把实现错误伪装成领域偏函数。
 - 证明所用的状态、上下文和规范值必须由基本类型、枚举及其普通容器组成；不透明对象或循环容器没有稳定结构身份，因此会被明确拒绝，而不会退回进程相关的 `repr` 或对象地址。
+- SHA-256 字段用于一致性检查，不提供真实性、授权或防恶意伪造保证；需要跨信任边界交换证书时，调用方仍须对完整序列化证书另行签名并管理密钥。
 - 反例引导的 `context_basis` 足以重建当前枚举域中的残差分区，但当前贪心顺序不保证它是所有可能测试集合中基数最小或描述长度最短的一组。
 - 组合规则选择只排除与声明实验冲突或无法取得残差证书的规则；在所有给定上下文上观察等价的规则不可辨识。`unique_selection` 只表示固定协议下存在唯一最短候选，不等于证明真实机制唯一。`description_length` 是调用方在固定编码器下提供的长度，不是框架从 Python 函数中推断的 Kolmogorov 复杂度。
 - 权威场景清单全部覆盖时，即使惰性迭代器恰好触及模拟上限也可证明任务域完整；没有调用方场景清单的第三方模型，即使返回已耗尽的普通 `tuple` 或 `list` 也不能自行证明场景域完整。
