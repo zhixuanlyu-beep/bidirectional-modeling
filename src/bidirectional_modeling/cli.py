@@ -256,6 +256,11 @@ def build_demo_report() -> Dict[str, Any]:
             "independent_holdout": correspondence_certificate.has_independent_holdout,
             "complete": correspondence_certificate.complete,
             "commutes": correspondence_certificate.commutes,
+            "correspondence_fingerprint": (
+                correspondence_certificate.correspondence_fingerprint
+            ),
+            "protocol_fingerprint": correspondence_certificate.protocol_fingerprint,
+            "boundaries": list(correspondence_certificate.boundaries),
             "lower_scenarios": sum(
                 item.certificate.lower_scenarios
                 for item in correspondence_certificate.cases
@@ -275,6 +280,13 @@ def build_demo_report() -> Dict[str, Any]:
                     "role": item.role.value,
                     "independent": item.independent,
                     "passed": item.certificate.passed,
+                    "lower_model_fingerprint": (
+                        item.certificate.lower_model_fingerprint
+                    ),
+                    "upper_model_fingerprint": (
+                        item.certificate.upper_model_fingerprint
+                    ),
+                    "protocol_fingerprint": item.certificate.protocol_fingerprint,
                     "lower_context_fingerprint": (
                         item.certificate.lower_context_fingerprint
                     ),

@@ -489,6 +489,8 @@ def scale_correspondence_scenario():
         },
         scenario_projection=lambda key: ScenarioKey("aggregate", key.intervention),
         assumptions=("only the component sum is task-relevant",),
+        projection_id="sum-components-v1",
+        scenario_projection_id="aggregate-scenario-v1",
     )
     return (
         correspondence,

@@ -12,6 +12,7 @@ from .correspondence import (
     Scale,
     ScaleGraph,
     ScalePath,
+    correspondence_fingerprint,
     context_fingerprint,
 )
 from .composition import (
@@ -178,8 +179,9 @@ __all__ = [
     "UndefinedTransition",
     "InterpretationScoringPolicy",
     "behaviorally_equivalent",
+    "correspondence_fingerprint",
     "context_fingerprint",
     "pareto_partition",
 ]
 
-__version__ = "0.9.1"
+__version__ = "0.10.0"
