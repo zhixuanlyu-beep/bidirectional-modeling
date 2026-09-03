@@ -11,6 +11,11 @@ from .correspondence import (
     CorrespondenceValidationCase,
     Scale,
 )
+from .composition import (
+    CompositionExperiment,
+    CompositionRule,
+    CompositionTest,
+)
 from .core import (
     Aggregation,
     Context,
@@ -255,6 +260,83 @@ def partial_residual_scenario() -> Tuple[
     return equivalence, context, model
 
 
+def composition_rule_scenario() -> Tuple[
+    Tuple[CompositionExperiment, ...], Tuple[CompositionRule, ...]
+]:
+    """Competing parity rules with sparse, language-free observations."""
+
+    experiment = CompositionExperiment(
+        name="finite parity composition",
+        states={"zero": {"parity": 0, "phase": 0}},
+        initial_states=("zero",),
+        actions=("add-zero", "add-one"),
+        readout=lambda state, _context: {"parity": state["parity"]},
+        equivalence=EquivalenceSpec(("parity",)),
+        tests=(
+            CompositionTest("empty", "zero", (), True, {"parity": 0}),
+            CompositionTest(
+                "one bit", "zero", ("add-one",), True, {"parity": 1}
+            ),
+            CompositionTest(
+                "zero bit", "zero", ("add-zero",), True, {"parity": 0}
+            ),
+            CompositionTest(
+                "two ones",
+                "zero",
+                ("add-one", "add-one"),
+                True,
+                {"parity": 0},
+            ),
+            CompositionTest(
+                "zero then one",
+                "zero",
+                ("add-zero", "add-one"),
+                True,
+                {"parity": 1},
+            ),
+        ),
+        context=Context(scale="finite-parity-composition"),
+    )
+
+    def parity_transition(state, action, _context):
+        result = dict(state)
+        if action == "add-one":
+            result["parity"] = 1 - result["parity"]
+        return result
+
+    def delayed_failure_transition(state, action, _context):
+        result = dict(state)
+        if action in ("add-zero", "add-one"):
+            if action == "add-one" and result["phase"] < 2:
+                result["parity"] = 1 - result["parity"]
+            result["phase"] = min(2, result["phase"] + 1)
+        return result
+
+    def constant_transition(state, _action, _context):
+        result = dict(state)
+        result["parity"] = 0
+        return result
+
+    rules = (
+        CompositionRule("parity", parity_transition, description_length=8.0),
+        CompositionRule(
+            "delayed failure",
+            delayed_failure_transition,
+            description_length=8.0,
+        ),
+        CompositionRule(
+            "constant zero", constant_transition, description_length=2.0
+        ),
+        CompositionRule(
+            "forbid one",
+            parity_transition,
+            description_length=3.0,
+            applicable=lambda _state, action, _context: action != "add-one",
+        ),
+    )
+    return (experiment,), rules
+
+
 def organization_interpretation_scenario():
     """One approval structure is compatible with several macro purposes."""
 
@@ -487,6 +569,7 @@ def all_scenarios() -> Dict[str, object]:
         "science": science_closure_scenario(),
         "organization": organization_interpretation_scenario(),
         "partial_residual": partial_residual_scenario(),
+        "composition_rules": composition_rule_scenario(),
         "residual_quotient": residual_quotient_scenario(),
         "correspondence": scale_correspondence_scenario(),
         "correspondence_suite": scale_correspondence_suite(),

@@ -14,6 +14,12 @@ from .correspondence import (
     CorrespondenceValidator,
     ScaleGraph,
 )
+from .composition import (
+    CompositionExperiment,
+    CompositionRule,
+    CompositionRuleSelector,
+    CompositionSelectionReport,
+)
 from .core import (
     ClosureReport,
     Concept,
@@ -156,11 +162,15 @@ class BidirectionalModelingEngine:
         concept_library: Optional[ConceptLibrary] = None,
         correspondence_validator: Optional[CorrespondenceValidator] = None,
         scale_graph: Optional[ScaleGraph] = None,
+        composition_selector: Optional[CompositionRuleSelector] = None,
     ) -> None:
         self.realizer = realizer or Realizer()
         self.interpreter = interpreter or Interpreter(self.realizer.evaluator)
         self.closure = ClosureAnalyzer()
         self.residuals = ResidualQuotientAnalyzer()
+        self.compositions = composition_selector or CompositionRuleSelector(
+            self.residuals
+        )
         self.concepts = concept_library or ConceptLibrary()
         self.correspondence_validator = correspondence_validator or CorrespondenceValidator(
             self.realizer.evaluator
@@ -219,6 +229,28 @@ class BidirectionalModelingEngine:
             max_states,
             max_context_depth,
             max_context_tests,
+        )
+
+    def select_composition_rules(
+        self,
+        rules: Sequence[CompositionRule],
+        experiments: Sequence[CompositionExperiment],
+        max_reachability_depth: Optional[int] = None,
+        max_states: int = 1_000,
+        max_context_depth: Optional[int] = None,
+        max_context_tests: int = 256,
+        exception_penalty: float = 64.0,
+    ) -> CompositionSelectionReport:
+        """Reject inconsistent composition rules and rank certified quotients."""
+
+        return self.compositions.select(
+            rules,
+            experiments,
+            max_reachability_depth=max_reachability_depth,
+            max_states=max_states,
+            max_context_depth=max_context_depth,
+            max_context_tests=max_context_tests,
+            exception_penalty=exception_penalty,
         )
 
     def verify_correspondence(
