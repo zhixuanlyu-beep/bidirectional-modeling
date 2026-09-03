@@ -22,6 +22,11 @@ from .core import (
     Trace,
 )
 from .evaluation import SatisfactionEvaluator, TraceBatch
+from .provenance import (
+    context_fingerprint,
+    observed_model_fingerprint as _model_evidence_fingerprint,
+    safe_observed_model_fingerprint as _safe_model_evidence_fingerprint,
+)
 from .structural import (
     callable_fingerprint,
     fingerprint_value,
@@ -38,15 +43,6 @@ ScenarioProjection = Callable[[ScenarioKey], ScenarioKey]
 
 def _identity_scenario(key: ScenarioKey) -> ScenarioKey:
     return key
-
-
-def context_fingerprint(context: Context) -> str:
-    """Stable digest for the declared context and scenario domain."""
-
-    return fingerprint_value(
-        context.semantic_signature(),
-        purpose="context fingerprint deterministic structural identity",
-    )
 
 
 @dataclass(frozen=True)
@@ -216,71 +212,6 @@ def _audited_snapshot_projection(
             % correspondence.name
         )
     return results[0]
-
-
-def _model_evidence_fingerprint(
-    model: ExecutableModel,
-    traces: Iterable[Any],
-    horizon: int,
-) -> str:
-    trace_signatures = []
-    for index, trace in enumerate(traces):
-        if not isinstance(trace, Trace):
-            trace_signatures.append(
-                freeze_value(
-                    (
-                        "invalid-trace",
-                        index,
-                        type(trace).__module__,
-                        type(trace).__qualname__,
-                    ),
-                    purpose="model evidence fingerprint",
-                )
-            )
-            continue
-        trace_signatures.append(
-            freeze_value(
-                (
-                    trace.model_name,
-                    trace.initial_state,
-                    trace.intervention,
-                    tuple(dict(snapshot) for snapshot in trace.snapshots),
-                ),
-                purpose="model evidence fingerprint",
-            )
-        )
-    return fingerprint_value(
-        (
-            "observed-model-v1",
-            type(model).__module__,
-            type(model).__qualname__,
-            str(getattr(model, "name", "")),
-            horizon,
-            tuple(sorted(trace_signatures)),
-        ),
-        purpose="model evidence fingerprint",
-    )
-
-
-def _safe_model_evidence_fingerprint(
-    model: ExecutableModel,
-    traces: Iterable[Any],
-    horizon: int,
-) -> Tuple[str, Optional[str]]:
-    try:
-        return _model_evidence_fingerprint(model, traces, horizon), None
-    except Exception as error:
-        fallback = fingerprint_value(
-            (
-                "uncertifiable-observed-model-v1",
-                type(model).__module__,
-                type(model).__qualname__,
-                str(getattr(model, "name", "")),
-                horizon,
-            ),
-            purpose="uncertifiable model evidence fingerprint",
-        )
-        return fallback, "%s: %s" % (type(error).__name__, error)
 
 
 def _protocol_fingerprint(
@@ -604,15 +535,12 @@ class CorrespondenceValidator:
             )
             simulations_used += upper_batch.simulations_used
         else:
-            upper_batch = TraceBatch(
-                (),
-                False,
-                0.0,
-                (
-                    "upper-scale simulation was not started because the shared "
-                    "simulation budget was exhausted",
-                ),
-                "none",
+            upper_batch = self.evaluator.unstarted_batch(
+                upper_model,
+                upper_context,
+                horizon,
+                "upper-scale simulation was not started because the shared "
+                "simulation budget was exhausted",
             )
 
         boundaries = list(

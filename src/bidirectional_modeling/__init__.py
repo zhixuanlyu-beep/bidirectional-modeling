@@ -13,7 +13,6 @@ from .correspondence import (
     ScaleGraph,
     ScalePath,
     correspondence_fingerprint,
-    context_fingerprint,
 )
 from .composition import (
     CompositionCaseResult,
@@ -76,6 +75,12 @@ from .interpretation import (
     ObservedEffectGenerator,
 )
 from .probes import HorizonExtensionProbe
+from .provenance import (
+    context_fingerprint,
+    equivalence_fingerprint,
+    macro_spec_fingerprint,
+    observed_model_fingerprint,
+)
 from .realization import (
     CandidateGenerator,
     ParametricCandidateGenerator,
@@ -181,7 +186,10 @@ __all__ = [
     "behaviorally_equivalent",
     "correspondence_fingerprint",
     "context_fingerprint",
+    "equivalence_fingerprint",
+    "macro_spec_fingerprint",
+    "observed_model_fingerprint",
     "pareto_partition",
 ]
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
