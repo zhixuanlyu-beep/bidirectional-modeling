@@ -16,6 +16,8 @@
 
 `0.9.1` 加固证明所依赖的语义底座：上下文、宏观规范、效果生成、闭合分析与残差分析共享同一个严格结构编码器，不再以对象的 `repr` 充当身份；有限状态模型在回调边界深度隔离状态，证明型分析会重放读出和转移以拒绝非确定性结果。初态也受 `max_states` 约束，非有限的度量或容差值以及负状态索引会显式失败。
 
+`0.10.0` 将跨尺度证明绑定到具体对应声明、上下层观测轨迹、上下文和验证协议：替换同名投影、场景映射或证据后，旧证书不能再加入 `ScaleGraph`。投影回调会在隔离副本上重放；输入修改不会泄漏，非确定输出或验证期间变化的身份会失败关闭。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │
@@ -38,7 +40,7 @@ Concept refinement <── Counterexample / closure analysis
 - `FiniteStateModel` 深度复制进入和离开 `applicable`、`transition`、`readout` 的状态，避免候选通过嵌套可变对象污染实验或其他候选；残差与闭合证明还会重放同一输入，结果或动作支撑不一致时按未知行为失败关闭。
 - 证书完整性必须相对于独立场景域证明。内置 `FiniteStateModel` 由框架从初态与干预导出场景清单；第三方模型必须由调用者通过 `Context.scenario_manifest` 提供 `ScenarioKey` 清单。候选提供的 `scenario_count()` 只作诊断提示，不能证明覆盖完整。
 - 跨尺度验证允许多个微观场景映射到同一宏观场景，但要求每个微观场景都有映像、每个宏观场景都有原像，并且每个时间步的投影结果都满足上层等价关系；空场景域不能产生真空证明。
-- 每份对应证书记录上下层 `Context` 的 SHA-256 指纹，防止把一个环境、假设或场景域中的结论冒充到另一个适用域。多用例套件在所有用例间共享同一模拟预算。
+- 每份对应证书记录对应声明、上下层观测轨迹、上下文和验证协议的 SHA-256 指纹，防止把一个投影、证据域或预算下的结论重放到另一个声明。多用例套件在所有用例间共享同一模拟预算。
 - 默认同时执行基线和显式干预，避免只在干预情形下通过、却在正常运行中失败。
 - 目标是任务相关的最小充分模型，不是还原完整底层世界。
 
@@ -55,7 +57,7 @@ Concept refinement <── Counterexample / closure analysis
 - `ClosureAnalyzer`：只从声明的初始状态探索可达状态，构造 `x₁ ~ x₂` 但未来宏观结果分化的见证，并列出可供人工批准的分离特征。
 - `refine_until_closed`：把闭合性反例接回规格细化；每次提升新可观测量后重新验证，直到闭合、预算耗尽或人工拒绝。
 - `ConceptLibrary`：保存定义、正反例、边界、相关概念、候选细化和一致的版本历史。
-- `CorrespondenceValidator`：在共享模拟预算内分别认证上下层场景域，再检查 `projection(lower_t) ~ upper_t`；失败时返回具体场景、时间步和快照见证；`validate_suite` 进一步区分校准兼容性与独立留出复核。
+- `CorrespondenceValidator`：在共享模拟预算内分别认证上下层场景域，再检查 `projection(lower_t) ~ upper_t`；投影会在隔离输入上重放，证书同时绑定声明、观测证据、上下文与协议；失败时返回具体场景、时间步和快照见证；`validate_suite` 进一步区分校准兼容性与独立留出复核。
 - `ScaleGraph`：只接纳验证通过的直接对应边。多跳路径只表示每条边分别通过，不会被偷换成端到端对应证明。
 - 双向往返检查：宏观往返只有在 `HypothesisGenerator.independent_recovery=True` 时才可通过，预先注入的假设目录只能证明兼容性；微观往返默认排除原模型本身，要求另一实现按“初始场景 + 干预”复现任务行为。往返的全部阶段共用一份预算。
 
@@ -202,10 +204,16 @@ certificate = engine.verify_correspondence(
     horizon=2,
 )
 print(certificate.passed)          # complete and commutes
+print(certificate.binds_correspondence(correspondence))
+print(certificate.protocol_fingerprint)
 print(certificate.counterexamples)
 ```
 
 这里验证的是整个动态交换图，而不只是终态数值相等：对每个下层场景 `s` 和每个时间步 `t`，下层快照经 `projection` 后必须与 `scenario_projection(s)` 指向的上层快照等价。投影与场景映射由调用方持有，因此候选模型不能自行改变判据。
+
+`Correspondence.projection_id` 和 `scenario_projection_id` 可为依赖外部模块、服务或其他不可结构化对象的回调声明稳定版本。普通 Python 函数会自动摘要代码、默认参数、闭包和实际引用的模块级绑定；无法可靠结构化的依赖若没有显式 ID，会拒绝生成证书。调用方必须在外部行为变化时更新 ID。
+
+这些摘要是证书错配和重放防护，不是数字签名，也不证明证书发布者身份。`lower_model_fingerprint` 与 `upper_model_fingerprint` 标识本次协议实际认证的轨迹证据；它们不声称覆盖已声明上下文与时间范围之外的模型行为。
 
 跨上下文复核使用验证套件：
 
@@ -218,7 +226,11 @@ print(suite.compatibility_passed)       # 所有已声明用例相容
 print(suite.has_independent_holdout)    # 至少一个独立留出声明
 print(suite.passed)                     # 两者同时成立
 for result in suite.cases:
-    print(result.case_name, result.certificate.lower_context_fingerprint)
+    print(
+        result.case_name,
+        result.certificate.lower_model_fingerprint,
+        result.certificate.lower_context_fingerprint,
+    )
 ```
 
 开放式结构搜索可实现 `CandidateGenerator` 或使用 `ParametricCandidateGenerator`；已有设计库可直接传入序列或使用 `RegistryGenerator`。领域目的解释可实现 `HypothesisGenerator`，也可使用 `CatalogHypothesisGenerator` 提供明确候选。

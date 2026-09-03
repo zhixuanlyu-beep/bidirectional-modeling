@@ -7,7 +7,6 @@ The validator checks that claim over independently certified scenario domains.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, Union
@@ -16,13 +15,21 @@ from .core import (
     Context,
     EquivalenceSpec,
     ExecutableModel,
+    NonDeterministicModelError,
     ResourceBudget,
     ScenarioKey,
     Snapshot,
     Trace,
 )
 from .evaluation import SatisfactionEvaluator, TraceBatch
-from .structural import freeze_value
+from .structural import (
+    callable_fingerprint,
+    fingerprint_value,
+    freeze_value,
+    isolated_copy,
+    isolated_mapping,
+    validate_fingerprint,
+)
 
 
 SnapshotProjection = Callable[[Snapshot, Context], Mapping[str, Any]]
@@ -36,12 +43,10 @@ def _identity_scenario(key: ScenarioKey) -> ScenarioKey:
 def context_fingerprint(context: Context) -> str:
     """Stable digest for the declared context and scenario domain."""
 
-    signature = freeze_value(
+    return fingerprint_value(
         context.semantic_signature(),
         purpose="context fingerprint deterministic structural identity",
     )
-    payload = repr(signature).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -53,12 +58,14 @@ class Scale:
     equivalence: EquivalenceSpec
 
     def __post_init__(self) -> None:
-        if not self.name:
-            raise ValueError("scale name must be non-empty")
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError("scale name must be a non-empty string")
         if not self.observables:
             raise ValueError("a scale must declare at least one observable")
-        if any(not item for item in self.observables):
-            raise ValueError("scale observable names must be non-empty")
+        if any(
+            not isinstance(item, str) or not item for item in self.observables
+        ):
+            raise ValueError("scale observable names must be non-empty strings")
         if len(self.observables) != len(set(self.observables)):
             raise ValueError("scale observables must be unique")
         missing = set(self.equivalence.fields) - set(self.observables)
@@ -67,6 +74,20 @@ class Scale:
                 "scale equivalence fields must be declared observables: %s"
                 % sorted(missing)
             )
+
+    def semantic_signature(self) -> Tuple[Any, ...]:
+        return (
+            "scale-v1",
+            self.name,
+            tuple(sorted(self.observables)),
+            self.equivalence.semantic_signature(),
+        )
+
+    def fingerprint(self) -> str:
+        return fingerprint_value(
+            self.semantic_signature(),
+            purpose="scale deterministic structural fingerprint",
+        )
 
 
 @dataclass(frozen=True)
@@ -79,6 +100,8 @@ class Correspondence:
     projection: SnapshotProjection
     scenario_projection: ScenarioProjection = _identity_scenario
     assumptions: Tuple[str, ...] = ()
+    projection_id: Optional[str] = None
+    scenario_projection_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -89,6 +112,206 @@ class Correspondence:
             raise TypeError("correspondence projection must be callable")
         if not callable(self.scenario_projection):
             raise TypeError("scenario projection must be callable")
+        for label, identity in (
+            ("projection_id", self.projection_id),
+            ("scenario_projection_id", self.scenario_projection_id),
+        ):
+            if identity is not None and (
+                type(identity) is not str or not identity
+            ):
+                raise ValueError("%s must be a non-empty string" % label)
+
+    def semantic_signature(self) -> Tuple[Any, ...]:
+        return (
+            "correspondence-v1",
+            self.name,
+            self.lower_scale.semantic_signature(),
+            self.upper_scale.semantic_signature(),
+            callable_fingerprint(
+                self.projection,
+                semantic_id=self.projection_id,
+                purpose="snapshot projection fingerprint",
+            ),
+            callable_fingerprint(
+                self.scenario_projection,
+                semantic_id=self.scenario_projection_id,
+                purpose="scenario projection fingerprint",
+            ),
+            tuple(sorted(self.assumptions)),
+        )
+
+    def fingerprint(self) -> str:
+        return fingerprint_value(
+            self.semantic_signature(),
+            purpose="correspondence deterministic structural fingerprint",
+        )
+
+
+def correspondence_fingerprint(correspondence: Correspondence) -> str:
+    """Bind a certificate to one concrete scale and projection claim."""
+
+    return correspondence.fingerprint()
+
+
+def _correspondence_binding_error(
+    correspondence: Correspondence,
+    expected: str,
+) -> Optional[str]:
+    try:
+        observed = correspondence_fingerprint(correspondence)
+    except Exception as error:
+        return "correspondence identity could not be fingerprinted: %s: %s" % (
+            type(error).__name__,
+            error,
+        )
+    if observed != expected:
+        return "correspondence identity changed after the certificate was bound"
+    return None
+
+
+def _audited_scenario_projection(
+    correspondence: Correspondence,
+    key: ScenarioKey,
+) -> ScenarioKey:
+    results = tuple(
+        correspondence.scenario_projection(
+            isolated_copy(key, purpose="scenario projection input")
+        )
+        for _ in range(2)
+    )
+    if any(not isinstance(item, ScenarioKey) for item in results):
+        raise TypeError("scenario projection did not return ScenarioKey")
+    if results[0] != results[1]:
+        raise NonDeterministicModelError(
+            "non-deterministic scenario projection in correspondence %s"
+            % correspondence.name
+        )
+    return results[0]
+
+
+def _audited_snapshot_projection(
+    correspondence: Correspondence,
+    snapshot: Snapshot,
+    context: Context,
+) -> Mapping[str, Any]:
+    results = []
+    for _ in range(2):
+        projected = correspondence.projection(
+            isolated_mapping(snapshot, purpose="snapshot projection input"),
+            isolated_copy(context, purpose="snapshot projection context"),
+        )
+        results.append(
+            isolated_mapping(projected, purpose="snapshot projection result")
+        )
+    identities = tuple(
+        freeze_value(
+            item,
+            purpose="snapshot projection deterministic structural identity",
+        )
+        for item in results
+    )
+    if identities[0] != identities[1]:
+        raise NonDeterministicModelError(
+            "non-deterministic snapshot projection in correspondence %s"
+            % correspondence.name
+        )
+    return results[0]
+
+
+def _model_evidence_fingerprint(
+    model: ExecutableModel,
+    traces: Iterable[Any],
+    horizon: int,
+) -> str:
+    trace_signatures = []
+    for index, trace in enumerate(traces):
+        if not isinstance(trace, Trace):
+            trace_signatures.append(
+                freeze_value(
+                    (
+                        "invalid-trace",
+                        index,
+                        type(trace).__module__,
+                        type(trace).__qualname__,
+                    ),
+                    purpose="model evidence fingerprint",
+                )
+            )
+            continue
+        trace_signatures.append(
+            freeze_value(
+                (
+                    trace.model_name,
+                    trace.initial_state,
+                    trace.intervention,
+                    tuple(dict(snapshot) for snapshot in trace.snapshots),
+                ),
+                purpose="model evidence fingerprint",
+            )
+        )
+    return fingerprint_value(
+        (
+            "observed-model-v1",
+            type(model).__module__,
+            type(model).__qualname__,
+            str(getattr(model, "name", "")),
+            horizon,
+            tuple(sorted(trace_signatures)),
+        ),
+        purpose="model evidence fingerprint",
+    )
+
+
+def _safe_model_evidence_fingerprint(
+    model: ExecutableModel,
+    traces: Iterable[Any],
+    horizon: int,
+) -> Tuple[str, Optional[str]]:
+    try:
+        return _model_evidence_fingerprint(model, traces, horizon), None
+    except Exception as error:
+        fallback = fingerprint_value(
+            (
+                "uncertifiable-observed-model-v1",
+                type(model).__module__,
+                type(model).__qualname__,
+                str(getattr(model, "name", "")),
+                horizon,
+            ),
+            purpose="uncertifiable model evidence fingerprint",
+        )
+        return fallback, "%s: %s" % (type(error).__name__, error)
+
+
+def _protocol_fingerprint(
+    correspondence_digest: str,
+    lower_model_digest: str,
+    upper_model_digest: str,
+    lower_context_digest: str,
+    upper_context_digest: str,
+    horizon: int,
+    lower_coverage_authority: str,
+    upper_coverage_authority: str,
+    budget: ResourceBudget,
+    simulation_limit: int,
+) -> str:
+    return fingerprint_value(
+        (
+            "correspondence-validator-v1",
+            correspondence_digest,
+            lower_model_digest,
+            upper_model_digest,
+            lower_context_digest,
+            upper_context_digest,
+            horizon,
+            lower_coverage_authority,
+            upper_coverage_authority,
+            budget.max_candidates,
+            simulation_limit,
+            budget.max_cost,
+        ),
+        purpose="correspondence validation protocol fingerprint",
+    )
 
 
 @dataclass(frozen=True)
@@ -121,16 +344,31 @@ class CorrespondenceCertificate:
     upper_scenarios: int
     paired_scenarios: int
     covered_upper_scenarios: int
+    correspondence_fingerprint: str
+    lower_model_fingerprint: str
+    upper_model_fingerprint: str
+    protocol_fingerprint: str
+    lower_context_fingerprint: str
+    upper_context_fingerprint: str
     counterexamples: Tuple[CorrespondenceCounterexample, ...] = ()
     assumptions: Tuple[str, ...] = ()
     boundaries: Tuple[str, ...] = ()
     lower_coverage_authority: str = "none"
     upper_coverage_authority: str = "none"
-    lower_context_fingerprint: str = ""
-    upper_context_fingerprint: str = ""
     simulations_used: int = 0
 
     def __post_init__(self) -> None:
+        if any(
+            not value
+            for value in (
+                self.correspondence_name,
+                self.lower_scale,
+                self.upper_scale,
+                self.lower_model_name,
+                self.upper_model_name,
+            )
+        ):
+            raise ValueError("correspondence certificate identities must be non-empty")
         if self.horizon < 1:
             raise ValueError("correspondence horizon must be at least one")
         counts = (
@@ -142,24 +380,28 @@ class CorrespondenceCertificate:
         )
         if min(counts) < 0:
             raise ValueError("correspondence counts must be non-negative")
-        for fingerprint in (
-            self.lower_context_fingerprint,
-            self.upper_context_fingerprint,
+        for label, fingerprint in (
+            ("correspondence fingerprint", self.correspondence_fingerprint),
+            ("lower model fingerprint", self.lower_model_fingerprint),
+            ("upper model fingerprint", self.upper_model_fingerprint),
+            ("protocol fingerprint", self.protocol_fingerprint),
+            ("lower context fingerprint", self.lower_context_fingerprint),
+            ("upper context fingerprint", self.upper_context_fingerprint),
         ):
-            if not fingerprint:
-                continue
-            if len(fingerprint) != 64:
-                raise ValueError("context fingerprints must be SHA-256 digests")
-            try:
-                int(fingerprint, 16)
-            except ValueError as error:
-                raise ValueError(
-                    "context fingerprints must be hexadecimal"
-                ) from error
+            validate_fingerprint(fingerprint, purpose=label)
 
     @property
     def passed(self) -> bool:
         return self.complete and self.commutes
+
+    def binds_correspondence(self, correspondence: Correspondence) -> bool:
+        return (
+            _correspondence_binding_error(
+                correspondence,
+                self.correspondence_fingerprint,
+            )
+            is None
+        )
 
 
 class CorrespondenceCaseRole(str, Enum):
@@ -216,13 +458,24 @@ class CorrespondenceSuiteCertificate:
     upper_scale: str
     cases: Tuple[CorrespondenceCaseResult, ...]
     simulations_used: int
+    correspondence_fingerprint: str
+    protocol_fingerprint: str
     truncated: bool = False
+    boundaries: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.correspondence_name or not self.lower_scale or not self.upper_scale:
             raise ValueError("suite certificate identities must be non-empty")
         if self.simulations_used < 0:
             raise ValueError("suite simulations_used must be non-negative")
+        validate_fingerprint(
+            self.correspondence_fingerprint,
+            purpose="suite correspondence fingerprint",
+        )
+        validate_fingerprint(
+            self.protocol_fingerprint,
+            purpose="suite protocol fingerprint",
+        )
         names = [item.case_name for item in self.cases]
         if len(names) != len(set(names)):
             raise ValueError("suite certificate case names must be unique")
@@ -238,6 +491,13 @@ class CorrespondenceSuiteCertificate:
                 self.upper_scale,
             ):
                 raise ValueError("case certificate metadata does not match its suite")
+            if (
+                item.certificate.correspondence_fingerprint
+                != self.correspondence_fingerprint
+            ):
+                raise ValueError(
+                    "case certificate fingerprint does not match its suite"
+                )
         if sum(item.certificate.simulations_used for item in self.cases) != (
             self.simulations_used
         ):
@@ -273,6 +533,15 @@ class CorrespondenceSuiteCertificate:
     @property
     def passed(self) -> bool:
         return self.has_independent_holdout and self.compatibility_passed
+
+    def binds_correspondence(self, correspondence: Correspondence) -> bool:
+        return (
+            _correspondence_binding_error(
+                correspondence,
+                self.correspondence_fingerprint,
+            )
+            is None
+        )
 
 
 CorrespondenceEvidence = Union[
@@ -314,6 +583,9 @@ class CorrespondenceValidator:
             raise ValueError("correspondence horizon must be at least one")
         upper_context = upper_context or lower_context
         budget = budget or ResourceBudget()
+        correspondence_digest = correspondence_fingerprint(correspondence)
+        lower_context_digest = context_fingerprint(lower_context)
+        upper_context_digest = context_fingerprint(upper_context)
 
         lower_batch = self.evaluator.collect(
             lower_model,
@@ -343,9 +615,9 @@ class CorrespondenceValidator:
                 "none",
             )
 
-        boundaries = tuple(
+        boundaries = list(
             "lower: %s" % item for item in lower_batch.boundaries
-        ) + tuple("upper: %s" % item for item in upper_batch.boundaries)
+        ) + list("upper: %s" % item for item in upper_batch.boundaries)
         counterexamples = []
 
         lower_traces = []
@@ -394,9 +666,9 @@ class CorrespondenceValidator:
         for lower_trace in lower_traces:
             lower_key = lower_trace.scenario_key
             try:
-                upper_key = correspondence.scenario_projection(lower_key)
-                if not isinstance(upper_key, ScenarioKey):
-                    raise TypeError("scenario projection did not return ScenarioKey")
+                upper_key = _audited_scenario_projection(
+                    correspondence, lower_key
+                )
             except Exception as error:
                 counterexamples.append(
                     CorrespondenceCounterexample(
@@ -471,13 +743,11 @@ class CorrespondenceValidator:
                     continue
 
                 try:
-                    projected = correspondence.projection(
+                    projected = _audited_snapshot_projection(
+                        correspondence,
                         lower_snapshot,
                         lower_context,
                     )
-                    if not isinstance(projected, Mapping):
-                        raise TypeError("snapshot projection did not return a mapping")
-                    projected = dict(projected)
                     missing_projected = set(
                         correspondence.upper_scale.observables
                     ) - set(projected)
@@ -527,6 +797,55 @@ class CorrespondenceValidator:
                 )
             )
 
+        lower_model_digest, lower_fingerprint_error = (
+            _safe_model_evidence_fingerprint(
+                lower_model, lower_batch.traces, horizon
+            )
+        )
+        upper_model_digest, upper_fingerprint_error = (
+            _safe_model_evidence_fingerprint(
+                upper_model, upper_batch.traces, horizon
+            )
+        )
+        binding_complete = True
+        for label, error in (
+            ("lower", lower_fingerprint_error),
+            ("upper", upper_fingerprint_error),
+        ):
+            if error is None:
+                continue
+            binding_complete = False
+            boundaries.append(
+                "%s model evidence could not be fingerprinted: %s"
+                % (label, error)
+            )
+
+        binding_error = _correspondence_binding_error(
+            correspondence,
+            correspondence_digest,
+        )
+        if binding_error is not None:
+            binding_complete = False
+            counterexamples.append(
+                CorrespondenceCounterexample(
+                    "correspondence-identity-changed",
+                    binding_error,
+                )
+            )
+
+        protocol_digest = _protocol_fingerprint(
+            correspondence_digest,
+            lower_model_digest,
+            upper_model_digest,
+            lower_context_digest,
+            upper_context_digest,
+            horizon,
+            lower_batch.coverage_authority,
+            upper_batch.coverage_authority,
+            budget,
+            budget.max_simulations,
+        )
+
         coverage_complete = not any(
             item.kind in self._COVERAGE_FAILURES for item in counterexamples
         )
@@ -537,6 +856,7 @@ class CorrespondenceValidator:
             lower_batch.complete
             and upper_batch.complete
             and coverage_complete
+            and binding_complete
         )
         return CorrespondenceCertificate(
             correspondence_name=correspondence.name,
@@ -551,13 +871,17 @@ class CorrespondenceValidator:
             upper_scenarios=len(upper_traces),
             paired_scenarios=paired_scenarios,
             covered_upper_scenarios=len(set(upper_by_key).intersection(mapped_upper)),
+            correspondence_fingerprint=correspondence_digest,
+            lower_model_fingerprint=lower_model_digest,
+            upper_model_fingerprint=upper_model_digest,
+            protocol_fingerprint=protocol_digest,
+            lower_context_fingerprint=lower_context_digest,
+            upper_context_fingerprint=upper_context_digest,
             counterexamples=tuple(counterexamples),
             assumptions=correspondence.assumptions,
-            boundaries=boundaries,
+            boundaries=tuple(boundaries),
             lower_coverage_authority=lower_batch.coverage_authority,
             upper_coverage_authority=upper_batch.coverage_authority,
-            lower_context_fingerprint=context_fingerprint(lower_context),
-            upper_context_fingerprint=context_fingerprint(upper_context),
             simulations_used=simulations_used,
         )
 
@@ -577,13 +901,60 @@ class CorrespondenceValidator:
             raise ValueError("correspondence validation case names must be unique")
 
         budget = budget or ResourceBudget()
+        correspondence_digest = correspondence_fingerprint(correspondence)
         remaining = budget.max_simulations
         simulations_used = 0
         truncated = False
+        suite_boundaries = []
         results = []
         for case in cases:
+            binding_error = _correspondence_binding_error(
+                correspondence,
+                correspondence_digest,
+            )
+            if binding_error is not None:
+                truncated = True
+                suite_boundaries.append(binding_error)
+                break
             upper_context = case.resolved_upper_context
             if remaining <= 0:
+                lower_context_digest = context_fingerprint(case.lower_context)
+                upper_context_digest = context_fingerprint(upper_context)
+                lower_model_digest, lower_error = (
+                    _safe_model_evidence_fingerprint(
+                        case.lower_model, (), case.horizon
+                    )
+                )
+                upper_model_digest, upper_error = (
+                    _safe_model_evidence_fingerprint(
+                        case.upper_model, (), case.horizon
+                    )
+                )
+                exhausted_boundaries = [
+                    "validation case was not started because the suite simulation "
+                    "budget was exhausted"
+                ]
+                for label, error in (
+                    ("lower", lower_error),
+                    ("upper", upper_error),
+                ):
+                    if error is not None:
+                        exhausted_boundaries.append(
+                            "%s model evidence could not be fingerprinted: %s"
+                            % (label, error)
+                        )
+                protocol_digest = _protocol_fingerprint(
+                    correspondence_digest,
+                    lower_model_digest,
+                    upper_model_digest,
+                    lower_context_digest,
+                    upper_context_digest,
+                    case.horizon,
+                    "none",
+                    "none",
+                    budget,
+                    0,
+                )
                 certificate = CorrespondenceCertificate(
                     correspondence_name=correspondence.name,
                     lower_scale=correspondence.lower_scale.name,
@@ -597,13 +968,14 @@ class CorrespondenceValidator:
                     upper_scenarios=0,
                     paired_scenarios=0,
                     covered_upper_scenarios=0,
+                    correspondence_fingerprint=correspondence_digest,
+                    lower_model_fingerprint=lower_model_digest,
+                    upper_model_fingerprint=upper_model_digest,
+                    protocol_fingerprint=protocol_digest,
+                    lower_context_fingerprint=lower_context_digest,
+                    upper_context_fingerprint=upper_context_digest,
                     assumptions=correspondence.assumptions,
-                    boundaries=(
-                        "validation case was not started because the suite simulation "
-                        "budget was exhausted",
-                    ),
-                    lower_context_fingerprint=context_fingerprint(case.lower_context),
-                    upper_context_fingerprint=context_fingerprint(upper_context),
+                    boundaries=tuple(exhausted_boundaries),
                 )
                 truncated = True
             else:
@@ -616,13 +988,20 @@ class CorrespondenceValidator:
                     case.horizon,
                     replace(budget, max_simulations=remaining),
                 )
-                simulations_used += certificate.simulations_used
                 remaining -= certificate.simulations_used
                 if not certificate.complete and any(
                     "budget" in boundary.lower()
                     for boundary in certificate.boundaries
                 ):
                     truncated = True
+            if certificate.correspondence_fingerprint != correspondence_digest:
+                truncated = True
+                suite_boundaries.append(
+                    "correspondence identity changed before a case could be bound "
+                    "to the suite"
+                )
+                break
+            simulations_used += certificate.simulations_used
             results.append(
                 CorrespondenceCaseResult(
                     case.name,
@@ -632,13 +1011,46 @@ class CorrespondenceValidator:
                 )
             )
 
+        binding_error = _correspondence_binding_error(
+            correspondence,
+            correspondence_digest,
+        )
+        if binding_error is not None:
+            truncated = True
+            if binding_error not in suite_boundaries:
+                suite_boundaries.append(binding_error)
+
+        suite_protocol_digest = fingerprint_value(
+            (
+                "correspondence-suite-validator-v1",
+                correspondence_digest,
+                tuple(
+                    (
+                        item.case_name,
+                        item.role.value,
+                        item.independent,
+                        item.certificate.protocol_fingerprint,
+                    )
+                    for item in results
+                ),
+                budget.max_candidates,
+                budget.max_simulations,
+                budget.max_cost,
+                truncated,
+            ),
+            purpose="correspondence suite protocol fingerprint",
+        )
+
         return CorrespondenceSuiteCertificate(
             correspondence_name=correspondence.name,
             lower_scale=correspondence.lower_scale.name,
             upper_scale=correspondence.upper_scale.name,
             cases=tuple(results),
             simulations_used=simulations_used,
+            correspondence_fingerprint=correspondence_digest,
+            protocol_fingerprint=suite_protocol_digest,
             truncated=truncated,
+            boundaries=tuple(suite_boundaries),
         )
 
 
@@ -699,6 +1111,10 @@ class ScaleGraph:
         )
         if metadata != expected:
             raise ValueError("certificate metadata does not match the correspondence")
+        if not certificate.binds_correspondence(correspondence):
+            raise ValueError(
+                "certificate fingerprint does not match the correspondence"
+            )
 
         for scale in (correspondence.lower_scale, correspondence.upper_scale):
             existing = self._scales.get(scale.name)
