@@ -14,11 +14,21 @@ from enum import Enum
 import math
 from typing import Any, Deque, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
-from .core import Context, EquivalenceSpec, FiniteStateModel
+from .core import (
+    Context,
+    EquivalenceSpec,
+    FiniteStateModel,
+    UndefinedTransition,
+)
 from .correspondence import context_fingerprint
 
 
 FrozenValue = Tuple[Any, ...]
+
+
+class _Edge(Enum):
+    UNDEFINED = "undefined"
+    UNKNOWN = "unknown"
 
 
 def _freeze(value: Any) -> FrozenValue:
@@ -125,6 +135,8 @@ class DistinguishingContext:
     left_terminal_signature: Tuple[Any, ...]
     right_terminal_signature: Tuple[Any, ...]
     discovered_at_depth: int
+    left_defined: bool = True
+    right_defined: bool = True
 
     @property
     def depth(self) -> int:
@@ -171,10 +183,18 @@ class ResidualTransition:
     action: str
     target_classes: Tuple[int, ...]
     complete: bool
+    undefined: bool = False
 
     @property
     def well_defined(self) -> bool:
-        return self.complete and len(self.target_classes) == 1
+        return self.complete and (
+            (self.undefined and not self.target_classes)
+            or (not self.undefined and len(self.target_classes) == 1)
+        )
+
+    @property
+    def defined(self) -> bool:
+        return self.well_defined and not self.undefined
 
 
 @dataclass(frozen=True)
@@ -205,8 +225,28 @@ class ResidualQuotient:
                     raise ValueError(
                         "the requested quotient transition is not well-defined"
                     )
+                if transition.undefined:
+                    raise UndefinedTransition(
+                        "action %r is undefined for residual class %d"
+                        % (action, source_class)
+                    )
                 return transition.target_classes[0]
         raise KeyError((source_class, action))
+
+
+@dataclass(frozen=True)
+class ResidualContextRefinement:
+    """One counterexample-guided addition to a finite context basis."""
+
+    iteration: int
+    left_state: int
+    right_state: int
+    context: Tuple[str, ...]
+    state_classes: Tuple[int, ...]
+
+    @property
+    def class_count(self) -> int:
+        return len(set(self.state_classes))
 
 
 @dataclass(frozen=True)
@@ -225,6 +265,9 @@ class ResidualQuotientReport:
     exploration_depth: int
     transition_evaluations: int
     boundaries: Tuple[str, ...] = ()
+    context_basis: Tuple[Tuple[str, ...], ...] = ()
+    context_refinements: Tuple[ResidualContextRefinement, ...] = ()
+    context_basis_reproduces_partition: bool = False
 
     @property
     def minimal(self) -> bool:
@@ -248,6 +291,7 @@ class ResidualQuotientAnalyzer:
         max_reachability_depth: Optional[int] = None,
         max_states: int = 1_000,
         max_context_depth: Optional[int] = None,
+        max_context_tests: int = 256,
     ) -> ResidualQuotientReport:
         if max_states < 1:
             raise ValueError("max_states must be positive")
@@ -255,6 +299,8 @@ class ResidualQuotientAnalyzer:
             raise ValueError("max_reachability_depth must be non-negative")
         if max_context_depth is not None and max_context_depth < 0:
             raise ValueError("max_context_depth must be non-negative")
+        if max_context_tests < 1:
+            raise ValueError("max_context_tests must be positive")
 
         actions = tuple(
             dict.fromkeys(
@@ -267,7 +313,7 @@ class ResidualQuotientAnalyzer:
         observation_keys = []
         initial_indices = []
         frontier: Deque[int] = deque()
-        transitions: Dict[Tuple[int, str], Optional[int]] = {}
+        transitions: Dict[Tuple[int, str], Any] = {}
         boundaries = []
         transition_evaluations = 0
 
@@ -337,7 +383,7 @@ class ResidualQuotientAnalyzer:
             ):
                 reachability_limit_hit = True
                 for action in actions:
-                    transitions[(state_index, action)] = None
+                    transitions[(state_index, action)] = _Edge.UNKNOWN
                 continue
 
             for action in actions:
@@ -351,7 +397,7 @@ class ResidualQuotientAnalyzer:
                     if successor_index is None:
                         if len(states) >= max_states:
                             state_limit_hit = True
-                            transitions[(state_index, action)] = None
+                            transitions[(state_index, action)] = _Edge.UNKNOWN
                             continue
                         successor_index, _ = add_state(
                             successor,
@@ -359,8 +405,10 @@ class ResidualQuotientAnalyzer:
                             state.actions + (action,),
                         )
                     transitions[(state_index, action)] = successor_index
+                except UndefinedTransition:
+                    transitions[(state_index, action)] = _Edge.UNDEFINED
                 except Exception as error:
-                    transitions[(state_index, action)] = None
+                    transitions[(state_index, action)] = _Edge.UNKNOWN
                     boundaries.append(
                         "transition from state %d under %r could not be certified: %s"
                         % (state_index, action, error)
@@ -378,7 +426,7 @@ class ResidualQuotientAnalyzer:
 
         complete = (
             len(transitions) == len(states) * len(actions)
-            and all(target is not None for target in transitions.values())
+            and all(target is not _Edge.UNKNOWN for target in transitions.values())
         )
 
         initial_partition = _normalize_partition(observation_keys)
@@ -394,11 +442,24 @@ class ResidualQuotientAnalyzer:
             while queue:
                 left, right, prefix = queue.popleft()
                 for action in actions:
-                    left_next = transitions.get((left, action))
-                    right_next = transitions.get((right, action))
-                    if left_next is None or right_next is None:
+                    left_next = transitions.get(
+                        (left, action), _Edge.UNKNOWN
+                    )
+                    right_next = transitions.get(
+                        (right, action), _Edge.UNKNOWN
+                    )
+                    if (
+                        left_next is _Edge.UNKNOWN
+                        or right_next is _Edge.UNKNOWN
+                    ):
                         continue
                     word = prefix + (action,)
+                    if (left_next is _Edge.UNDEFINED) != (
+                        right_next is _Edge.UNDEFINED
+                    ):
+                        return word
+                    if left_next is _Edge.UNDEFINED:
+                        continue
                     if observation_keys[left_next] != observation_keys[right_next]:
                         return word
                     pair = (left_next, right_next)
@@ -407,14 +468,18 @@ class ResidualQuotientAnalyzer:
                         queue.append((left_next, right_next, word))
             return None
 
-        def terminal_state(state_index: int, word: Sequence[str]) -> int:
+        def context_result(
+            state_index: int, word: Sequence[str]
+        ) -> Tuple[bool, Optional[int]]:
             current = state_index
             for action in word:
-                target = transitions.get((current, action))
-                if target is None:
+                target = transitions.get((current, action), _Edge.UNKNOWN)
+                if target is _Edge.UNKNOWN:
                     raise ValueError("a distinguishing context crossed an unknown edge")
+                if target is _Edge.UNDEFINED:
+                    return False, None
                 current = target
-            return current
+            return True, current
 
         def distinctions_for_split(
             before: Sequence[int],
@@ -426,8 +491,8 @@ class ResidualQuotientAnalyzer:
                 word = shortest_context(left, right)
                 if word is None:
                     continue
-                left_terminal = terminal_state(left, word)
-                right_terminal = terminal_state(right, word)
+                left_defined, left_terminal = context_result(left, word)
+                right_defined, right_terminal = context_result(right, word)
                 distinctions.append(
                     DistinguishingContext(
                         left_state=left,
@@ -435,11 +500,17 @@ class ResidualQuotientAnalyzer:
                         actions=word,
                         left_terminal_signature=(
                             states[left_terminal].observation_signature
+                            if left_terminal is not None
+                            else ()
                         ),
                         right_terminal_signature=(
                             states[right_terminal].observation_signature
+                            if right_terminal is not None
+                            else ()
                         ),
                         discovered_at_depth=depth,
+                        left_defined=left_defined,
+                        right_defined=right_defined,
                     )
                 )
                 if word not in words:
@@ -458,14 +529,18 @@ class ResidualQuotientAnalyzer:
         while True:
             signatures = []
             for state_index, current_class in enumerate(current_partition):
-                targets = tuple(
-                    current_partition[target]
-                    if (target := transitions.get((state_index, action)))
-                    is not None
-                    else None
-                    for action in actions
-                )
-                signatures.append((current_class, targets))
+                targets = []
+                for action in actions:
+                    target = transitions.get(
+                        (state_index, action), _Edge.UNKNOWN
+                    )
+                    if target is _Edge.UNKNOWN:
+                        targets.append(("unknown",))
+                    elif target is _Edge.UNDEFINED:
+                        targets.append(("undefined",))
+                    else:
+                        targets.append(("state", current_partition[target]))
+                signatures.append((current_class, tuple(targets)))
             refined = _normalize_partition(signatures)
             if refined == current_partition:
                 stable = True
@@ -501,10 +576,15 @@ class ResidualQuotientAnalyzer:
             for action in actions:
                 targets = set()
                 transition_complete = True
+                undefined = False
                 for state_index in residual_class.members:
-                    target = transitions.get((state_index, action))
-                    if target is None:
+                    target = transitions.get(
+                        (state_index, action), _Edge.UNKNOWN
+                    )
+                    if target is _Edge.UNKNOWN:
                         transition_complete = False
+                    elif target is _Edge.UNDEFINED:
+                        undefined = True
                     else:
                         targets.add(current_partition[target])
                 quotient_transition = ResidualTransition(
@@ -512,6 +592,7 @@ class ResidualQuotientAnalyzer:
                     action,
                     tuple(sorted(targets)),
                     transition_complete,
+                    undefined,
                 )
                 quotient_transitions.append(quotient_transition)
                 congruent = congruent and quotient_transition.well_defined
@@ -527,6 +608,78 @@ class ResidualQuotientAnalyzer:
                 for name, index in initial_indices
             ),
         )
+
+        def context_outcome(
+            state_index: int, word: Sequence[str]
+        ) -> Tuple[Any, ...]:
+            defined, terminal = context_result(state_index, word)
+            if not defined:
+                return ("undefined",)
+            return ("defined", observation_keys[terminal])
+
+        context_basis = [()]
+        context_refinements = []
+
+        def partition_for_basis() -> Tuple[int, ...]:
+            return _normalize_partition(
+                tuple(
+                    context_outcome(state_index, word)
+                    for word in context_basis
+                )
+                for state_index in range(len(states))
+            )
+
+        basis_partition = partition_for_basis()
+        while basis_partition != current_partition:
+            if len(context_basis) >= max_context_tests:
+                boundaries.append(
+                    "distinguishing-context extraction reached "
+                    "max_context_tests=%d" % max_context_tests
+                )
+                break
+            counterexample_pair = None
+            for left_state in range(len(states)):
+                for right_state in range(left_state + 1, len(states)):
+                    if (
+                        basis_partition[left_state]
+                        == basis_partition[right_state]
+                        and current_partition[left_state]
+                        != current_partition[right_state]
+                    ):
+                        counterexample_pair = (left_state, right_state)
+                        break
+                if counterexample_pair is not None:
+                    break
+            if counterexample_pair is None:
+                break
+            word = shortest_context(*counterexample_pair)
+            if word is None or word in context_basis:
+                boundaries.append(
+                    "a finite distinguishing-context basis could not reproduce "
+                    "the selected residual partition"
+                )
+                break
+            previous_count = len(set(basis_partition))
+            context_basis.append(word)
+            refined_basis = partition_for_basis()
+            if len(set(refined_basis)) <= previous_count:
+                boundaries.append(
+                    "a counterexample context did not strictly refine its test partition"
+                )
+                context_basis.pop()
+                break
+            basis_partition = refined_basis
+            context_refinements.append(
+                ResidualContextRefinement(
+                    iteration=len(context_refinements) + 1,
+                    left_state=counterexample_pair[0],
+                    right_state=counterexample_pair[1],
+                    context=word,
+                    state_classes=basis_partition,
+                )
+            )
+        context_basis_reproduces_partition = basis_partition == current_partition
+
         if complete and not congruent:
             boundaries.append(
                 "the selected bounded residual partition is not a transition congruence"
@@ -550,4 +703,9 @@ class ResidualQuotientAnalyzer:
             exploration_depth=max(len(state.actions) for state in states),
             transition_evaluations=transition_evaluations,
             boundaries=tuple(boundaries),
+            context_basis=tuple(context_basis),
+            context_refinements=tuple(context_refinements),
+            context_basis_reproduces_partition=(
+                context_basis_reproduces_partition
+            ),
         )

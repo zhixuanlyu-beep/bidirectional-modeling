@@ -10,6 +10,8 @@
 
 `0.7.0` 加入有限确定性系统上的残差语义商发现：框架从初态枚举可达微观状态，以动作序列作为区分上下文，逐层细化观察等价类，生成最短区分上下文、商转移和完整性/稳定性/同余性证书。只有完整探索并收敛到同余分区时，结果才声明为当前实验域上的最小行为模型。
 
+`0.8.0` 把局部支撑集提升为一等语义：`FiniteStateModel.applicable` 显式声明动作何时无定义，`UndefinedTransition` 表示合法的 `⊥`，普通运行异常仍作为未知边阻断证明。残差报告还用反例循环提取有限区分上下文基，每次只加入一个能严格细化当前测试分区的最短上下文。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │
@@ -39,7 +41,7 @@ Concept refinement <── Counterexample / closure analysis
 ## 已实现组件
 
 - `FiniteStateModel`：有限状态、转移、行动、读出和透明资源指标。
-- `ResidualQuotientAnalyzer`：枚举有限可达状态，构造按上下文深度单调细化的残差分区；合并所有未来观察行为相同的微观状态，并返回最短区分动作序列和可验证的商转移。
+- `ResidualQuotientAnalyzer`：枚举有限可达状态，构造按上下文深度单调细化的残差分区；合并所有未来观察行为及动作支撑相同的微观状态，并返回最短区分动作序列、反例引导上下文基和可验证的偏商转移。
 - `SatisfactionEvaluator`：惰性消费模拟轨迹，对照调用方或框架持有的场景清单验证身份、去重、轨迹长度和模型归属，不信任候选自报的场景数；同一已认证轨迹批次可被多个规格安全复用。
 - `Realizer`：接受设计库或参数化候选生成器，执行验证和红队探测，保留主证书与探测证书，并输出帕累托前沿、被支配候选和被拒候选。
 - `Interpreter`：生成或接收目的假设，按时间范围缓存轨迹、共享模拟预算，用解释力、简洁性、鲁棒性和上下文证据排序，并提出信息增益最高的区分实验。
@@ -116,9 +118,26 @@ for level in report.filtration:
     print(level.context_depth, level.class_count)
 for witness in report.distinguishing_contexts:
     print(witness.actions)
+print(report.context_basis)           # ((), ('probe',))
+print(report.context_basis_reproduces_partition)  # 重建当前有界分区
 ```
 
 第 0 层只按当前 `signal` 观察分组；深度 1 加入 `probe` 上下文后，未来结果不同的隐藏状态被拆开，而仅有无关 `copy` 字段不同的两个状态保持合并。`max_reachability_depth`、`max_states` 或 `max_context_depth` 截断时，报告会保留有界分区，但 `minimal` 必为假。
+
+局部支撑通过 `FiniteStateModel.applicable` 声明。若一个残差类上的 `consume` 全部无定义，其商转移是良定义的偏转移；若同一类中只有部分状态支持它，该类会被继续拆分：
+
+```python
+from bidirectional_modeling import UndefinedTransition
+from bidirectional_modeling.examples import partial_residual_scenario
+
+equivalence, context, model = partial_residual_scenario()
+report = engine.discover_residual_quotient(model, equivalence, context)
+disabled = dict(report.quotient.initial_state_classes)["disabled"]
+try:
+    report.quotient.next_class(disabled, "consume")
+except UndefinedTransition:
+    pass  # 已认证的 ⊥，不是程序崩溃
+```
 
 自动生成保守效果假设：
 
@@ -173,13 +192,14 @@ for result in suite.cases:
 
 开放式结构搜索可实现 `CandidateGenerator` 或使用 `ParametricCandidateGenerator`；已有设计库可直接传入序列或使用 `RegistryGenerator`。领域目的解释可实现 `HypothesisGenerator`，也可使用 `CatalogHypothesisGenerator` 提供明确候选。
 
-## 五个内置验收场景
+## 六个内置验收场景
 
 1. **软件行为**：多个可靠工作器形成帕累托候选；丢数据的“指标钻空子”方案被不变量拒绝；只在短期可靠的方案被延长时间探测反驳。
 2. **科学动力学**：位置相同但速度不同的状态未来分化；系统给出非闭合见证，人工批准把速度提升为宏观状态。由于该示例状态空间无界，有限搜索在细化后只报告“未发现反例但证明不完整”，不会宣称全局闭合。
 3. **残差语义商**：三个当前观察相同的不透明初态经 `probe` 暴露两种未来结果；框架自动拆分未来行为不同的状态，同时合并只有无关微观副本编号不同的状态。
-4. **组织机制**：同一审批结构兼容防欺诈、审计和中央控制等多个解释；系统保留不可识别性、限制弱证据意图推断，并选择区分候选的信息增益问题。
-5. **跨尺度对应**：两个不同的微观分量划分映射到同一个宏观总量状态；验证器先在已知划分上校准，再用未见划分作独立留出复核，确认多对一粗粒化在完整时间轨迹上与宏观动力学交换。
+4. **局部动作支撑**：两个当前观察相同的状态只有一个支持 `consume`；残差商将“有后继”和 `⊥` 作为不同操作行为，并产生支撑不闭合见证。
+5. **组织机制**：同一审批结构兼容防欺诈、审计和中央控制等多个解释；系统保留不可识别性、限制弱证据意图推断，并选择区分候选的信息增益问题。
+6. **跨尺度对应**：两个不同的微观分量划分映射到同一个宏观总量状态；验证器先在已知划分上校准，再用未见划分作独立留出复核，确认多对一粗粒化在完整时间轨迹上与宏观动力学交换。
 
 ## 扩展接口
 
@@ -213,7 +233,8 @@ context = Context(
 - 核心给出搜索、验证和闭环协议，不声称解决任意开放世界的模型发现；候选空间、领域先验和实验接口仍需外部提供。
 - 参考模型是确定性有限状态系统。连续、随机或高维系统需要实现相同协议，并提供相应误差界和统计证书。
 - 残差商只相对于声明的读出、观察等价关系、动作集合、上下文和可达状态域成立；它产生操作语义类，不会自动赋予自然语言含义、功能或意图。
-- 当前残差分析把转移异常视为未知边并使完整性证明失败，而不是静默解释成合法的 `⊥` 结果。带支撑集的显式偏组合语义仍需后续领域接口。
+- 只有显式的 `UndefinedTransition`（通常由 `applicable=False` 产生）才是合法 `⊥`；转移函数的其他异常仍是未知边并使完整性证明失败，避免把实现错误伪装成领域偏函数。
+- 反例引导的 `context_basis` 足以重建当前枚举域中的残差分区，但当前贪心顺序不保证它是所有可能测试集合中基数最小或描述长度最短的一组。
 - 权威场景清单全部覆盖时，即使惰性迭代器恰好触及模拟上限也可证明任务域完整；没有调用方场景清单的第三方模型，即使返回已耗尽的普通 `tuple` 或 `list` 也不能自行证明场景域完整。
 - 对应证书只覆盖指定的两个模型、上下文、场景域和时间范围；投影函数是调用方声明的待检验假说，不是由有限数据自动识别出的唯一映射。
 - `CorrespondenceValidationCase.independent=True` 是调用方对数据隔离和来源独立性的显式声明，不是安全边界；严格盲测仍需在外部阻止投影构造过程读取留出模型、场景和结果。
