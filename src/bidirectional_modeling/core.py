@@ -18,6 +18,10 @@ Snapshot = Mapping[str, Any]
 State = Mapping[str, Any]
 
 
+class UndefinedTransition(LookupError):
+    """A declared action has no result on the current semantic support."""
+
+
 def _freeze_context_value(value: Any) -> Any:
     """Canonicalize context data or reject values with unstable identities."""
 
@@ -617,6 +621,7 @@ class ExecutableModel(Protocol):
 
 Transition = Callable[[State, str, Context], State]
 Readout = Callable[[State, Context], Snapshot]
+Applicability = Callable[[State, str, Context], bool]
 
 
 @dataclass
@@ -632,6 +637,7 @@ class FiniteStateModel:
     failure_boundaries: Tuple[str, ...] = ()
     prior_reliability: float = 0.8
     capabilities: Tuple[str, ...] = ()
+    applicable: Optional[Applicability] = None
 
     def __post_init__(self) -> None:
         unknown = set(self.initial_states) - set(self.states)
@@ -641,10 +647,26 @@ class FiniteStateModel:
             raise ValueError("initial state names must be unique")
         if not 0.0 <= self.prior_reliability <= 1.0:
             raise ValueError("prior reliability must be in [0, 1]")
+        if self.applicable is not None and not callable(self.applicable):
+            raise TypeError("applicable must be callable")
+
+    def supports(self, state: State, action: str, context: Context) -> bool:
+        """Whether an otherwise declared action is defined on one state."""
+
+        if action != "noop" and action not in self.actions:
+            return False
+        if self.applicable is None:
+            return True
+        return bool(self.applicable(dict(state), action, context))
 
     def step(self, state: State, action: str, context: Context) -> State:
         if action != "noop" and action not in self.actions:
             raise ValueError("unsupported action %r for model %s" % (action, self.name))
+        if not self.supports(state, action, context):
+            raise UndefinedTransition(
+                "action %r is undefined on the current support for model %s"
+                % (action, self.name)
+            )
         return self.transition(dict(state), action, context)
 
     def observe(self, state: State, context: Context) -> Snapshot:

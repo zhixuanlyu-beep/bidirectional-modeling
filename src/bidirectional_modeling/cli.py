@@ -135,6 +135,20 @@ def build_demo_report() -> Dict[str, Any]:
             "congruent": residual.congruent,
             "explored_states": residual.explored_states,
             "class_count": residual.quotient.class_count,
+            "context_basis_reproduces_partition": (
+                residual.context_basis_reproduces_partition
+            ),
+            "context_basis": [list(item) for item in residual.context_basis],
+            "context_refinements": [
+                {
+                    "iteration": item.iteration,
+                    "left_state": item.left_state,
+                    "right_state": item.right_state,
+                    "context": list(item.context),
+                    "class_count": item.class_count,
+                }
+                for item in residual.context_refinements
+            ],
             "filtration": [
                 {
                     "context_depth": level.context_depth,
@@ -269,6 +283,14 @@ def _print_human(report: Dict[str, Any]) -> None:
             "  深度 %d：%d 类"
             % (level["context_depth"], level["class_count"])
         )
+    print(
+        "  反例引导上下文基：%s"
+        % (
+            residual["context_basis"]
+            if residual["context_basis_reproduces_partition"]
+            else "未完整"
+        )
+    )
 
     closure = report["closure"]
     print("\n闭合性检查：%s" % ("通过" if closure["closed"] else "失败"))

@@ -45,6 +45,7 @@ from .core import (
     ScenarioKey,
     SatisfactionCertificate,
     Trace,
+    UndefinedTransition,
 )
 from .engine import (
     BidirectionalModelingEngine,
@@ -75,6 +76,7 @@ from .refinement import ClosureAnalyzer, ConceptLibrary
 from .residual import (
     DistinguishingContext,
     ResidualClass,
+    ResidualContextRefinement,
     ResidualFiltrationLevel,
     ResidualQuotient,
     ResidualQuotientAnalyzer,
@@ -138,6 +140,7 @@ __all__ = [
     "RequirementCategory",
     "ResourceBudget",
     "ResidualClass",
+    "ResidualContextRefinement",
     "ResidualFiltrationLevel",
     "ResidualQuotient",
     "ResidualQuotientAnalyzer",
@@ -152,10 +155,11 @@ __all__ = [
     "SatisfactionEvaluator",
     "Trace",
     "TraceBatch",
+    "UndefinedTransition",
     "InterpretationScoringPolicy",
     "behaviorally_equivalent",
     "context_fingerprint",
     "pareto_partition",
 ]
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

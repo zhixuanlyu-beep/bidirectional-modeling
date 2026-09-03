@@ -75,5 +75,5 @@ jobs:
       - name: Install built wheel and smoke-test it
         run: |
           python -m pip install dist/*.whl
-          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.7.0'"
+          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.8.0'"
           bidirectional-modeling demo --json > /dev/null

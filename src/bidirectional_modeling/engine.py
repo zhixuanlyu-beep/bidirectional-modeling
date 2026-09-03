@@ -207,6 +207,7 @@ class BidirectionalModelingEngine:
         max_reachability_depth: Optional[int] = None,
         max_states: int = 1_000,
         max_context_depth: Optional[int] = None,
+        max_context_tests: int = 256,
     ) -> ResidualQuotientReport:
         """Discover a minimal context-relative quotient on a finite domain."""
 
@@ -217,6 +218,7 @@ class BidirectionalModelingEngine:
             max_reachability_depth,
             max_states,
             max_context_depth,
+            max_context_tests,
         )
 
     def verify_correspondence(

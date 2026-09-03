@@ -6,11 +6,19 @@ from dataclasses import replace
 from itertools import combinations
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 
-from .core import ClosureReport, Concept, Context, Counterexample, FiniteStateModel, MacroSpec
+from .core import (
+    ClosureReport,
+    Concept,
+    Context,
+    Counterexample,
+    FiniteStateModel,
+    MacroSpec,
+    UndefinedTransition,
+)
 
 
 class ClosureAnalyzer:
-    """Finds x1 ~ x2 but T(x1) !~ T(x2) witnesses."""
+    """Find transition or action-support differences inside a macro class."""
 
     def analyze(
         self,
@@ -43,7 +51,10 @@ class ClosureAnalyzer:
             next_frontier = []
             for source_name, state in frontier:
                 for action in actions:
-                    next_state = dict(model.step(state, action, context))
+                    try:
+                        next_state = dict(model.step(state, action, context))
+                    except UndefinedTransition:
+                        continue
                     key = state_key(next_state)
                     if key in seen:
                         continue
@@ -76,11 +87,29 @@ class ClosureAnalyzer:
                 continue
             for action in actions:
                 checked += 1
-                left_next = model.step(left, action, context)
-                right_next = model.step(right, action, context)
-                left_next_observed = model.observe(left_next, context)
-                right_next_observed = model.observe(right_next, context)
-                if spec.equivalence.equivalent(left_next_observed, right_next_observed):
+                try:
+                    left_next = model.step(left, action, context)
+                    left_next_observed = model.observe(left_next, context)
+                    left_defined = True
+                except UndefinedTransition:
+                    left_next_observed = None
+                    left_defined = False
+                try:
+                    right_next = model.step(right, action, context)
+                    right_next_observed = model.observe(right_next, context)
+                    right_defined = True
+                except UndefinedTransition:
+                    right_next_observed = None
+                    right_defined = False
+                if not left_defined and not right_defined:
+                    continue
+                support_mismatch = left_defined != right_defined
+                if (
+                    not support_mismatch
+                    and spec.equivalence.equivalent(
+                        left_next_observed, right_next_observed
+                    )
+                ):
                     continue
                 differing = tuple(
                     sorted(
@@ -96,9 +125,25 @@ class ClosureAnalyzer:
                         "left": dict(left),
                         "right": dict(right),
                         "action": action,
-                        "left_next": dict(left_next_observed),
-                        "right_next": dict(right_next_observed),
+                        "left_defined": left_defined,
+                        "right_defined": right_defined,
+                        "left_next": (
+                            dict(left_next_observed) if left_defined else None
+                        ),
+                        "right_next": (
+                            dict(right_next_observed) if right_defined else None
+                        ),
                         "differing": differing,
+                        "kind": (
+                            "dynamical-support-non-closure"
+                            if support_mismatch
+                            else "dynamical-non-closure"
+                        ),
+                        "summary": (
+                            "two macro-equivalent states have different action support"
+                            if support_mismatch
+                            else "two macro-equivalent states evolve into different macro classes"
+                        ),
                     }
                 )
 
@@ -115,17 +160,23 @@ class ClosureAnalyzer:
 
         counterexamples = []
         for violation in violations:
-            local_ranked = tuple(feature for feature in ranked_features if feature in violation["differing"])
+            local_ranked = tuple(
+                feature
+                for feature in ranked_features
+                if feature in violation["differing"]
+            )
             counterexamples.append(
                 Counterexample(
-                    kind="dynamical-non-closure",
-                    summary="two macro-equivalent states evolve into different macro classes",
+                    kind=violation["kind"],
+                    summary=violation["summary"],
                     witness={
                         "left_state": violation["left_name"],
                         "right_state": violation["right_name"],
                         "left_micro": violation["left"],
                         "right_micro": violation["right"],
                         "action": violation["action"],
+                        "left_defined": violation["left_defined"],
+                        "right_defined": violation["right_defined"],
                         "left_next_macro": violation["left_next"],
                         "right_next_macro": violation["right_next"],
                     },

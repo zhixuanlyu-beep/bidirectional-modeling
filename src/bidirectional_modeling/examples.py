@@ -223,6 +223,38 @@ def residual_quotient_scenario() -> Tuple[
     return equivalence, context, model
 
 
+def partial_residual_scenario() -> Tuple[
+    EquivalenceSpec, Context, FiniteStateModel
+]:
+    """Equal observations separated only by a locally supported action."""
+
+    equivalence = EquivalenceSpec(("signal",))
+    context = Context(scale="partial-operation")
+
+    def transition(state, action, _context):
+        if action == "consume":
+            return {"enabled": False, "signal": 0}
+        return dict(state)
+
+    model = FiniteStateModel(
+        "partial-consumer",
+        {
+            "enabled": {"enabled": True, "signal": 0},
+            "disabled": {"enabled": False, "signal": 0},
+        },
+        ("enabled", "disabled"),
+        ("consume",),
+        transition,
+        lambda state, _context: {"signal": state["signal"]},
+        ModelMetrics(cost=1.0, complexity=1.0, risk=0.0),
+        capabilities=("partial action support",),
+        applicable=lambda state, action, _context: (
+            action != "consume" or state["enabled"]
+        ),
+    )
+    return equivalence, context, model
+
+
 def organization_interpretation_scenario():
     """One approval structure is compatible with several macro purposes."""
 
@@ -454,6 +486,7 @@ def all_scenarios() -> Dict[str, object]:
         "software": software_scenario(),
         "science": science_closure_scenario(),
         "organization": organization_interpretation_scenario(),
+        "partial_residual": partial_residual_scenario(),
         "residual_quotient": residual_quotient_scenario(),
         "correspondence": scale_correspondence_scenario(),
         "correspondence_suite": scale_correspondence_suite(),
