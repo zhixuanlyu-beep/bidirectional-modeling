@@ -14,6 +14,16 @@ from .correspondence import (
     ScalePath,
     context_fingerprint,
 )
+from .composition import (
+    CompositionCaseResult,
+    CompositionExperiment,
+    CompositionRule,
+    CompositionRuleEvaluation,
+    CompositionRuleSelector,
+    CompositionSelectionReport,
+    CompositionTest,
+    CompositionTestResult,
+)
 from .core import (
     Aggregation,
     CandidateEvaluation,
@@ -96,6 +106,14 @@ __all__ = [
     "ClosureReport",
     "Concept",
     "ConceptLibrary",
+    "CompositionCaseResult",
+    "CompositionExperiment",
+    "CompositionRule",
+    "CompositionRuleEvaluation",
+    "CompositionRuleSelector",
+    "CompositionSelectionReport",
+    "CompositionTest",
+    "CompositionTestResult",
     "ConfidenceBreakdown",
     "Context",
     "Correspondence",
@@ -162,4 +180,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"

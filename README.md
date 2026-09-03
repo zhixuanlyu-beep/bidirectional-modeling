@@ -12,6 +12,8 @@
 
 `0.8.0` 把局部支撑集提升为一等语义：`FiniteStateModel.applicable` 显式声明动作何时无定义，`UndefinedTransition` 表示合法的 `⊥`，普通运行异常仍作为未知边阻断证明。残差报告还用反例循环提取有限区分上下文基，每次只加入一个能严格细化当前测试分区的最短上下文。
 
+`0.9.0` 加入候选微观组合规则选择：多个 `CompositionRule` 必须接受同一组、由实验方持有的操作观察；错误观察结果、错误支撑和运行异常都会生成阻断反例。通过测试的规则还必须得到完整、稳定、同余且可由有限上下文基重建的残差商，之后才按“规则 + 语义状态 + 偏转移表 + 区分上下文 + 异常”的显式描述长度排序。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │
@@ -25,6 +27,7 @@ Concept refinement <── Counterexample / closure analysis
 
 - 所有目的都相对于上下文 `Context Γ`：环境、尺度、历史证据、观察者、干预和假设。
 - 无标签发现仍然相对于一个操作协议：模型动作给出允许的上下文，模型读出和 `EquivalenceSpec` 给出最终可观察判据；框架不会把缺少观察结构误称为“无先验语义”。
+- 候选组合规则不能自行选择验收判据：`CompositionExperiment` 固定初态、动作、读出、等价关系与操作测试，所有规则在同一域中竞争；规则描述长度必须来自同一编码约定。
 - `MacroSpec G` 明确可观测量、目标、等价关系、不变量、约束、误差与时间范围。
 - 向下推断搜索满足 `M |=Γ G` 的模型，返回成本、复杂度和风险上的帕累托候选，而非虚构唯一实现。
 - 向上推断严格区分效果、功能和意图。仅凭结构通常只能支持效果；功能依赖环境，意图还需要足够强的主体、设计或选择证据。
@@ -42,6 +45,7 @@ Concept refinement <── Counterexample / closure analysis
 
 - `FiniteStateModel`：有限状态、转移、行动、读出和透明资源指标。
 - `ResidualQuotientAnalyzer`：枚举有限可达状态，构造按上下文深度单调细化的残差分区；合并所有未来观察行为及动作支撑相同的微观状态，并返回最短区分动作序列、反例引导上下文基和可验证的偏商转移。
+- `CompositionRuleSelector`：先用共享操作测试排除观察、支撑或执行不一致的微观组合规则，再要求残差最小性证书，最后按透明的两段描述长度代理量排序；多实验用例必须全部通过。
 - `SatisfactionEvaluator`：惰性消费模拟轨迹，对照调用方或框架持有的场景清单验证身份、去重、轨迹长度和模型归属，不信任候选自报的场景数；同一已认证轨迹批次可被多个规格安全复用。
 - `Realizer`：接受设计库或参数化候选生成器，执行验证和红队探测，保留主证书与探测证书，并输出帕累托前沿、被支配候选和被拒候选。
 - `Interpreter`：生成或接收目的假设，按时间范围缓存轨迹、共享模拟预算，用解释力、简洁性、鲁棒性和上下文证据排序，并提出信息增益最高的区分实验。
@@ -139,6 +143,30 @@ except UndefinedTransition:
     pass  # 已认证的 ⊥，不是程序崩溃
 ```
 
+用无自然语言标签的操作结果筛选候选微观组合规则：
+
+```python
+from bidirectional_modeling.examples import composition_rule_scenario
+
+experiments, rules = composition_rule_scenario()
+selection = engine.select_composition_rules(rules, experiments)
+
+print(selection.selected_rule_names)  # ('parity',)
+for candidate in selection.ranked:
+    case = candidate.cases[0]
+    print(
+        candidate.rule.name,
+        candidate.total_description_length,
+        case.class_count,
+    )
+for rejected in selection.rejected:
+    print(rejected.rule.name, [item.kind for item in rejected.counterexamples])
+```
+
+示例中的常量规则与错误偏支撑规则被操作反例直接排除；一个只在更深上下文才失败的过拟合规则虽然通过稀疏测试，但诱导出更多残差状态、更大的偏转移表和更长的区分上下文基，因此输给两状态的奇偶规则。向 `experiments` 加入更大尺度或留出枚举域后，候选必须逐域取得完整证书。
+
+这里以 `transition(state, action, context)` 表示逐个叠加微观原子的柯里化组合 \(x \circ a\)；`action` 可以直接编码待加入的原子、图块或端口粘合操作，因此不要求一个宏观语义对应一层固定网络。
+
 自动生成保守效果假设：
 
 ```python
@@ -192,14 +220,15 @@ for result in suite.cases:
 
 开放式结构搜索可实现 `CandidateGenerator` 或使用 `ParametricCandidateGenerator`；已有设计库可直接传入序列或使用 `RegistryGenerator`。领域目的解释可实现 `HypothesisGenerator`，也可使用 `CatalogHypothesisGenerator` 提供明确候选。
 
-## 六个内置验收场景
+## 七个内置验收场景
 
 1. **软件行为**：多个可靠工作器形成帕累托候选；丢数据的“指标钻空子”方案被不变量拒绝；只在短期可靠的方案被延长时间探测反驳。
 2. **科学动力学**：位置相同但速度不同的状态未来分化；系统给出非闭合见证，人工批准把速度提升为宏观状态。由于该示例状态空间无界，有限搜索在细化后只报告“未发现反例但证明不完整”，不会宣称全局闭合。
 3. **残差语义商**：三个当前观察相同的不透明初态经 `probe` 暴露两种未来结果；框架自动拆分未来行为不同的状态，同时合并只有无关微观副本编号不同的状态。
 4. **局部动作支撑**：两个当前观察相同的状态只有一个支持 `consume`；残差商将“有后继”和 `⊥` 作为不同操作行为，并产生支撑不闭合见证。
-5. **组织机制**：同一审批结构兼容防欺诈、审计和中央控制等多个解释；系统保留不可识别性、限制弱证据意图推断，并选择区分候选的信息增益问题。
-6. **跨尺度对应**：两个不同的微观分量划分映射到同一个宏观总量状态；验证器先在已知划分上校准，再用未见划分作独立留出复核，确认多对一粗粒化在完整时间轨迹上与宏观动力学交换。
+5. **组合规则选择**：常量规则、错误支撑规则和深层过拟合规则与正确奇偶组合规则竞争；前两者由反例排除，后者因残差商和上下文基更复杂而在描述长度上落败。
+6. **组织机制**：同一审批结构兼容防欺诈、审计和中央控制等多个解释；系统保留不可识别性、限制弱证据意图推断，并选择区分候选的信息增益问题。
+7. **跨尺度对应**：两个不同的微观分量划分映射到同一个宏观总量状态；验证器先在已知划分上校准，再用未见划分作独立留出复核，确认多对一粗粒化在完整时间轨迹上与宏观动力学交换。
 
 ## 扩展接口
 
@@ -207,6 +236,7 @@ for result in suite.cases:
 
 - 可执行模型的 `simulate`、资源指标和可观测读出；第三方模型还需要调用方提供 `Context.scenario_manifest`，可选的 `scenario_count` 仅提供诊断信息；
 - `CandidateGenerator`，把领域设计空间转换成模型候选；
+- `CompositionRule` 与一个或多个 `CompositionExperiment`，比较共享枚举域中的候选微观组合方式；
 - `HypothesisGenerator`，产生有上下文依据的效果、功能或意图候选；
 - `RedTeamProbe`，表达领域特有的安全、长期性或反事实检查；
 - 自定义 `Requirement`，验证基础字段比较以外的规则。
@@ -235,6 +265,7 @@ context = Context(
 - 残差商只相对于声明的读出、观察等价关系、动作集合、上下文和可达状态域成立；它产生操作语义类，不会自动赋予自然语言含义、功能或意图。
 - 只有显式的 `UndefinedTransition`（通常由 `applicable=False` 产生）才是合法 `⊥`；转移函数的其他异常仍是未知边并使完整性证明失败，避免把实现错误伪装成领域偏函数。
 - 反例引导的 `context_basis` 足以重建当前枚举域中的残差分区，但当前贪心顺序不保证它是所有可能测试集合中基数最小或描述长度最短的一组。
+- 组合规则选择只排除与声明实验冲突或无法取得残差证书的规则；在所有给定上下文上观察等价的规则不可辨识。`unique_selection` 只表示固定协议下存在唯一最短候选，不等于证明真实机制唯一。`description_length` 是调用方在固定编码器下提供的长度，不是框架从 Python 函数中推断的 Kolmogorov 复杂度。
 - 权威场景清单全部覆盖时，即使惰性迭代器恰好触及模拟上限也可证明任务域完整；没有调用方场景清单的第三方模型，即使返回已耗尽的普通 `tuple` 或 `list` 也不能自行证明场景域完整。
 - 对应证书只覆盖指定的两个模型、上下文、场景域和时间范围；投影函数是调用方声明的待检验假说，不是由有限数据自动识别出的唯一映射。
 - `CorrespondenceValidationCase.independent=True` 是调用方对数据隔离和来源独立性的显式声明，不是安全边界；严格盲测仍需在外部阻止投影构造过程读取留出模型、场景和结果。

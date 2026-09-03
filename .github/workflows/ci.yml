@@ -66,6 +66,7 @@ jobs:
               "bidirectional_modeling/correspondence.py",
               "bidirectional_modeling/core.py",
               "bidirectional_modeling/cli.py",
+              "bidirectional_modeling/composition.py",
               "bidirectional_modeling/residual.py",
           }
           missing = required - names
@@ -75,5 +76,5 @@ jobs:
       - name: Install built wheel and smoke-test it
         run: |
           python -m pip install dist/*.whl
-          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.8.0'"
+          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.9.0'"
           bidirectional-modeling demo --json > /dev/null

@@ -8,6 +8,7 @@ from typing import Any, Dict
 
 from .engine import BidirectionalModelingEngine
 from .examples import (
+    composition_rule_scenario,
     organization_interpretation_scenario,
     residual_quotient_scenario,
     scale_correspondence_suite,
@@ -34,6 +35,12 @@ def build_demo_report() -> Dict[str, Any]:
         residual_model,
         residual_equivalence,
         residual_context,
+    )
+
+    composition_experiments, composition_rules = composition_rule_scenario()
+    composition = engine.select_composition_rules(
+        composition_rules,
+        composition_experiments,
     )
 
     science_spec, science_context, science_model = science_closure_scenario()
@@ -171,6 +178,55 @@ def build_demo_report() -> Dict[str, Any]:
             ],
             "boundaries": list(residual.boundaries),
         },
+        "composition_rules": {
+            "unique_selection": composition.unique_selection,
+            "selected": list(composition.selected_rule_names),
+            "ranked": [
+                {
+                    "rule": item.rule.name,
+                    "description_length": item.total_description_length,
+                    "rule_description_length": item.rule.description_length,
+                    "cases": [
+                        {
+                            "experiment": case.experiment_name,
+                            "class_count": case.class_count,
+                            "residual_minimal": (
+                                case.residual_report.minimal
+                                if case.residual_report is not None
+                                else False
+                            ),
+                            "context_basis": (
+                                [
+                                    list(word)
+                                    for word in case.residual_report.context_basis
+                                ]
+                                if case.residual_report is not None
+                                else []
+                            ),
+                            "description_components": {
+                                "states": case.state_description_length,
+                                "transitions": case.transition_description_length,
+                                "contexts": case.context_description_length,
+                                "exceptions": case.exception_description_length,
+                            },
+                        }
+                        for case in item.cases
+                    ],
+                }
+                for item in composition.ranked
+            ],
+            "rejected": [
+                {
+                    "rule": item.rule.name,
+                    "counterexamples": [
+                        counterexample.kind
+                        for counterexample in item.counterexamples
+                    ],
+                }
+                for item in composition.rejected
+            ],
+            "boundaries": list(composition.boundaries),
+        },
         "closure": {
             "model": science_model.name,
             "closed": closure.closed,
@@ -291,6 +347,26 @@ def _print_human(report: Dict[str, Any]) -> None:
             else "未完整"
         )
     )
+
+    composition = report["composition_rules"]
+    print(
+        "\n候选微观组合规则：%s"
+        % (
+            ", ".join(composition["selected"])
+            if composition["selected"]
+            else "无可认证候选"
+        )
+    )
+    for candidate in composition["ranked"]:
+        print(
+            "  ✓ %s  description_length=%.1f"
+            % (candidate["rule"], candidate["description_length"])
+        )
+    for rejected in composition["rejected"]:
+        print(
+            "  ✗ %s  %s"
+            % (rejected["rule"], ", ".join(rejected["counterexamples"]))
+        )
 
     closure = report["closure"]
     print("\n闭合性检查：%s" % ("通过" if closure["closed"] else "失败"))
