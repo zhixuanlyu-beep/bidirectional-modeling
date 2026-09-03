@@ -18,6 +18,7 @@ from .core import (
     ClosureReport,
     Concept,
     Context,
+    EquivalenceSpec,
     Evidence,
     ExecutableModel,
     Experiment,
@@ -31,6 +32,7 @@ from .core import (
 from .interpretation import HypothesisSource, Interpreter
 from .realization import CandidateSource, Realizer
 from .refinement import ClosureAnalyzer, ConceptLibrary
+from .residual import ResidualQuotientAnalyzer, ResidualQuotientReport
 
 
 @dataclass(frozen=True)
@@ -158,6 +160,7 @@ class BidirectionalModelingEngine:
         self.realizer = realizer or Realizer()
         self.interpreter = interpreter or Interpreter(self.realizer.evaluator)
         self.closure = ClosureAnalyzer()
+        self.residuals = ResidualQuotientAnalyzer()
         self.concepts = concept_library or ConceptLibrary()
         self.correspondence_validator = correspondence_validator or CorrespondenceValidator(
             self.realizer.evaluator
@@ -195,6 +198,26 @@ class BidirectionalModelingEngine:
         max_states: int = 1_000,
     ):
         return self.closure.analyze(model, spec, context, max_depth, max_states)
+
+    def discover_residual_quotient(
+        self,
+        model: FiniteStateModel,
+        equivalence: EquivalenceSpec,
+        context: Context,
+        max_reachability_depth: Optional[int] = None,
+        max_states: int = 1_000,
+        max_context_depth: Optional[int] = None,
+    ) -> ResidualQuotientReport:
+        """Discover a minimal context-relative quotient on a finite domain."""
+
+        return self.residuals.analyze(
+            model,
+            equivalence,
+            context,
+            max_reachability_depth,
+            max_states,
+            max_context_depth,
+        )
 
     def verify_correspondence(
         self,
