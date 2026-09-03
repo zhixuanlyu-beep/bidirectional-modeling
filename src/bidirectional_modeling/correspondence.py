@@ -22,6 +22,7 @@ from .core import (
     Trace,
 )
 from .evaluation import SatisfactionEvaluator, TraceBatch
+from .structural import freeze_value
 
 
 SnapshotProjection = Callable[[Snapshot, Context], Mapping[str, Any]]
@@ -35,7 +36,11 @@ def _identity_scenario(key: ScenarioKey) -> ScenarioKey:
 def context_fingerprint(context: Context) -> str:
     """Stable digest for the declared context and scenario domain."""
 
-    payload = repr(context.semantic_signature()).encode("utf-8")
+    signature = freeze_value(
+        context.semantic_signature(),
+        purpose="context fingerprint deterministic structural identity",
+    )
+    payload = repr(signature).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
