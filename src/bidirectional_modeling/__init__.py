@@ -72,6 +72,16 @@ from .realization import (
     pareto_partition,
 )
 from .refinement import ClosureAnalyzer, ConceptLibrary
+from .residual import (
+    DistinguishingContext,
+    ResidualClass,
+    ResidualFiltrationLevel,
+    ResidualQuotient,
+    ResidualQuotientAnalyzer,
+    ResidualQuotientReport,
+    ResidualState,
+    ResidualTransition,
+)
 
 __all__ = [
     "Aggregation",
@@ -97,6 +107,7 @@ __all__ = [
     "Counterexample",
     "CustomRequirement",
     "DiscriminatingQuery",
+    "DistinguishingContext",
     "EquivalenceSpec",
     "Evidence",
     "Experiment",
@@ -126,6 +137,13 @@ __all__ = [
     "RefinementStep",
     "RequirementCategory",
     "ResourceBudget",
+    "ResidualClass",
+    "ResidualFiltrationLevel",
+    "ResidualQuotient",
+    "ResidualQuotientAnalyzer",
+    "ResidualQuotientReport",
+    "ResidualState",
+    "ResidualTransition",
     "Scale",
     "ScaleGraph",
     "ScalePath",
@@ -140,4 +158,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"

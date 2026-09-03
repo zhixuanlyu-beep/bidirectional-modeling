@@ -192,6 +192,37 @@ def science_closure_scenario() -> Tuple[MacroSpec, Context, FiniteStateModel]:
     return spec, context, model
 
 
+def residual_quotient_scenario() -> Tuple[
+    EquivalenceSpec, Context, FiniteStateModel
+]:
+    """Opaque microstates whose future probe behavior induces four classes."""
+
+    equivalence = EquivalenceSpec(("signal",))
+    context = Context(scale="opaque-probe")
+
+    def transition(state, action, _context):
+        if action != "probe" or state["mode"] == "terminal":
+            return dict(state)
+        signal = -1 if state["mode"] == "left" else 1
+        return {"mode": "terminal", "copy": 0, "signal": signal}
+
+    model = FiniteStateModel(
+        "opaque-probe-system",
+        {
+            "left-a": {"mode": "left", "copy": 0, "signal": 0},
+            "left-b": {"mode": "left", "copy": 1, "signal": 0},
+            "right": {"mode": "right", "copy": 0, "signal": 0},
+        },
+        ("left-a", "left-b", "right"),
+        ("probe",),
+        transition,
+        lambda state, _context: {"signal": state["signal"]},
+        ModelMetrics(cost=1.0, complexity=1.0, risk=0.0),
+        capabilities=("behavioral quotient discovery",),
+    )
+    return equivalence, context, model
+
+
 def organization_interpretation_scenario():
     """One approval structure is compatible with several macro purposes."""
 
@@ -423,6 +454,7 @@ def all_scenarios() -> Dict[str, object]:
         "software": software_scenario(),
         "science": science_closure_scenario(),
         "organization": organization_interpretation_scenario(),
+        "residual_quotient": residual_quotient_scenario(),
         "correspondence": scale_correspondence_scenario(),
         "correspondence_suite": scale_correspondence_suite(),
     }

@@ -9,6 +9,7 @@ from typing import Any, Dict
 from .engine import BidirectionalModelingEngine
 from .examples import (
     organization_interpretation_scenario,
+    residual_quotient_scenario,
     scale_correspondence_suite,
     science_closure_scenario,
     software_scenario,
@@ -25,6 +26,15 @@ def build_demo_report() -> Dict[str, Any]:
 
     software_spec, software_context, software_models = software_scenario()
     realized = engine.realize(software_spec, software_context, software_models)
+
+    residual_equivalence, residual_context, residual_model = (
+        residual_quotient_scenario()
+    )
+    residual = engine.discover_residual_quotient(
+        residual_model,
+        residual_equivalence,
+        residual_context,
+    )
 
     science_spec, science_context, science_model = science_closure_scenario()
     closure = engine.check_closure(science_model, science_spec, science_context)
@@ -116,6 +126,36 @@ def build_demo_report() -> Dict[str, Any]:
             "automatically_observed_effects": [
                 item.hypothesis.name for item in observed_effects.candidates
             ],
+        },
+        "residual_quotient": {
+            "model": residual.model_name,
+            "minimal": residual.minimal,
+            "complete": residual.complete,
+            "stable": residual.stable,
+            "congruent": residual.congruent,
+            "explored_states": residual.explored_states,
+            "class_count": residual.quotient.class_count,
+            "filtration": [
+                {
+                    "context_depth": level.context_depth,
+                    "class_count": level.class_count,
+                    "new_distinguishing_contexts": [
+                        list(context)
+                        for context in level.new_distinguishing_contexts
+                    ],
+                }
+                for level in residual.filtration
+            ],
+            "distinguishing_contexts": [
+                {
+                    "left_state": item.left_state,
+                    "right_state": item.right_state,
+                    "actions": list(item.actions),
+                    "depth": item.depth,
+                }
+                for item in residual.distinguishing_contexts
+            ],
+            "boundaries": list(residual.boundaries),
         },
         "closure": {
             "model": science_model.name,
@@ -214,6 +254,21 @@ def _print_human(report: Dict[str, Any]) -> None:
     query = interpreted["discriminating_query"]
     if query:
         print("  ? 最佳区分问题：%s" % query["question"])
+
+    residual = report["residual_quotient"]
+    print(
+        "\n残差语义商：%s，%d 个微观状态 → %d 个行为类"
+        % (
+            "已证明最小" if residual["minimal"] else "仅有界结果",
+            residual["explored_states"],
+            residual["class_count"],
+        )
+    )
+    for level in residual["filtration"]:
+        print(
+            "  深度 %d：%d 类"
+            % (level["context_depth"], level["class_count"])
+        )
 
     closure = report["closure"]
     print("\n闭合性检查：%s" % ("通过" if closure["closed"] else "失败"))
