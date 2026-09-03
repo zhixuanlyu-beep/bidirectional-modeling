@@ -15,6 +15,7 @@ from .core import (
     MacroSpec,
     UndefinedTransition,
 )
+from .structural import freeze_value, isolated_mapping
 
 
 class ClosureAnalyzer:
@@ -35,27 +36,97 @@ class ClosureAnalyzer:
             raise ValueError("max_depth must be non-negative")
 
         def state_key(state: Mapping[str, Any]) -> Tuple[Any, ...]:
-            return tuple(sorted((key, repr(value)) for key, value in state.items()))
+            return freeze_value(
+                dict(state),
+                purpose="closure state deterministic structural identity",
+            )
 
-        initial = [
-            (name, dict(model.states[name])) for name in model.initial_states
-        ]
-        complete = len(initial) <= max_states
-        reachable = initial[:max_states]
-        seen = {state_key(state) for _, state in reachable}
+        analysis_errors = []
+        error_keys = set()
+
+        def record_error(phase: str, error: Exception, **witness: Any) -> None:
+            key = (
+                phase,
+                type(error).__module__,
+                type(error).__qualname__,
+                str(error),
+                tuple(sorted((name, repr(value)) for name, value in witness.items())),
+            )
+            if key in error_keys:
+                return
+            error_keys.add(key)
+            analysis_errors.append(
+                Counterexample(
+                    kind="closure-analysis-error",
+                    summary="closure analysis could not certify %s" % phase,
+                    witness={
+                        "model": model.name,
+                        "phase": phase,
+                        "error": "%s: %s" % (type(error).__name__, error),
+                        **witness,
+                    },
+                    violated=("complete dynamical closure analysis",),
+                    suggested_refinements=(
+                        "use deterministic structural state values and pure model callbacks",
+                    ),
+                )
+            )
+
+        complete = True
+        initial = []
+        seen = set()
+        for name in model.initial_states:
+            if len(initial) >= max_states:
+                complete = False
+                break
+            try:
+                state = isolated_mapping(
+                    model.states[name], purpose="closure initial state"
+                )
+                key = state_key(state)
+            except Exception as error:
+                complete = False
+                record_error("initial-state identity", error, initial_state=name)
+                continue
+            initial.append((name, state))
+            seen.add(key)
+
+        reachable = list(initial)
         frontier = list(reachable)
-        actions = ("noop",) + tuple(
-            action for action in model.actions if action != "noop"
+        actions = tuple(
+            dict.fromkeys(
+                ("noop",)
+                + tuple(action for action in model.actions if action != "noop")
+            )
         )
         for depth in range(1, depth_limit + 1):
             next_frontier = []
             for source_name, state in frontier:
                 for action in actions:
                     try:
-                        next_state = dict(model.step(state, action, context))
+                        next_state = model.audited_step(state, action, context)
                     except UndefinedTransition:
                         continue
-                    key = state_key(next_state)
+                    except Exception as error:
+                        complete = False
+                        record_error(
+                            "reachable transition",
+                            error,
+                            source_state=source_name,
+                            action=action,
+                        )
+                        continue
+                    try:
+                        key = state_key(next_state)
+                    except Exception as error:
+                        complete = False
+                        record_error(
+                            "successor identity",
+                            error,
+                            source_state=source_name,
+                            action=action,
+                        )
+                        continue
                     if key in seen:
                         continue
                     if len(reachable) >= max_states:
@@ -79,28 +150,71 @@ class ClosureAnalyzer:
 
         violations = []
         checked = 0
-        state_items = tuple(reachable)
-        for (left_name, left), (right_name, right) in combinations(state_items, 2):
-            left_observed = model.observe(left, context)
-            right_observed = model.observe(right, context)
+        state_items = []
+        for state_name, state in reachable:
+            try:
+                observation = model.audited_observe(state, context)
+                # Validate the declared equivalence interface before pairwise use.
+                spec.equivalence.signature(observation)
+            except Exception as error:
+                complete = False
+                record_error(
+                    "reachable-state readout",
+                    error,
+                    state=state_name,
+                )
+                continue
+            state_items.append((state_name, state, observation))
+
+        for (
+            left_name,
+            left,
+            left_observed,
+        ), (
+            right_name,
+            right,
+            right_observed,
+        ) in combinations(tuple(state_items), 2):
             if not spec.equivalence.equivalent(left_observed, right_observed):
                 continue
             for action in actions:
                 checked += 1
                 try:
-                    left_next = model.step(left, action, context)
-                    left_next_observed = model.observe(left_next, context)
+                    left_next = model.audited_step(left, action, context)
+                    left_next_observed = model.audited_observe(
+                        left_next, context
+                    )
                     left_defined = True
                 except UndefinedTransition:
                     left_next_observed = None
                     left_defined = False
+                except Exception as error:
+                    complete = False
+                    record_error(
+                        "paired transition",
+                        error,
+                        state=left_name,
+                        action=action,
+                    )
+                    continue
                 try:
-                    right_next = model.step(right, action, context)
-                    right_next_observed = model.observe(right_next, context)
+                    right_next = model.audited_step(right, action, context)
+                    right_next_observed = model.audited_observe(
+                        right_next, context
+                    )
                     right_defined = True
                 except UndefinedTransition:
                     right_next_observed = None
                     right_defined = False
+                except Exception as error:
+                    complete = False
+                    record_error(
+                        "paired transition",
+                        error,
+                        state=right_name,
+                        action=action,
+                    )
+                    continue
                 if not left_defined and not right_defined:
                     continue
                 support_mismatch = left_defined != right_defined
@@ -158,7 +272,7 @@ class ClosureAnalyzer:
             )
         )
 
-        counterexamples = []
+        counterexamples = list(analysis_errors)
         for violation in violations:
             local_ranked = tuple(
                 feature

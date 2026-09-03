@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, replace
+import math
 from typing import Iterable, Mapping, Optional, Protocol, Sequence, Tuple, Union
 
 from .core import (
@@ -24,6 +25,7 @@ from .core import (
     normalized_entropy,
 )
 from .evaluation import SatisfactionEvaluator, TraceBatch
+from .structural import freeze_value
 
 
 class HypothesisGenerator(Protocol):
@@ -81,14 +83,36 @@ class ObservedEffectGenerator:
         for field_name in sorted(common_fields):
             initial_values = [trace.snapshots[0][field_name] for trace in traces]
             final_values = [trace.snapshots[-1][field_name] for trace in traces]
-            if len(set(map(repr, final_values))) != 1:
+            final_identities = tuple(
+                freeze_value(
+                    value,
+                    purpose="observed effect deterministic structural identity",
+                )
+                for value in final_values
+            )
+            if len(set(final_identities)) != 1:
                 continue
             final_value = final_values[0]
+            final_identity = final_identities[0]
             remains_constant = all(
-                all(snapshot[field_name] == final_value for snapshot in trace.snapshots)
+                all(
+                    freeze_value(
+                        snapshot[field_name],
+                        purpose="observed effect deterministic structural identity",
+                    )
+                    == final_identity
+                    for snapshot in trace.snapshots
+                )
                 for trace in traces
             )
-            if all(initial == final_value for initial in initial_values) and remains_constant:
+            if all(
+                freeze_value(
+                    initial,
+                    purpose="observed effect deterministic structural identity",
+                )
+                == final_identity
+                for initial in initial_values
+            ) and remains_constant:
                 label = "maintain %s at %r" % (field_name, final_value)
             elif all(
                 isinstance(initial, (int, float))
@@ -142,20 +166,33 @@ class InterpretationScoringPolicy:
     unsupported_intent_cap: float = 0.49
 
     def __post_init__(self) -> None:
-        weights = (
-            self.coverage_weight,
-            self.robustness_weight,
-            self.assumption_weight,
-            self.simplicity_weight,
-            self.context_weight,
+        weight_names = (
+            "coverage_weight",
+            "robustness_weight",
+            "assumption_weight",
+            "simplicity_weight",
+            "context_weight",
         )
-        if any(weight < 0 for weight in weights):
-            raise ValueError("interpretation weights must be non-negative")
+        weights = tuple(
+            float(getattr(self, name)) for name in weight_names
+        )
+        for name, value in zip(weight_names, weights):
+            object.__setattr__(self, name, value)
+        if any(not math.isfinite(weight) or weight < 0 for weight in weights):
+            raise ValueError("interpretation weights must be finite and non-negative")
         if abs(sum(weights) - 1.0) > 1e-9:
             raise ValueError("interpretation weights must sum to 1")
-        if not 0.0 <= self.minimum_direct_intent_evidence <= 1.0:
+        thresholds = (
+            float(self.minimum_direct_intent_evidence),
+            float(self.unsupported_intent_cap),
+        )
+        object.__setattr__(
+            self, "minimum_direct_intent_evidence", thresholds[0]
+        )
+        object.__setattr__(self, "unsupported_intent_cap", thresholds[1])
+        if not math.isfinite(thresholds[0]) or not 0.0 <= thresholds[0] <= 1.0:
             raise ValueError("minimum direct intent evidence must be in [0, 1]")
-        if not 0.0 <= self.unsupported_intent_cap <= 1.0:
+        if not math.isfinite(thresholds[1]) or not 0.0 <= thresholds[1] <= 1.0:
             raise ValueError("unsupported intent cap must be in [0, 1]")
 
 

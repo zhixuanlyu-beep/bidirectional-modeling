@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-import math
 from typing import Any, Deque, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from .core import (
@@ -21,9 +20,7 @@ from .core import (
     UndefinedTransition,
 )
 from .correspondence import context_fingerprint
-
-
-FrozenValue = Tuple[Any, ...]
+from .structural import FrozenValue, freeze_value, isolated_mapping
 
 
 class _Edge(Enum):
@@ -32,44 +29,9 @@ class _Edge(Enum):
 
 
 def _freeze(value: Any) -> FrozenValue:
-    """Return a deterministic, hashable identity for supported state values."""
-
-    if value is None:
-        return ("none",)
-    if isinstance(value, bool):
-        return ("bool", value)
-    if isinstance(value, int):
-        return ("int", value)
-    if isinstance(value, float):
-        if math.isnan(value):
-            return ("float", "nan")
-        return ("float", value.hex())
-    if isinstance(value, str):
-        return ("str", value)
-    if isinstance(value, bytes):
-        return ("bytes", value.hex())
-    if isinstance(value, Enum):
-        return (
-            "enum",
-            type(value).__module__,
-            type(value).__qualname__,
-            _freeze(value.value),
-        )
-    if isinstance(value, Mapping):
-        items = [(_freeze(key), _freeze(item)) for key, item in value.items()]
-        return ("mapping", tuple(sorted(items, key=repr)))
-    if isinstance(value, list):
-        return ("list", tuple(_freeze(item) for item in value))
-    if isinstance(value, tuple):
-        return ("tuple", tuple(_freeze(item) for item in value))
-    if isinstance(value, (set, frozenset)):
-        return (
-            "set",
-            tuple(sorted((_freeze(item) for item in value), key=repr)),
-        )
-    raise TypeError(
-        "residual state values must have a deterministic structural identity; "
-        "unsupported value type %s" % type(value).__qualname__
+    return freeze_value(
+        value,
+        purpose="residual state values need a deterministic structural identity",
     )
 
 
@@ -213,6 +175,8 @@ class ResidualQuotient:
         return len(self.classes)
 
     def class_for_state(self, state_index: int) -> int:
+        if state_index < 0 or state_index >= len(self.state_classes):
+            raise IndexError("residual state index out of range")
         return self.state_classes[state_index]
 
     def next_class(self, source_class: int, action: str) -> int:
@@ -316,18 +280,22 @@ class ResidualQuotientAnalyzer:
         transitions: Dict[Tuple[int, str], Any] = {}
         boundaries = []
         transition_evaluations = 0
+        state_limit_hit = False
+        reachability_limit_hit = False
 
         def add_state(
             state: Mapping[str, Any],
             source_initial_state: str,
             path: Tuple[str, ...],
         ) -> Tuple[int, bool]:
-            micro_state = dict(state)
+            micro_state = isolated_mapping(
+                state, purpose="residual microstate"
+            )
             key = _state_key(micro_state)
             known = state_indices.get(key)
             if known is not None:
                 return known, False
-            observation = dict(model.observe(micro_state, context))
+            observation = model.audited_observe(micro_state, context)
             signature = equivalence.signature(observation)
             index = len(states)
             state_indices[key] = index
@@ -346,6 +314,14 @@ class ResidualQuotientAnalyzer:
             return index, True
 
         for initial_name in model.initial_states:
+            initial_key = _state_key(model.states[initial_name])
+            if initial_key not in state_indices and len(states) >= max_states:
+                state_limit_hit = True
+                boundaries.append(
+                    "initial-state enumeration reached max_states=%d before %r"
+                    % (max_states, initial_name)
+                )
+                break
             state_index, _ = add_state(
                 model.states[initial_name], initial_name, ()
             )
@@ -371,8 +347,6 @@ class ResidualQuotientAnalyzer:
                 tuple(boundaries),
             )
 
-        state_limit_hit = False
-        reachability_limit_hit = False
         while frontier:
             state_index = frontier.popleft()
             state = states[state_index]
@@ -389,8 +363,8 @@ class ResidualQuotientAnalyzer:
             for action in actions:
                 transition_evaluations += 1
                 try:
-                    successor = dict(
-                        model.step(dict(state.micro_state), action, context)
+                    successor = model.audited_step(
+                        state.micro_state, action, context
                     )
                     key = _state_key(successor)
                     successor_index = state_indices.get(key)
@@ -425,7 +399,9 @@ class ResidualQuotientAnalyzer:
             )
 
         complete = (
-            len(transitions) == len(states) * len(actions)
+            not state_limit_hit
+            and not reachability_limit_hit
+            and len(transitions) == len(states) * len(actions)
             and all(target is not _Edge.UNKNOWN for target in transitions.values())
         )
 

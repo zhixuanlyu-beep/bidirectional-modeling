@@ -46,6 +46,7 @@ from .core import (
     MacroSpec,
     ModelMetricRequirement,
     ModelMetrics,
+    NonDeterministicModelError,
     PurposeHypothesis,
     PurposeLevel,
     ProbeOutcome,
@@ -144,6 +145,7 @@ __all__ = [
     "MicroRoundTripReport",
     "ModelMetricRequirement",
     "ModelMetrics",
+    "NonDeterministicModelError",
     "ObservedEffectGenerator",
     "ParametricCandidateGenerator",
     "PurposeHypothesis",
@@ -180,4 +182,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"

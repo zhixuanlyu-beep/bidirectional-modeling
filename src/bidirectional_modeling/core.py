@@ -13,6 +13,8 @@ from enum import Enum
 from statistics import mean
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
 
+from .structural import freeze_value, isolated_mapping
+
 
 Snapshot = Mapping[str, Any]
 State = Mapping[str, Any]
@@ -22,46 +24,14 @@ class UndefinedTransition(LookupError):
     """A declared action has no result on the current semantic support."""
 
 
+class NonDeterministicModelError(RuntimeError):
+    """The same model callback input produced different semantic results."""
+
+
 def _freeze_context_value(value: Any) -> Any:
     """Canonicalize context data or reject values with unstable identities."""
 
-    if value is None:
-        return ("none",)
-    if isinstance(value, bool):
-        return ("bool", value)
-    if isinstance(value, int):
-        return ("int", value)
-    if isinstance(value, float):
-        return ("float", value.hex())
-    if isinstance(value, str):
-        return ("str", value)
-    if isinstance(value, bytes):
-        return ("bytes", value.hex())
-    if isinstance(value, Enum):
-        return (
-            "enum",
-            type(value).__module__,
-            type(value).__qualname__,
-            _freeze_context_value(value.value),
-        )
-    if isinstance(value, Mapping):
-        items = (
-            (_freeze_context_value(key), _freeze_context_value(item))
-            for key, item in value.items()
-        )
-        return ("mapping", tuple(sorted(items, key=repr)))
-    if isinstance(value, (list, tuple)):
-        return (
-            type(value).__name__,
-            tuple(_freeze_context_value(item) for item in value),
-        )
-    if isinstance(value, (set, frozenset)):
-        items = (_freeze_context_value(item) for item in value)
-        return (type(value).__name__, tuple(sorted(items, key=repr)))
-    raise TypeError(
-        "context fingerprints require canonical primitive/container values; got %s.%s"
-        % (type(value).__module__, type(value).__qualname__)
-    )
+    return freeze_value(value, purpose="context fingerprints")
 
 
 class PurposeLevel(str, Enum):
@@ -134,10 +104,19 @@ class ResourceBudget:
     max_cost: float = math.inf
 
     def __post_init__(self) -> None:
+        if (
+            not isinstance(self.max_candidates, int)
+            or isinstance(self.max_candidates, bool)
+            or not isinstance(self.max_simulations, int)
+            or isinstance(self.max_simulations, bool)
+        ):
+            raise TypeError("candidate and simulation budget limits must be integers")
         if self.max_candidates <= 0 or self.max_simulations <= 0:
             raise ValueError("budget limits must be positive")
-        if math.isnan(float(self.max_cost)) or self.max_cost < 0:
+        max_cost = float(self.max_cost)
+        if math.isnan(max_cost) or max_cost < 0:
             raise ValueError("max_cost must be non-negative")
+        object.__setattr__(self, "max_cost", max_cost)
 
 
 @dataclass(frozen=True)
@@ -210,8 +189,12 @@ class ModelMetrics:
     risk: float
 
     def __post_init__(self) -> None:
-        if min(self.cost, self.complexity, self.risk) < 0:
-            raise ValueError("model metrics must be non-negative")
+        values = tuple(float(item) for item in (self.cost, self.complexity, self.risk))
+        if any(not math.isfinite(item) or item < 0 for item in values):
+            raise ValueError("model metrics must be finite and non-negative")
+        object.__setattr__(self, "cost", values[0])
+        object.__setattr__(self, "complexity", values[1])
+        object.__setattr__(self, "risk", values[2])
 
     def as_tuple(self) -> Tuple[float, float, float]:
         return self.cost, self.complexity, self.risk
@@ -315,8 +298,10 @@ class FieldRequirement:
     tolerance: float = 0.0
 
     def __post_init__(self) -> None:
-        if math.isnan(float(self.tolerance)) or self.tolerance < 0:
-            raise ValueError("requirement tolerance must be non-negative")
+        tolerance = float(self.tolerance)
+        if not math.isfinite(tolerance) or tolerance < 0:
+            raise ValueError("requirement tolerance must be finite and non-negative")
+        object.__setattr__(self, "tolerance", tolerance)
 
     def semantic_signature(self) -> Tuple[Any, ...]:
         return (
@@ -390,8 +375,10 @@ class ModelMetricRequirement:
     tolerance: float = 0.0
 
     def __post_init__(self) -> None:
-        if math.isnan(float(self.tolerance)) or self.tolerance < 0:
-            raise ValueError("requirement tolerance must be non-negative")
+        tolerance = float(self.tolerance)
+        if not math.isfinite(tolerance) or tolerance < 0:
+            raise ValueError("requirement tolerance must be finite and non-negative")
+        object.__setattr__(self, "tolerance", tolerance)
 
     def semantic_signature(self) -> Tuple[Any, ...]:
         return (
@@ -460,12 +447,24 @@ class EquivalenceSpec:
     tolerances: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if any(not isinstance(item, str) or not item for item in self.fields):
+            raise ValueError("equivalence field names must be non-empty strings")
+        if len(self.fields) != len(set(self.fields)):
+            raise ValueError("equivalence fields must be unique")
         unknown = set(self.tolerances) - set(self.fields)
         if unknown:
             raise ValueError("tolerances reference undeclared fields: %s" % sorted(unknown))
-        invalid = {key: value for key, value in self.tolerances.items() if value <= 0}
+        normalized = {key: float(value) for key, value in self.tolerances.items()}
+        invalid = {
+            key: value
+            for key, value in normalized.items()
+            if not math.isfinite(value) or value <= 0
+        }
         if invalid:
-            raise ValueError("equivalence resolutions must be positive: %s" % invalid)
+            raise ValueError(
+                "equivalence resolutions must be finite and positive: %s" % invalid
+            )
+        object.__setattr__(self, "tolerances", normalized)
 
     def equivalent(self, left: Snapshot, right: Snapshot) -> bool:
         # Equivalence must be transitive.  Numeric resolutions therefore form
@@ -479,7 +478,13 @@ class EquivalenceSpec:
             value = snapshot[field_name]
             tolerance = self.tolerances.get(field_name, 0.0)
             if tolerance and isinstance(value, (int, float)):
+                if not math.isfinite(float(value)):
+                    raise ValueError(
+                        "equivalence field %r must be finite" % field_name
+                    )
                 value = math.floor(float(value) / tolerance + 0.5)
+            elif isinstance(value, float) and not math.isfinite(value):
+                raise ValueError("equivalence field %r must be finite" % field_name)
             result.append(value)
         return tuple(result)
 
@@ -488,27 +493,7 @@ class EquivalenceSpec:
 
 
 def _freeze_value(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return tuple(
-            sorted(
-                (
-                    (_freeze_value(key), _freeze_value(item))
-                    for key, item in value.items()
-                ),
-                key=repr,
-            )
-        )
-    if isinstance(value, (list, tuple)):
-        return tuple(_freeze_value(item) for item in value)
-    if isinstance(value, set):
-        return tuple(sorted((_freeze_value(item) for item in value), key=repr))
-    if isinstance(value, Enum):
-        return value.value
-    try:
-        hash(value)
-    except TypeError:
-        return repr(value)
-    return value
+    return freeze_value(value, purpose="deterministic structural identity")
 
 
 def requirement_semantic_signature(requirement: Requirement) -> Tuple[Any, ...]:
@@ -540,10 +525,14 @@ class MacroSpec:
     tags: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.horizon, int) or isinstance(self.horizon, bool):
+            raise TypeError("horizon must be an integer")
         if self.horizon < 1:
             raise ValueError("horizon must be at least one")
-        if math.isnan(float(self.tolerance)) or self.tolerance < 0:
-            raise ValueError("macro tolerance must be non-negative")
+        tolerance = float(self.tolerance)
+        if not math.isfinite(tolerance) or tolerance < 0:
+            raise ValueError("macro tolerance must be finite and non-negative")
+        object.__setattr__(self, "tolerance", tolerance)
         missing = set(self.equivalence.fields) - set(self.observables)
         if missing:
             raise ValueError("equivalence fields must be declared observables: %s" % sorted(missing))
@@ -565,12 +554,14 @@ class MacroSpec:
 
     def semantic_signature(self) -> Tuple[Any, ...]:
         def canonical(requirements: Tuple[Requirement, ...]) -> Tuple[Any, ...]:
-            return tuple(
-                sorted(
-                    (requirement_semantic_signature(item) for item in requirements),
-                    key=repr,
+            signatures = (
+                freeze_value(
+                    requirement_semantic_signature(item),
+                    purpose="macro requirement deterministic structural identity",
                 )
+                for item in requirements
             )
+            return tuple(sorted(signatures))
 
         return (
             tuple(sorted(self.observables)),
@@ -597,8 +588,9 @@ class MacroSpec:
         if field_name not in fields:
             fields += (field_name,)
         if resolution is not None:
-            if resolution <= 0:
-                raise ValueError("resolution must be positive")
+            resolution = float(resolution)
+            if not math.isfinite(resolution) or resolution <= 0:
+                raise ValueError("resolution must be finite and positive")
             tolerances[field_name] = resolution
         return replace(
             self,
@@ -640,6 +632,20 @@ class FiniteStateModel:
     applicable: Optional[Applicability] = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError("model name must be a non-empty string")
+        if not isinstance(self.states, Mapping):
+            raise TypeError("model states must be a mapping")
+        if any(not isinstance(name, str) or not name for name in self.states):
+            raise ValueError("model state names must be non-empty strings")
+        if any(
+            not isinstance(name, str) or not name for name in self.initial_states
+        ):
+            raise ValueError("initial state names must be non-empty strings")
+        if any(not isinstance(action, str) or not action for action in self.actions):
+            raise ValueError("model actions must be non-empty strings")
+        if len(self.actions) != len(set(self.actions)):
+            raise ValueError("model actions must be unique")
         unknown = set(self.initial_states) - set(self.states)
         if unknown:
             raise ValueError("unknown initial states: %s" % sorted(unknown))
@@ -647,8 +653,18 @@ class FiniteStateModel:
             raise ValueError("initial state names must be unique")
         if not 0.0 <= self.prior_reliability <= 1.0:
             raise ValueError("prior reliability must be in [0, 1]")
+        if not callable(self.transition):
+            raise TypeError("transition must be callable")
+        if not callable(self.readout):
+            raise TypeError("readout must be callable")
         if self.applicable is not None and not callable(self.applicable):
             raise TypeError("applicable must be callable")
+        # A model owns its initial-state data.  Candidate construction must not
+        # retain aliases into an experiment or another candidate's nested state.
+        self.states = {
+            name: isolated_mapping(state, purpose="initial model state %r" % name)
+            for name, state in self.states.items()
+        }
 
     def supports(self, state: State, action: str, context: Context) -> bool:
         """Whether an otherwise declared action is defined on one state."""
@@ -657,7 +673,8 @@ class FiniteStateModel:
             return False
         if self.applicable is None:
             return True
-        return bool(self.applicable(dict(state), action, context))
+        isolated = isolated_mapping(state, purpose="applicability input state")
+        return bool(self.applicable(isolated, action, context))
 
     def step(self, state: State, action: str, context: Context) -> State:
         if action != "noop" and action not in self.actions:
@@ -667,10 +684,74 @@ class FiniteStateModel:
                 "action %r is undefined on the current support for model %s"
                 % (action, self.name)
             )
-        return self.transition(dict(state), action, context)
+        isolated = isolated_mapping(state, purpose="transition input state")
+        result = self.transition(isolated, action, context)
+        return isolated_mapping(result, purpose="transition result state")
 
     def observe(self, state: State, context: Context) -> Snapshot:
-        return dict(self.readout(state, context))
+        isolated = isolated_mapping(state, purpose="readout input state")
+        result = self.readout(isolated, context)
+        return isolated_mapping(result, purpose="readout result")
+
+    def audited_step(self, state: State, action: str, context: Context) -> State:
+        """Replay one transition and reject inconsistent support or successors."""
+
+        def attempt() -> Tuple[bool, Optional[State], Optional[UndefinedTransition]]:
+            try:
+                return True, self.step(state, action, context), None
+            except UndefinedTransition as error:
+                return False, None, error
+
+        first_defined, first, first_error = attempt()
+        second_defined, second, _ = attempt()
+        if first_defined != second_defined:
+            raise NonDeterministicModelError(
+                "non-deterministic action support for %r in model %s"
+                % (action, self.name)
+            )
+        if not first_defined:
+            if first_error is None:
+                raise RuntimeError(
+                    "undefined transition did not provide an error"
+                )
+            raise first_error
+        if first is None or second is None:
+            raise RuntimeError(
+                "defined transition did not provide a successor state"
+            )
+        first_key = freeze_value(
+            first,
+            purpose="transition deterministic structural identity",
+        )
+        second_key = freeze_value(
+            second,
+            purpose="transition deterministic structural identity",
+        )
+        if first_key != second_key:
+            raise NonDeterministicModelError(
+                "non-deterministic successor for action %r in model %s"
+                % (action, self.name)
+            )
+        return isolated_mapping(first, purpose="audited transition result")
+
+    def audited_observe(self, state: State, context: Context) -> Snapshot:
+        """Replay a readout and reject changing observations."""
+
+        first = self.observe(state, context)
+        second = self.observe(state, context)
+        first_key = freeze_value(
+            first,
+            purpose="readout deterministic structural identity",
+        )
+        second_key = freeze_value(
+            second,
+            purpose="readout deterministic structural identity",
+        )
+        if first_key != second_key:
+            raise NonDeterministicModelError(
+                "non-deterministic readout in model %s" % self.name
+            )
+        return isolated_mapping(first, purpose="audited readout result")
 
     def _interventions(self, context: Context) -> Tuple[Intervention, ...]:
         interventions = context.interventions
@@ -692,14 +773,22 @@ class FiniteStateModel:
         )
 
     def simulate(self, context: Context, horizon: int) -> Iterable[Trace]:
+        if not isinstance(horizon, int) or isinstance(horizon, bool):
+            raise TypeError("simulation horizon must be an integer")
+        if horizon < 0:
+            raise ValueError("simulation horizon must be non-negative")
         interventions = self._interventions(context)
         for initial_name in self.initial_states:
             for intervention in interventions:
-                state = dict(self.states[initial_name])
-                snapshots = [self.observe(state, context)]
+                state = isolated_mapping(
+                    self.states[initial_name], purpose="simulation initial state"
+                )
+                snapshots = [self.audited_observe(state, context)]
                 for step in range(horizon):
-                    state = dict(self.step(state, intervention.action_at(step), context))
-                    snapshots.append(self.observe(state, context))
+                    state = self.audited_step(
+                        state, intervention.action_at(step), context
+                    )
+                    snapshots.append(self.audited_observe(state, context))
                 yield Trace(
                     model_name=self.name,
                     initial_state=initial_name,
@@ -844,8 +933,10 @@ class Experiment:
     cost: float = 0.0
 
     def __post_init__(self) -> None:
-        if math.isnan(float(self.cost)) or self.cost < 0:
-            raise ValueError("experiment cost must be non-negative")
+        cost = float(self.cost)
+        if not math.isfinite(cost) or cost < 0:
+            raise ValueError("experiment cost must be finite and non-negative")
+        object.__setattr__(self, "cost", cost)
 
 
 @dataclass(frozen=True)
