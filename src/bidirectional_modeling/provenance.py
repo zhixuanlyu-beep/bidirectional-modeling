@@ -9,7 +9,15 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Optional, Tuple
 
-from .core import Context, EquivalenceSpec, ExecutableModel, MacroSpec, Trace
+from .core import (
+    CheckResult,
+    ConfidenceBreakdown,
+    Context,
+    EquivalenceSpec,
+    ExecutableModel,
+    MacroSpec,
+    Trace,
+)
 from .structural import fingerprint_value, freeze_value
 
 
@@ -221,4 +229,64 @@ def satisfaction_protocol_fingerprint(
             max_cost,
         ),
         purpose="satisfaction evaluation protocol fingerprint",
+    )
+
+
+def satisfaction_claim_fingerprint(
+    protocol_digest: str,
+    spec_name: str,
+    model_name: str,
+    satisfied: bool,
+    checks: Tuple[CheckResult, ...],
+    verified_scenarios: int,
+    confidence: ConfidenceBreakdown,
+    assumptions: Tuple[str, ...],
+    failure_boundaries: Tuple[str, ...],
+    horizon: int,
+    complete: bool,
+    requirements_passed: bool,
+    coverage_authority: str,
+) -> str:
+    """Fingerprint the complete semantic outcome of a satisfaction run.
+
+    ``protocol_digest`` identifies what was evaluated.  This second digest
+    identifies what the certificate claims happened, so result fields cannot
+    be replaced while retaining the original protocol identity.
+    """
+
+    check_signatures = tuple(
+        (
+            "check-result-v1",
+            item.name,
+            item.category.value,
+            item.passed,
+            item.observed,
+            item.expected,
+            item.robustness,
+            item.detail,
+        )
+        for item in checks
+    )
+    return fingerprint_value(
+        (
+            "satisfaction-claim-v1",
+            protocol_digest,
+            spec_name,
+            model_name,
+            satisfied,
+            check_signatures,
+            verified_scenarios,
+            (
+                confidence.coverage,
+                confidence.robustness,
+                confidence.assumption_reliability,
+            ),
+            assumptions,
+            failure_boundaries,
+            horizon,
+            complete,
+            requirements_passed,
+            coverage_authority,
+        ),
+        purpose="satisfaction claim fingerprint",
     )

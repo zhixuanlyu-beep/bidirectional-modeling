@@ -311,6 +311,108 @@ class ResidualContextRefinement:
         return len(set(self.state_classes))
 
 
+def _residual_claim_fingerprint(
+    protocol_digest: str,
+    model_name: str,
+    equivalence_signature: Tuple[Any, ...],
+    quotient: ResidualQuotient,
+    filtration: Tuple[ResidualFiltrationLevel, ...],
+    distinguishing_contexts: Tuple[DistinguishingContext, ...],
+    complete: bool,
+    stable: bool,
+    congruent: bool,
+    exploration_depth: int,
+    transition_evaluations: int,
+    boundaries: Tuple[str, ...],
+    context_basis: Tuple[Tuple[str, ...], ...],
+    context_refinements: Tuple[ResidualContextRefinement, ...],
+    context_basis_reproduces_partition: bool,
+) -> str:
+    quotient_signature = (
+        "residual-quotient-v1",
+        tuple(
+            (
+                item.index,
+                item.source_initial_state,
+                item.actions,
+                item.micro_state,
+                item.observation,
+                item.observation_signature,
+            )
+            for item in quotient.states
+        ),
+        quotient.state_classes,
+        tuple(
+            (item.identifier, item.members, item.representative)
+            for item in quotient.classes
+        ),
+        tuple(
+            (
+                item.source_class,
+                item.action,
+                item.target_classes,
+                item.complete,
+                item.undefined,
+            )
+            for item in quotient.transitions
+        ),
+        quotient.actions,
+        quotient.initial_state_classes,
+    )
+    filtration_signature = tuple(
+        (
+            item.context_depth,
+            item.state_classes,
+            item.new_distinguishing_contexts,
+        )
+        for item in filtration
+    )
+    distinction_signature = tuple(
+        (
+            item.left_state,
+            item.right_state,
+            item.actions,
+            item.left_terminal_signature,
+            item.right_terminal_signature,
+            item.discovered_at_depth,
+            item.left_defined,
+            item.right_defined,
+        )
+        for item in distinguishing_contexts
+    )
+    refinement_signature = tuple(
+        (
+            item.iteration,
+            item.left_state,
+            item.right_state,
+            item.context,
+            item.state_classes,
+        )
+        for item in context_refinements
+    )
+    return fingerprint_value(
+        (
+            "residual-quotient-claim-v1",
+            protocol_digest,
+            model_name,
+            equivalence_signature,
+            quotient_signature,
+            filtration_signature,
+            distinction_signature,
+            complete,
+            stable,
+            congruent,
+            exploration_depth,
+            transition_evaluations,
+            boundaries,
+            context_basis,
+            refinement_signature,
+            context_basis_reproduces_partition,
+        ),
+        purpose="residual quotient claim fingerprint",
+    )
+
+
 @dataclass(frozen=True)
 class ResidualQuotientReport:
     """Certificate and boundedness information for one quotient discovery."""
@@ -320,6 +422,7 @@ class ResidualQuotientReport:
     model_fingerprint: str
     equivalence_fingerprint: str
     protocol_fingerprint: str
+    claim_fingerprint: str
     max_reachability_depth: Optional[int]
     max_states: int
     max_context_depth: Optional[int]
@@ -368,6 +471,7 @@ class ResidualQuotientReport:
             ("residual model fingerprint", self.model_fingerprint),
             ("residual equivalence fingerprint", self.equivalence_fingerprint),
             ("residual protocol fingerprint", self.protocol_fingerprint),
+            ("residual claim fingerprint", self.claim_fingerprint),
         ):
             validate_fingerprint(fingerprint, purpose=label)
         expected_equivalence = fingerprint_value(
@@ -391,12 +495,80 @@ class ResidualQuotientReport:
             raise ValueError(
                 "residual report fields do not match its protocol fingerprint"
             )
+        expected_claim = _residual_claim_fingerprint(
+            self.protocol_fingerprint,
+            self.model_name,
+            self.equivalence_signature,
+            self.quotient,
+            self.filtration,
+            self.distinguishing_contexts,
+            self.complete,
+            self.stable,
+            self.congruent,
+            self.exploration_depth,
+            self.transition_evaluations,
+            self.boundaries,
+            self.context_basis,
+            self.context_refinements,
+            self.context_basis_reproduces_partition,
+        )
+        if expected_claim != self.claim_fingerprint:
+            raise ValueError(
+                "residual report fields do not match its claim fingerprint"
+            )
+
+    def verify_integrity(self) -> bool:
+        """Return whether protocol and discovered quotient fields remain intact."""
+
+        try:
+            expected_equivalence = fingerprint_value(
+                ("equivalence-v1", self.equivalence_signature),
+                purpose="equivalence deterministic structural fingerprint",
+            )
+            expected_protocol = _residual_protocol_fingerprint(
+                self.model_fingerprint,
+                self.context_fingerprint,
+                self.equivalence_fingerprint,
+                self.max_reachability_depth,
+                self.max_states,
+                self.max_context_depth,
+                self.max_context_tests,
+            )
+            expected_claim = _residual_claim_fingerprint(
+                self.protocol_fingerprint,
+                self.model_name,
+                self.equivalence_signature,
+                self.quotient,
+                self.filtration,
+                self.distinguishing_contexts,
+                self.complete,
+                self.stable,
+                self.congruent,
+                self.exploration_depth,
+                self.transition_evaluations,
+                self.boundaries,
+                self.context_basis,
+                self.context_refinements,
+                self.context_basis_reproduces_partition,
+            )
+        except Exception:
+            return False
+        return (
+            expected_equivalence == self.equivalence_fingerprint
+            and expected_protocol == self.protocol_fingerprint
+            and expected_claim == self.claim_fingerprint
+        )
 
     @property
     def minimal(self) -> bool:
         """Whether minimality is certified on the declared reachable domain."""
 
-        return self.complete and self.stable and self.congruent
+        return (
+            self.verify_integrity()
+            and self.complete
+            and self.stable
+            and self.congruent
+        )
 
     @property
     def explored_states(self) -> int:
@@ -404,14 +576,18 @@ class ResidualQuotientReport:
 
     def binds_context(self, context: Context) -> bool:
         try:
-            return context_fingerprint(context) == self.context_fingerprint
+            return (
+                self.verify_integrity()
+                and context_fingerprint(context) == self.context_fingerprint
+            )
         except Exception:
             return False
 
     def binds_equivalence(self, equivalence: EquivalenceSpec) -> bool:
         try:
             return (
-                equivalence_fingerprint(equivalence)
+                self.verify_integrity()
+                and equivalence_fingerprint(equivalence)
                 == self.equivalence_fingerprint
             )
         except Exception:
@@ -522,6 +698,8 @@ class ResidualQuotientAnalyzer:
                 "the model has no initial states, so no residual domain was enumerated"
             )
             quotient = ResidualQuotient((), (), (), (), actions, ())
+            filtration = (ResidualFiltrationLevel(0, ()),)
+            boundary_results = tuple(boundaries)
             model_digest = _residual_model_fingerprint(
                 model, states, actions, transitions, initial_indices
             )
@@ -534,26 +712,44 @@ class ResidualQuotientAnalyzer:
                 max_context_depth,
                 max_context_tests,
             )
+            claim_digest = _residual_claim_fingerprint(
+                protocol_digest,
+                model.name,
+                equivalence_signature,
+                quotient,
+                filtration,
+                (),
+                False,
+                False,
+                False,
+                0,
+                0,
+                boundary_results,
+                (),
+                (),
+                False,
+            )
             return ResidualQuotientReport(
                 model_name=model.name,
                 context_fingerprint=context_digest,
                 model_fingerprint=model_digest,
                 equivalence_fingerprint=equivalence_digest,
                 protocol_fingerprint=protocol_digest,
+                claim_fingerprint=claim_digest,
                 max_reachability_depth=max_reachability_depth,
                 max_states=max_states,
                 max_context_depth=max_context_depth,
                 max_context_tests=max_context_tests,
                 equivalence_signature=equivalence_signature,
                 quotient=quotient,
-                filtration=(ResidualFiltrationLevel(0, ()),),
+                filtration=filtration,
                 distinguishing_contexts=(),
                 complete=False,
                 stable=False,
                 congruent=False,
                 exploration_depth=0,
                 transition_evaluations=0,
-                boundaries=tuple(boundaries),
+                boundaries=boundary_results,
             )
 
         while frontier:
@@ -887,6 +1083,29 @@ class ResidualQuotientAnalyzer:
             max_context_depth,
             max_context_tests,
         )
+        filtration = tuple(levels)
+        distinguishing_contexts = tuple(distinctions)
+        boundary_results = tuple(boundaries)
+        context_basis_result = tuple(context_basis)
+        context_refinement_results = tuple(context_refinements)
+        exploration_depth = max(len(state.actions) for state in states)
+        claim_digest = _residual_claim_fingerprint(
+            protocol_digest,
+            model.name,
+            equivalence_signature,
+            quotient,
+            filtration,
+            distinguishing_contexts,
+            complete,
+            stable,
+            congruent,
+            exploration_depth,
+            transition_evaluations,
+            boundary_results,
+            context_basis_result,
+            context_refinement_results,
+            context_basis_reproduces_partition,
+        )
 
         return ResidualQuotientReport(
             model_name=model.name,
@@ -894,22 +1113,23 @@ class ResidualQuotientAnalyzer:
             model_fingerprint=model_digest,
             equivalence_fingerprint=equivalence_digest,
             protocol_fingerprint=protocol_digest,
+            claim_fingerprint=claim_digest,
             max_reachability_depth=max_reachability_depth,
             max_states=max_states,
             max_context_depth=max_context_depth,
             max_context_tests=max_context_tests,
             equivalence_signature=equivalence_signature,
             quotient=quotient,
-            filtration=tuple(levels),
-            distinguishing_contexts=tuple(distinctions),
+            filtration=filtration,
+            distinguishing_contexts=distinguishing_contexts,
             complete=complete,
             stable=stable,
             congruent=congruent,
-            exploration_depth=max(len(state.actions) for state in states),
+            exploration_depth=exploration_depth,
             transition_evaluations=transition_evaluations,
-            boundaries=tuple(boundaries),
-            context_basis=tuple(context_basis),
-            context_refinements=tuple(context_refinements),
+            boundaries=boundary_results,
+            context_basis=context_basis_result,
+            context_refinements=context_refinement_results,
             context_basis_reproduces_partition=(
                 context_basis_reproduces_partition
             ),

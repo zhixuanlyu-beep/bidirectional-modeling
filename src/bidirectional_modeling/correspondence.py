@@ -7,6 +7,7 @@ The validator checks that claim over independently certified scenario domains.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, Union
@@ -223,8 +224,9 @@ def _protocol_fingerprint(
     horizon: int,
     lower_coverage_authority: str,
     upper_coverage_authority: str,
-    budget: ResourceBudget,
+    max_candidates: int,
     simulation_limit: int,
+    max_cost: float,
 ) -> str:
     return fingerprint_value(
         (
@@ -237,9 +239,9 @@ def _protocol_fingerprint(
             horizon,
             lower_coverage_authority,
             upper_coverage_authority,
-            budget.max_candidates,
+            max_candidates,
             simulation_limit,
-            budget.max_cost,
+            max_cost,
         ),
         purpose="correspondence validation protocol fingerprint",
     )
@@ -257,6 +259,74 @@ class CorrespondenceCounterexample:
     lower_snapshot: Optional[Mapping[str, Any]] = None
     projected_snapshot: Optional[Mapping[str, Any]] = None
     upper_snapshot: Optional[Mapping[str, Any]] = None
+
+
+def _scenario_key_signature(
+    key: Optional[ScenarioKey],
+) -> Optional[Tuple[str, str]]:
+    if key is None:
+        return None
+    return (key.initial_state, key.intervention)
+
+
+def _correspondence_claim_fingerprint(
+    protocol_digest: str,
+    correspondence_name: str,
+    lower_scale: str,
+    upper_scale: str,
+    lower_model_name: str,
+    upper_model_name: str,
+    complete: bool,
+    commutes: bool,
+    lower_scenarios: int,
+    upper_scenarios: int,
+    paired_scenarios: int,
+    covered_upper_scenarios: int,
+    counterexamples: Tuple[CorrespondenceCounterexample, ...],
+    assumptions: Tuple[str, ...],
+    boundaries: Tuple[str, ...],
+    lower_coverage_authority: str,
+    upper_coverage_authority: str,
+    simulations_used: int,
+) -> str:
+    counterexample_signatures = tuple(
+        (
+            "correspondence-counterexample-v1",
+            item.kind,
+            item.detail,
+            _scenario_key_signature(item.lower_scenario),
+            _scenario_key_signature(item.upper_scenario),
+            item.step,
+            item.lower_snapshot,
+            item.projected_snapshot,
+            item.upper_snapshot,
+        )
+        for item in counterexamples
+    )
+    return fingerprint_value(
+        (
+            "correspondence-claim-v1",
+            protocol_digest,
+            correspondence_name,
+            lower_scale,
+            upper_scale,
+            lower_model_name,
+            upper_model_name,
+            complete,
+            commutes,
+            lower_scenarios,
+            upper_scenarios,
+            paired_scenarios,
+            covered_upper_scenarios,
+            counterexample_signatures,
+            assumptions,
+            boundaries,
+            lower_coverage_authority,
+            upper_coverage_authority,
+            simulations_used,
+        ),
+        purpose="correspondence claim fingerprint",
+    )
 
 
 @dataclass(frozen=True)
@@ -279,8 +349,12 @@ class CorrespondenceCertificate:
     lower_model_fingerprint: str
     upper_model_fingerprint: str
     protocol_fingerprint: str
+    claim_fingerprint: str
     lower_context_fingerprint: str
     upper_context_fingerprint: str
+    max_candidates: int
+    simulation_limit: int
+    max_cost: float
     counterexamples: Tuple[CorrespondenceCounterexample, ...] = ()
     assumptions: Tuple[str, ...] = ()
     boundaries: Tuple[str, ...] = ()
@@ -300,7 +374,11 @@ class CorrespondenceCertificate:
             )
         ):
             raise ValueError("correspondence certificate identities must be non-empty")
-        if self.horizon < 1:
+        if (
+            not isinstance(self.horizon, int)
+            or isinstance(self.horizon, bool)
+            or self.horizon < 1
+        ):
             raise ValueError("correspondence horizon must be at least one")
         counts = (
             self.lower_scenarios,
@@ -309,25 +387,134 @@ class CorrespondenceCertificate:
             self.covered_upper_scenarios,
             self.simulations_used,
         )
+        if any(
+            not isinstance(item, int) or isinstance(item, bool)
+            for item in counts
+        ):
+            raise TypeError("correspondence counts must be integers")
         if min(counts) < 0:
             raise ValueError("correspondence counts must be non-negative")
+        if (
+            not isinstance(self.max_candidates, int)
+            or isinstance(self.max_candidates, bool)
+            or self.max_candidates < 1
+        ):
+            raise ValueError("correspondence max_candidates must be positive")
+        if (
+            not isinstance(self.simulation_limit, int)
+            or isinstance(self.simulation_limit, bool)
+            or self.simulation_limit < 0
+        ):
+            raise ValueError("correspondence simulation_limit must be non-negative")
+        max_cost = float(self.max_cost)
+        if math.isnan(max_cost) or max_cost < 0:
+            raise ValueError("correspondence max_cost must be non-negative")
+        object.__setattr__(self, "max_cost", max_cost)
         for label, fingerprint in (
             ("correspondence fingerprint", self.correspondence_fingerprint),
             ("lower model fingerprint", self.lower_model_fingerprint),
             ("upper model fingerprint", self.upper_model_fingerprint),
             ("protocol fingerprint", self.protocol_fingerprint),
+            ("claim fingerprint", self.claim_fingerprint),
             ("lower context fingerprint", self.lower_context_fingerprint),
             ("upper context fingerprint", self.upper_context_fingerprint),
         ):
             validate_fingerprint(fingerprint, purpose=label)
+        expected_protocol = _protocol_fingerprint(
+            self.correspondence_fingerprint,
+            self.lower_model_fingerprint,
+            self.upper_model_fingerprint,
+            self.lower_context_fingerprint,
+            self.upper_context_fingerprint,
+            self.horizon,
+            self.lower_coverage_authority,
+            self.upper_coverage_authority,
+            self.max_candidates,
+            self.simulation_limit,
+            self.max_cost,
+        )
+        if expected_protocol != self.protocol_fingerprint:
+            raise ValueError(
+                "correspondence certificate fields do not match its "
+                "protocol fingerprint"
+            )
+        expected_claim = _correspondence_claim_fingerprint(
+            self.protocol_fingerprint,
+            self.correspondence_name,
+            self.lower_scale,
+            self.upper_scale,
+            self.lower_model_name,
+            self.upper_model_name,
+            self.complete,
+            self.commutes,
+            self.lower_scenarios,
+            self.upper_scenarios,
+            self.paired_scenarios,
+            self.covered_upper_scenarios,
+            self.counterexamples,
+            self.assumptions,
+            self.boundaries,
+            self.lower_coverage_authority,
+            self.upper_coverage_authority,
+            self.simulations_used,
+        )
+        if expected_claim != self.claim_fingerprint:
+            raise ValueError(
+                "correspondence certificate fields do not match its claim fingerprint"
+            )
+
+    def verify_integrity(self) -> bool:
+        """Return whether protocol and claimed validation results remain intact."""
+
+        try:
+            expected_protocol = _protocol_fingerprint(
+                self.correspondence_fingerprint,
+                self.lower_model_fingerprint,
+                self.upper_model_fingerprint,
+                self.lower_context_fingerprint,
+                self.upper_context_fingerprint,
+                self.horizon,
+                self.lower_coverage_authority,
+                self.upper_coverage_authority,
+                self.max_candidates,
+                self.simulation_limit,
+                self.max_cost,
+            )
+            expected_claim = _correspondence_claim_fingerprint(
+                self.protocol_fingerprint,
+                self.correspondence_name,
+                self.lower_scale,
+                self.upper_scale,
+                self.lower_model_name,
+                self.upper_model_name,
+                self.complete,
+                self.commutes,
+                self.lower_scenarios,
+                self.upper_scenarios,
+                self.paired_scenarios,
+                self.covered_upper_scenarios,
+                self.counterexamples,
+                self.assumptions,
+                self.boundaries,
+                self.lower_coverage_authority,
+                self.upper_coverage_authority,
+                self.simulations_used,
+            )
+        except Exception:
+            return False
+        return (
+            expected_protocol == self.protocol_fingerprint
+            and expected_claim == self.claim_fingerprint
+        )
 
     @property
     def passed(self) -> bool:
-        return self.complete and self.commutes
+        return self.verify_integrity() and self.complete and self.commutes
 
     def binds_correspondence(self, correspondence: Correspondence) -> bool:
         return (
-            _correspondence_binding_error(
+            self.verify_integrity()
+            and _correspondence_binding_error(
                 correspondence,
                 self.correspondence_fingerprint,
             )
@@ -380,6 +567,69 @@ class CorrespondenceCaseResult:
             raise ValueError("only a holdout result may claim independent provenance")
 
 
+def _suite_protocol_fingerprint(
+    correspondence_digest: str,
+    cases: Tuple[CorrespondenceCaseResult, ...],
+    max_candidates: int,
+    max_simulations: int,
+    max_cost: float,
+    truncated: bool,
+) -> str:
+    return fingerprint_value(
+        (
+            "correspondence-suite-validator-v1",
+            correspondence_digest,
+            tuple(
+                (
+                    item.case_name,
+                    item.role.value,
+                    item.independent,
+                    item.certificate.protocol_fingerprint,
+                )
+                for item in cases
+            ),
+            max_candidates,
+            max_simulations,
+            max_cost,
+            truncated,
+        ),
+        purpose="correspondence suite protocol fingerprint",
+    )
+
+
+def _suite_claim_fingerprint(
+    protocol_digest: str,
+    correspondence_name: str,
+    lower_scale: str,
+    upper_scale: str,
+    cases: Tuple[CorrespondenceCaseResult, ...],
+    simulations_used: int,
+    boundaries: Tuple[str, ...],
+) -> str:
+    return fingerprint_value(
+        (
+            "correspondence-suite-claim-v1",
+            protocol_digest,
+            correspondence_name,
+            lower_scale,
+            upper_scale,
+            tuple(
+                (
+                    item.case_name,
+                    item.role.value,
+                    item.independent,
+                    item.certificate.protocol_fingerprint,
+                    item.certificate.claim_fingerprint,
+                )
+                for item in cases
+            ),
+            simulations_used,
+            boundaries,
+        ),
+        purpose="correspondence suite claim fingerprint",
+    )
+
+
 @dataclass(frozen=True)
 class CorrespondenceSuiteCertificate:
     """Cross-context evidence, with independent holdout status kept explicit."""
@@ -391,14 +641,36 @@ class CorrespondenceSuiteCertificate:
     simulations_used: int
     correspondence_fingerprint: str
     protocol_fingerprint: str
+    claim_fingerprint: str
+    max_candidates: int
+    max_simulations: int
+    max_cost: float
     truncated: bool = False
     boundaries: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.correspondence_name or not self.lower_scale or not self.upper_scale:
             raise ValueError("suite certificate identities must be non-empty")
-        if self.simulations_used < 0:
+        if (
+            not isinstance(self.simulations_used, int)
+            or isinstance(self.simulations_used, bool)
+            or self.simulations_used < 0
+        ):
             raise ValueError("suite simulations_used must be non-negative")
+        for label, value in (
+            ("max_candidates", self.max_candidates),
+            ("max_simulations", self.max_simulations),
+        ):
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 1
+            ):
+                raise ValueError("suite %s must be positive" % label)
+        max_cost = float(self.max_cost)
+        if math.isnan(max_cost) or max_cost < 0:
+            raise ValueError("suite max_cost must be non-negative")
+        object.__setattr__(self, "max_cost", max_cost)
         validate_fingerprint(
             self.correspondence_fingerprint,
             purpose="suite correspondence fingerprint",
@@ -407,10 +679,16 @@ class CorrespondenceSuiteCertificate:
             self.protocol_fingerprint,
             purpose="suite protocol fingerprint",
         )
+        validate_fingerprint(
+            self.claim_fingerprint,
+            purpose="suite claim fingerprint",
+        )
         names = [item.case_name for item in self.cases]
         if len(names) != len(set(names)):
             raise ValueError("suite certificate case names must be unique")
         for item in self.cases:
+            if not item.certificate.verify_integrity():
+                raise ValueError("case certificate failed its integrity check")
             metadata = (
                 item.certificate.correspondence_name,
                 item.certificate.lower_scale,
@@ -433,30 +711,109 @@ class CorrespondenceSuiteCertificate:
             self.simulations_used
         ):
             raise ValueError("suite simulation count must equal its case certificates")
+        expected_protocol = _suite_protocol_fingerprint(
+            self.correspondence_fingerprint,
+            self.cases,
+            self.max_candidates,
+            self.max_simulations,
+            self.max_cost,
+            self.truncated,
+        )
+        if expected_protocol != self.protocol_fingerprint:
+            raise ValueError(
+                "suite certificate fields do not match its protocol fingerprint"
+            )
+        expected_claim = _suite_claim_fingerprint(
+            self.protocol_fingerprint,
+            self.correspondence_name,
+            self.lower_scale,
+            self.upper_scale,
+            self.cases,
+            self.simulations_used,
+            self.boundaries,
+        )
+        if expected_claim != self.claim_fingerprint:
+            raise ValueError(
+                "suite certificate fields do not match its claim fingerprint"
+            )
+
+    def verify_integrity(self) -> bool:
+        """Return whether suite metadata and every nested case remain intact."""
+
+        try:
+            if not all(item.certificate.verify_integrity() for item in self.cases):
+                return False
+            if len({item.case_name for item in self.cases}) != len(self.cases):
+                return False
+            expected_metadata = (
+                self.correspondence_name,
+                self.lower_scale,
+                self.upper_scale,
+            )
+            if any(
+                (
+                    item.certificate.correspondence_name,
+                    item.certificate.lower_scale,
+                    item.certificate.upper_scale,
+                )
+                != expected_metadata
+                or item.certificate.correspondence_fingerprint
+                != self.correspondence_fingerprint
+                for item in self.cases
+            ):
+                return False
+            if sum(
+                item.certificate.simulations_used for item in self.cases
+            ) != self.simulations_used:
+                return False
+            expected_protocol = _suite_protocol_fingerprint(
+                self.correspondence_fingerprint,
+                self.cases,
+                self.max_candidates,
+                self.max_simulations,
+                self.max_cost,
+                self.truncated,
+            )
+            expected_claim = _suite_claim_fingerprint(
+                self.protocol_fingerprint,
+                self.correspondence_name,
+                self.lower_scale,
+                self.upper_scale,
+                self.cases,
+                self.simulations_used,
+                self.boundaries,
+            )
+        except Exception:
+            return False
+        return (
+            expected_protocol == self.protocol_fingerprint
+            and expected_claim == self.claim_fingerprint
+        )
 
     @property
     def complete(self) -> bool:
-        return bool(self.cases) and all(
+        return self.verify_integrity() and bool(self.cases) and all(
             item.certificate.complete for item in self.cases
         )
 
     @property
     def commutes(self) -> bool:
-        return bool(self.cases) and all(
+        return self.verify_integrity() and bool(self.cases) and all(
             item.certificate.commutes for item in self.cases
         )
 
     @property
     def compatibility_passed(self) -> bool:
         return (
-            not self.truncated
+            self.verify_integrity()
+            and not self.truncated
             and bool(self.cases)
             and all(item.certificate.passed for item in self.cases)
         )
 
     @property
     def has_independent_holdout(self) -> bool:
-        return any(
+        return self.verify_integrity() and any(
             item.role == CorrespondenceCaseRole.HOLDOUT and item.independent
             for item in self.cases
         )
@@ -467,7 +824,8 @@ class CorrespondenceSuiteCertificate:
 
     def binds_correspondence(self, correspondence: Correspondence) -> bool:
         return (
-            _correspondence_binding_error(
+            self.verify_integrity()
+            and _correspondence_binding_error(
                 correspondence,
                 self.correspondence_fingerprint,
             )
@@ -770,8 +1128,9 @@ class CorrespondenceValidator:
             horizon,
             lower_batch.coverage_authority,
             upper_batch.coverage_authority,
-            budget,
+            budget.max_candidates,
             budget.max_simulations,
+            budget.max_cost,
         )
 
         coverage_complete = not any(
@@ -786,12 +1145,36 @@ class CorrespondenceValidator:
             and coverage_complete
             and binding_complete
         )
+        lower_model_name = str(getattr(lower_model, "name", ""))
+        upper_model_name = str(getattr(upper_model, "name", ""))
+        counterexample_results = tuple(counterexamples)
+        boundary_results = tuple(boundaries)
+        claim_digest = _correspondence_claim_fingerprint(
+            protocol_digest,
+            correspondence.name,
+            correspondence.lower_scale.name,
+            correspondence.upper_scale.name,
+            lower_model_name,
+            upper_model_name,
+            complete,
+            commutes,
+            len(lower_traces),
+            len(upper_traces),
+            paired_scenarios,
+            len(set(upper_by_key).intersection(mapped_upper)),
+            counterexample_results,
+            correspondence.assumptions,
+            boundary_results,
+            lower_batch.coverage_authority,
+            upper_batch.coverage_authority,
+            simulations_used,
+        )
         return CorrespondenceCertificate(
             correspondence_name=correspondence.name,
             lower_scale=correspondence.lower_scale.name,
             upper_scale=correspondence.upper_scale.name,
-            lower_model_name=str(getattr(lower_model, "name", "")),
-            upper_model_name=str(getattr(upper_model, "name", "")),
+            lower_model_name=lower_model_name,
+            upper_model_name=upper_model_name,
             horizon=horizon,
             complete=complete,
             commutes=commutes,
@@ -803,11 +1186,15 @@ class CorrespondenceValidator:
             lower_model_fingerprint=lower_model_digest,
             upper_model_fingerprint=upper_model_digest,
             protocol_fingerprint=protocol_digest,
+            claim_fingerprint=claim_digest,
             lower_context_fingerprint=lower_context_digest,
             upper_context_fingerprint=upper_context_digest,
-            counterexamples=tuple(counterexamples),
+            max_candidates=budget.max_candidates,
+            simulation_limit=budget.max_simulations,
+            max_cost=budget.max_cost,
+            counterexamples=counterexample_results,
             assumptions=correspondence.assumptions,
-            boundaries=tuple(boundaries),
+            boundaries=boundary_results,
             lower_coverage_authority=lower_batch.coverage_authority,
             upper_coverage_authority=upper_batch.coverage_authority,
             simulations_used=simulations_used,
@@ -880,15 +1267,39 @@ class CorrespondenceValidator:
                     case.horizon,
                     "none",
                     "none",
-                    budget,
+                    budget.max_candidates,
+                    0,
+                    budget.max_cost,
+                )
+                lower_model_name = str(getattr(case.lower_model, "name", ""))
+                upper_model_name = str(getattr(case.upper_model, "name", ""))
+                boundary_results = tuple(exhausted_boundaries)
+                claim_digest = _correspondence_claim_fingerprint(
+                    protocol_digest,
+                    correspondence.name,
+                    correspondence.lower_scale.name,
+                    correspondence.upper_scale.name,
+                    lower_model_name,
+                    upper_model_name,
+                    False,
+                    True,
+                    0,
+                    0,
+                    0,
+                    0,
+                    (),
+                    correspondence.assumptions,
+                    boundary_results,
+                    "none",
+                    "none",
                     0,
                 )
                 certificate = CorrespondenceCertificate(
                     correspondence_name=correspondence.name,
                     lower_scale=correspondence.lower_scale.name,
                     upper_scale=correspondence.upper_scale.name,
-                    lower_model_name=str(getattr(case.lower_model, "name", "")),
-                    upper_model_name=str(getattr(case.upper_model, "name", "")),
+                    lower_model_name=lower_model_name,
+                    upper_model_name=upper_model_name,
                     horizon=case.horizon,
                     complete=False,
                     commutes=True,
@@ -900,10 +1311,14 @@ class CorrespondenceValidator:
                     lower_model_fingerprint=lower_model_digest,
                     upper_model_fingerprint=upper_model_digest,
                     protocol_fingerprint=protocol_digest,
+                    claim_fingerprint=claim_digest,
                     lower_context_fingerprint=lower_context_digest,
                     upper_context_fingerprint=upper_context_digest,
+                    max_candidates=budget.max_candidates,
+                    simulation_limit=0,
+                    max_cost=budget.max_cost,
                     assumptions=correspondence.assumptions,
-                    boundaries=tuple(exhausted_boundaries),
+                    boundaries=boundary_results,
                 )
                 truncated = True
             else:
@@ -948,37 +1363,40 @@ class CorrespondenceValidator:
             if binding_error not in suite_boundaries:
                 suite_boundaries.append(binding_error)
 
-        suite_protocol_digest = fingerprint_value(
-            (
-                "correspondence-suite-validator-v1",
-                correspondence_digest,
-                tuple(
-                    (
-                        item.case_name,
-                        item.role.value,
-                        item.independent,
-                        item.certificate.protocol_fingerprint,
-                    )
-                    for item in results
-                ),
-                budget.max_candidates,
-                budget.max_simulations,
-                budget.max_cost,
-                truncated,
-            ),
-            purpose="correspondence suite protocol fingerprint",
+        case_results = tuple(results)
+        boundary_results = tuple(suite_boundaries)
+        suite_protocol_digest = _suite_protocol_fingerprint(
+            correspondence_digest,
+            case_results,
+            budget.max_candidates,
+            budget.max_simulations,
+            budget.max_cost,
+            truncated,
+        )
+        suite_claim_digest = _suite_claim_fingerprint(
+            suite_protocol_digest,
+            correspondence.name,
+            correspondence.lower_scale.name,
+            correspondence.upper_scale.name,
+            case_results,
+            simulations_used,
+            boundary_results,
         )
 
         return CorrespondenceSuiteCertificate(
             correspondence_name=correspondence.name,
             lower_scale=correspondence.lower_scale.name,
             upper_scale=correspondence.upper_scale.name,
-            cases=tuple(results),
+            cases=case_results,
             simulations_used=simulations_used,
             correspondence_fingerprint=correspondence_digest,
             protocol_fingerprint=suite_protocol_digest,
+            claim_fingerprint=suite_claim_digest,
+            max_candidates=budget.max_candidates,
+            max_simulations=budget.max_simulations,
+            max_cost=budget.max_cost,
             truncated=truncated,
-            boundaries=tuple(suite_boundaries),
+            boundaries=boundary_results,
         )
 
 
@@ -1018,15 +1436,49 @@ class ScaleGraph:
 
     @property
     def correspondences(self) -> Tuple[Correspondence, ...]:
+        self._prune_stale_evidence()
         return tuple(self._correspondences.values())
+
+    def _evidence_is_current(self, correspondence_name: str) -> bool:
+        correspondence = self._correspondences.get(correspondence_name)
+        certificate = self._certificates.get(correspondence_name)
+        if correspondence is None or certificate is None:
+            return False
+        try:
+            return (
+                certificate.verify_integrity()
+                and certificate.passed
+                and certificate.binds_correspondence(correspondence)
+            )
+        except Exception:
+            return False
+
+    def _prune_stale_evidence(self) -> None:
+        stale = tuple(
+            name
+            for name in self._certificates
+            if not self._evidence_is_current(name)
+        )
+        for name in stale:
+            self._certificates.pop(name, None)
+            self._correspondences.pop(name, None)
 
     def add_verified(
         self,
         correspondence: Correspondence,
         certificate: CorrespondenceEvidence,
     ) -> None:
+        if not isinstance(
+            certificate,
+            (CorrespondenceCertificate, CorrespondenceSuiteCertificate),
+        ):
+            raise TypeError("certificate must be correspondence evidence")
+        if not certificate.verify_integrity():
+            raise ValueError("correspondence certificate failed its integrity check")
         if not certificate.passed:
-            raise ValueError("only passed correspondence certificates may enter the graph")
+            raise ValueError(
+                "only passed correspondence certificates may enter the graph"
+            )
         metadata = (
             certificate.correspondence_name,
             certificate.lower_scale,
@@ -1043,6 +1495,7 @@ class ScaleGraph:
             raise ValueError(
                 "certificate fingerprint does not match the correspondence"
             )
+        self._prune_stale_evidence()
 
         for scale in (correspondence.lower_scale, correspondence.upper_scale):
             existing = self._scales.get(scale.name)
@@ -1076,9 +1529,18 @@ class ScaleGraph:
         self._certificates[correspondence.name] = certificate
 
     def certificate(self, correspondence_name: str) -> CorrespondenceEvidence:
+        if correspondence_name not in self._certificates:
+            raise KeyError(correspondence_name)
+        if not self._evidence_is_current(correspondence_name):
+            self._certificates.pop(correspondence_name, None)
+            self._correspondences.pop(correspondence_name, None)
+            raise ValueError(
+                "stored correspondence evidence is no longer valid"
+            )
         return self._certificates[correspondence_name]
 
     def has_certified_direct(self, lower_scale: str, upper_scale: str) -> bool:
+        self._prune_stale_evidence()
         return any(
             item.lower_scale.name == lower_scale
             and item.upper_scale.name == upper_scale
@@ -1093,6 +1555,7 @@ class ScaleGraph:
     ) -> Tuple[ScalePath, ...]:
         if max_hops < 1:
             raise ValueError("max_hops must be positive")
+        self._prune_stale_evidence()
         if lower_scale not in self._scales:
             raise KeyError(lower_scale)
         if upper_scale not in self._scales:

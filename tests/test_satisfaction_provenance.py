@@ -45,6 +45,7 @@ class SatisfactionProvenanceTests(unittest.TestCase):
             certificate.model_fingerprint,
             certificate.context_fingerprint,
             certificate.protocol_fingerprint,
+            certificate.claim_fingerprint,
             batch.protocol_fingerprint,
         ):
             self.assertEqual(len(fingerprint), 64)
@@ -251,6 +252,7 @@ class SatisfactionProvenanceTests(unittest.TestCase):
             "context_fingerprint",
             "trace_batch_fingerprint",
             "protocol_fingerprint",
+            "claim_fingerprint",
         ):
             self.assertEqual(len(satisfaction[field_name]), 64)
         for field_name in (
@@ -258,6 +260,7 @@ class SatisfactionProvenanceTests(unittest.TestCase):
             "context_fingerprint",
             "equivalence_fingerprint",
             "protocol_fingerprint",
+            "claim_fingerprint",
         ):
             self.assertEqual(len(residual[field_name]), 64)
         self.assertEqual(residual["bounds"]["max_states"], 1_000)
@@ -281,6 +284,7 @@ class ResidualProvenanceTests(unittest.TestCase):
             report.context_fingerprint,
             report.equivalence_fingerprint,
             report.protocol_fingerprint,
+            report.claim_fingerprint,
         ):
             self.assertEqual(len(fingerprint), 64)
 

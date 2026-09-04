@@ -211,6 +211,7 @@ class CertificateBindingTests(unittest.TestCase):
             "lower_model_fingerprint",
             "upper_model_fingerprint",
             "protocol_fingerprint",
+            "claim_fingerprint",
             "lower_context_fingerprint",
             "upper_context_fingerprint",
         ):
@@ -374,6 +375,7 @@ class CertificateBindingTests(unittest.TestCase):
         self.assertTrue(certificate.passed)
         self.assertTrue(certificate.binds_correspondence(correspondence))
         self.assertEqual(len(certificate.protocol_fingerprint), 64)
+        self.assertEqual(len(certificate.claim_fingerprint), 64)
         self.assertTrue(
             all(
                 item.certificate.correspondence_fingerprint
@@ -414,10 +416,12 @@ class CertificateBindingTests(unittest.TestCase):
 
         self.assertEqual(len(report["correspondence_fingerprint"]), 64)
         self.assertEqual(len(report["protocol_fingerprint"]), 64)
+        self.assertEqual(len(report["claim_fingerprint"]), 64)
         for case in report["cases"]:
             self.assertEqual(len(case["lower_model_fingerprint"]), 64)
             self.assertEqual(len(case["upper_model_fingerprint"]), 64)
             self.assertEqual(len(case["protocol_fingerprint"]), 64)
+            self.assertEqual(len(case["claim_fingerprint"]), 64)
 
 
 if __name__ == "__main__":
