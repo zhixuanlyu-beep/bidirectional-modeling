@@ -877,6 +877,7 @@ class SatisfactionCertificate:
     context_fingerprint: str
     trace_batch_fingerprint: str
     protocol_fingerprint: str
+    claim_fingerprint: str
     max_cost: float
     complete: bool = True
     requirements_passed: bool = True
@@ -906,13 +907,17 @@ class SatisfactionCertificate:
             ("context fingerprint", self.context_fingerprint),
             ("trace batch fingerprint", self.trace_batch_fingerprint),
             ("satisfaction protocol fingerprint", self.protocol_fingerprint),
+            ("satisfaction claim fingerprint", self.claim_fingerprint),
         ):
             validate_fingerprint(fingerprint, purpose=label)
         max_cost = float(self.max_cost)
         if math.isnan(max_cost) or max_cost < 0:
             raise ValueError("certificate max_cost must be non-negative")
         object.__setattr__(self, "max_cost", max_cost)
-        from .provenance import satisfaction_protocol_fingerprint
+        from .provenance import (
+            satisfaction_claim_fingerprint,
+            satisfaction_protocol_fingerprint,
+        )
 
         expected_protocol = satisfaction_protocol_fingerprint(
             self.spec_fingerprint,
@@ -925,16 +930,76 @@ class SatisfactionCertificate:
             raise ValueError(
                 "satisfaction certificate fields do not match its protocol fingerprint"
             )
+        expected_claim = satisfaction_claim_fingerprint(
+            self.protocol_fingerprint,
+            self.spec_name,
+            self.model_name,
+            self.satisfied,
+            self.checks,
+            self.verified_scenarios,
+            self.confidence,
+            self.assumptions,
+            self.failure_boundaries,
+            self.horizon,
+            self.complete,
+            self.requirements_passed,
+            self.coverage_authority,
+        )
+        if expected_claim != self.claim_fingerprint:
+            raise ValueError(
+                "satisfaction certificate fields do not match its claim fingerprint"
+            )
+
+    def verify_integrity(self) -> bool:
+        """Return whether protocol and semantic-result fields remain intact."""
+
+        from .provenance import (
+            satisfaction_claim_fingerprint,
+            satisfaction_protocol_fingerprint,
+        )
+
+        try:
+            expected_protocol = satisfaction_protocol_fingerprint(
+                self.spec_fingerprint,
+                self.model_fingerprint,
+                self.context_fingerprint,
+                self.trace_batch_fingerprint,
+                self.max_cost,
+            )
+            expected_claim = satisfaction_claim_fingerprint(
+                self.protocol_fingerprint,
+                self.spec_name,
+                self.model_name,
+                self.satisfied,
+                self.checks,
+                self.verified_scenarios,
+                self.confidence,
+                self.assumptions,
+                self.failure_boundaries,
+                self.horizon,
+                self.complete,
+                self.requirements_passed,
+                self.coverage_authority,
+            )
+        except Exception:
+            return False
+        return (
+            expected_protocol == self.protocol_fingerprint
+            and expected_claim == self.claim_fingerprint
+        )
 
     @property
     def verification_score(self) -> float:
-        return self.confidence.verification_score
+        return self.confidence.verification_score if self.verify_integrity() else 0.0
 
     def binds_specification(self, spec: MacroSpec) -> bool:
         from .provenance import macro_spec_fingerprint
 
         try:
-            return macro_spec_fingerprint(spec) == self.spec_fingerprint
+            return (
+                self.verify_integrity()
+                and macro_spec_fingerprint(spec) == self.spec_fingerprint
+            )
         except Exception:
             return False
 
@@ -942,7 +1007,10 @@ class SatisfactionCertificate:
         from .provenance import context_fingerprint
 
         try:
-            return context_fingerprint(context) == self.context_fingerprint
+            return (
+                self.verify_integrity()
+                and context_fingerprint(context) == self.context_fingerprint
+            )
         except Exception:
             return False
 
@@ -955,7 +1023,8 @@ class SatisfactionCertificate:
 
         try:
             return (
-                observed_model_fingerprint(model, traces, self.horizon)
+                self.verify_integrity()
+                and observed_model_fingerprint(model, traces, self.horizon)
                 == self.model_fingerprint
             )
         except Exception:
@@ -965,7 +1034,8 @@ class SatisfactionCertificate:
         """Whether this certificate was produced from the supplied trace batch."""
 
         return (
-            getattr(batch, "protocol_fingerprint", None)
+            self.verify_integrity()
+            and getattr(batch, "protocol_fingerprint", None)
             == self.trace_batch_fingerprint
             and getattr(batch, "horizon", None) == self.horizon
             and getattr(batch, "model_fingerprint", None)

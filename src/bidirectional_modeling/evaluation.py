@@ -22,10 +22,16 @@ from .provenance import (
     safe_context_fingerprint,
     safe_macro_spec_fingerprint,
     safe_observed_model_fingerprint,
+    satisfaction_claim_fingerprint,
     satisfaction_protocol_fingerprint,
     trace_batch_protocol_fingerprint,
 )
-from .structural import isolated_copy, isolated_mapping, validate_fingerprint
+from .structural import (
+    freeze_value,
+    isolated_copy,
+    isolated_mapping,
+    validate_fingerprint,
+)
 
 
 @dataclass(frozen=True)
@@ -599,6 +605,18 @@ class SatisfactionEvaluator:
                 )
                 if not isinstance(check, CheckResult):
                     raise TypeError("requirement did not return a CheckResult")
+                freeze_value(
+                    (
+                        check.name,
+                        check.category.value,
+                        check.passed,
+                        check.observed,
+                        check.expected,
+                        check.robustness,
+                        check.detail,
+                    ),
+                    purpose="satisfaction check result evidence",
+                )
                 checks.append(check)
             except Exception as error:
                 category = getattr(
@@ -703,27 +721,44 @@ class SatisfactionEvaluator:
             batch.protocol_fingerprint,
             budget.max_cost,
         )
+        check_results = tuple(checks)
+        assumptions = tuple(
+            dict.fromkeys(context.assumptions + spec.assumptions + model_assumptions)
+        )
+        failure_boundaries = tuple(
+            dict.fromkeys(model_boundaries + tuple(boundaries))
+        )
+        claim_digest = satisfaction_claim_fingerprint(
+            protocol_digest,
+            spec.name,
+            model_name,
+            satisfied,
+            check_results,
+            batch.simulations_used,
+            confidence,
+            assumptions,
+            failure_boundaries,
+            spec.horizon,
+            complete,
+            requirements_passed,
+            batch.coverage_authority,
+        )
         return SatisfactionCertificate(
             spec_name=spec.name,
             model_name=model_name,
             satisfied=satisfied,
-            checks=tuple(checks),
+            checks=check_results,
             verified_scenarios=batch.simulations_used,
             confidence=confidence,
-            assumptions=tuple(
-                dict.fromkeys(
-                    context.assumptions + spec.assumptions + model_assumptions
-                )
-            ),
-            failure_boundaries=tuple(
-                dict.fromkeys(model_boundaries + tuple(boundaries))
-            ),
+            assumptions=assumptions,
+            failure_boundaries=failure_boundaries,
             horizon=spec.horizon,
             spec_fingerprint=spec_digest,
             model_fingerprint=model_digest,
             context_fingerprint=context_digest,
             trace_batch_fingerprint=batch.protocol_fingerprint,
             protocol_fingerprint=protocol_digest,
+            claim_fingerprint=claim_digest,
             max_cost=budget.max_cost,
             complete=complete,
             requirements_passed=requirements_passed,
@@ -786,21 +821,40 @@ class SatisfactionEvaluator:
             robustness=0.0,
             detail=detail,
         )
+        assumptions = tuple(dict.fromkeys(context.assumptions + spec.assumptions))
+        failure_boundaries = tuple(boundaries)
+        confidence = ConfidenceBreakdown(0.0, 0.0, 0.0)
+        claim_digest = satisfaction_claim_fingerprint(
+            protocol_digest,
+            spec.name,
+            model_name,
+            False,
+            (check,),
+            0,
+            confidence,
+            assumptions,
+            failure_boundaries,
+            spec.horizon,
+            False,
+            False,
+            "none",
+        )
         return SatisfactionCertificate(
             spec_name=spec.name,
             model_name=model_name,
             satisfied=False,
             checks=(check,),
             verified_scenarios=0,
-            confidence=ConfidenceBreakdown(0.0, 0.0, 0.0),
-            assumptions=tuple(dict.fromkeys(context.assumptions + spec.assumptions)),
-            failure_boundaries=tuple(boundaries),
+            confidence=confidence,
+            assumptions=assumptions,
+            failure_boundaries=failure_boundaries,
             horizon=spec.horizon,
             spec_fingerprint=spec_digest,
             model_fingerprint=model_digest,
             context_fingerprint=context_digest,
             trace_batch_fingerprint=trace_protocol_digest,
             protocol_fingerprint=protocol_digest,
+            claim_fingerprint=claim_digest,
             max_cost=budget.max_cost,
             complete=False,
             requirements_passed=False,

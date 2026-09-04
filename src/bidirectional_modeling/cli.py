@@ -88,6 +88,7 @@ def build_demo_report() -> Dict[str, Any]:
                         item.certificate.trace_batch_fingerprint
                     ),
                     "protocol_fingerprint": item.certificate.protocol_fingerprint,
+                    "claim_fingerprint": item.certificate.claim_fingerprint,
                     "metrics": {
                         "cost": item.model.metrics.cost,
                         "complexity": item.model.metrics.complexity,
@@ -127,6 +128,7 @@ def build_demo_report() -> Dict[str, Any]:
                         item.certificate.trace_batch_fingerprint
                     ),
                     "protocol_fingerprint": item.certificate.protocol_fingerprint,
+                    "claim_fingerprint": item.certificate.claim_fingerprint,
                     "caveats": list(item.caveats),
                 }
                 for item in interpreted.candidates
@@ -159,6 +161,7 @@ def build_demo_report() -> Dict[str, Any]:
             "context_fingerprint": residual.context_fingerprint,
             "equivalence_fingerprint": residual.equivalence_fingerprint,
             "protocol_fingerprint": residual.protocol_fingerprint,
+            "claim_fingerprint": residual.claim_fingerprint,
             "bounds": {
                 "max_reachability_depth": residual.max_reachability_depth,
                 "max_states": residual.max_states,
@@ -285,6 +288,7 @@ def build_demo_report() -> Dict[str, Any]:
                 correspondence_certificate.correspondence_fingerprint
             ),
             "protocol_fingerprint": correspondence_certificate.protocol_fingerprint,
+            "claim_fingerprint": correspondence_certificate.claim_fingerprint,
             "boundaries": list(correspondence_certificate.boundaries),
             "lower_scenarios": sum(
                 item.certificate.lower_scenarios
@@ -312,6 +316,7 @@ def build_demo_report() -> Dict[str, Any]:
                         item.certificate.upper_model_fingerprint
                     ),
                     "protocol_fingerprint": item.certificate.protocol_fingerprint,
+                    "claim_fingerprint": item.certificate.claim_fingerprint,
                     "lower_context_fingerprint": (
                         item.certificate.lower_context_fingerprint
                     ),

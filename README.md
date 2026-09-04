@@ -20,6 +20,8 @@
 
 `0.11.0` 把同一证据链扩展到满足性验证和残差商。`TraceBatch` 现在绑定模型观测证据、上下文、时间范围、模拟上限、覆盖权威及批次结果；`evaluate_batch` 在 requirement 执行前后复核绑定，不能再把旧批次跨上下文或 horizon 重放。`SatisfactionCertificate` 进一步绑定具体规范、批次和资源协议，因此同名但语义不同的规范不能复用旧证书。`ResidualQuotientReport` 则绑定有界状态/转移证据、等价关系和全部搜索界。上下文与轨迹在回调边界深度隔离，原地修改不会污染调用方证据。
 
+`0.12.0` 为满足性、残差商、单用例对应和对应套件统一加入结果声明指纹。`protocol_fingerprint` 标识输入、证据域与资源边界，`claim_fingerprint` 另行绑定 verdict、计数、置信度、反例、边界和派生结构；构造时会同时重算两者，`verify_integrity()` 还能发现构造后发生的深层可变证据漂移。`ScaleGraph` 在读取和寻路时重新验证证书及当前对应声明，失效边会被移除，不再继续充当已认证路径。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │
@@ -42,9 +44,9 @@ Concept refinement <── Counterexample / closure analysis
 - `FiniteStateModel` 深度复制进入和离开 `applicable`、`transition`、`readout` 的状态和上下文，避免候选通过嵌套可变对象污染实验或其他候选；满足性 requirement 也分别接收隔离的轨迹与上下文。残差与闭合证明会重放同一输入，结果或动作支撑不一致时按未知行为失败关闭。
 - 证书完整性必须相对于独立场景域证明。内置 `FiniteStateModel` 由框架从初态与干预导出场景清单；第三方模型必须由调用者通过 `Context.scenario_manifest` 提供 `ScenarioKey` 清单。候选提供的 `scenario_count()` 只作诊断提示，不能证明覆盖完整。
 - 跨尺度验证允许多个微观场景映射到同一宏观场景，但要求每个微观场景都有映像、每个宏观场景都有原像，并且每个时间步的投影结果都满足上层等价关系；空场景域不能产生真空证明。
-- 每份对应证书记录对应声明、上下层观测轨迹、上下文和验证协议的 SHA-256 指纹，防止把一个投影、证据域或预算下的结论重放到另一个声明。多用例套件在所有用例间共享同一模拟预算。
-- 每个满足性批次和证书都记录规范、模型观测证据、上下文、horizon、覆盖权威及实际资源协议的 SHA-256 指纹；`binds_specification`、`binds_context`、`binds_evidence`、`binds_trace_batch` 和 `TraceBatch.binds` 可在消费结论前显式复核。
-- 每份残差商报告记录完整的有界模型证据、上下文、等价关系及搜索界；同名模型产生不同的状态/观察/转移证据时，其 `model_fingerprint` 不同，改变搜索界则会改变 `protocol_fingerprint`。
+- 每份对应证书记录对应声明、上下层观测轨迹、上下文和验证协议的 `protocol_fingerprint`，并用 `claim_fingerprint` 绑定结论、计数、反例和边界，防止把一个投影、证据域或预算下的结论重放到另一个声明。多用例套件还绑定用例角色、独立性声明与每个子证书，并在所有用例间共享同一模拟预算。
+- 每个满足性批次和证书都记录规范、模型观测证据、上下文、horizon、覆盖权威及实际资源协议的 SHA-256 指纹；证书的独立声明指纹覆盖全部检查结果和置信度。`verify_integrity`、`binds_specification`、`binds_context`、`binds_evidence`、`binds_trace_batch` 和 `TraceBatch.binds` 可在消费结论前显式复核。
+- 每份残差商报告记录完整的有界模型证据、上下文、等价关系及搜索界；同名模型产生不同的状态/观察/转移证据时，其 `model_fingerprint` 不同，改变搜索界则会改变 `protocol_fingerprint`，替换商结构或最小性结论则会使 `claim_fingerprint` 失效。
 - 默认同时执行基线和显式干预，避免只在干预情形下通过、却在正常运行中失败。
 - 目标是任务相关的最小充分模型，不是还原完整底层世界。
 
@@ -62,7 +64,7 @@ Concept refinement <── Counterexample / closure analysis
 - `refine_until_closed`：把闭合性反例接回规格细化；每次提升新可观测量后重新验证，直到闭合、预算耗尽或人工拒绝。
 - `ConceptLibrary`：保存定义、正反例、边界、相关概念、候选细化和一致的版本历史。
 - `CorrespondenceValidator`：在共享模拟预算内分别认证上下层场景域，再检查 `projection(lower_t) ~ upper_t`；投影会在隔离输入上重放，证书同时绑定声明、观测证据、上下文与协议；失败时返回具体场景、时间步和快照见证；`validate_suite` 进一步区分校准兼容性与独立留出复核。
-- `ScaleGraph`：只接纳验证通过的直接对应边。多跳路径只表示每条边分别通过，不会被偷换成端到端对应证明。
+- `ScaleGraph`：只接纳验证通过的直接对应边，并在读取、直接边查询和寻路时复核结果完整性及投影身份；已经漂移的边会被移除。多跳路径只表示每条边分别通过，不会被偷换成端到端对应证明。
 - 双向往返检查：宏观往返只有在 `HypothesisGenerator.independent_recovery=True` 时才可通过，预先注入的假设目录只能证明兼容性；微观往返默认排除原模型本身，要求另一实现按“初始场景 + 干预”复现任务行为。往返的全部阶段共用一份预算。
 
 ## 安装与运行
@@ -114,6 +116,8 @@ for candidate in result.candidates:
     print("bound to goal:", certificate.binds_specification(goal))
     print("bound to context:", certificate.binds_context(context))
     print("protocol:", certificate.protocol_fingerprint)
+    print("claim:", certificate.claim_fingerprint)
+    print("intact:", certificate.verify_integrity())
     print("verification score:", candidate.verification_score)
     for check in certificate.checks:
         print(check.name, check.passed, check.observed)
@@ -139,6 +143,7 @@ print(report.context_basis_reproduces_partition)  # 重建当前有界分区
 print(report.binds_context(context))
 print(report.binds_equivalence(equivalence))
 print(report.model_fingerprint, report.protocol_fingerprint)
+print(report.claim_fingerprint, report.verify_integrity())
 ```
 
 第 0 层只按当前 `signal` 观察分组；深度 1 加入 `probe` 上下文后，未来结果不同的隐藏状态被拆开，而仅有无关 `copy` 字段不同的两个状态保持合并。`max_reachability_depth`、`max_states` 或 `max_context_depth` 截断时，报告会保留有界分区，但 `minimal` 必为假。
@@ -216,6 +221,7 @@ certificate = engine.verify_correspondence(
 print(certificate.passed)          # complete and commutes
 print(certificate.binds_correspondence(correspondence))
 print(certificate.protocol_fingerprint)
+print(certificate.claim_fingerprint, certificate.verify_integrity())
 print(certificate.counterexamples)
 ```
 

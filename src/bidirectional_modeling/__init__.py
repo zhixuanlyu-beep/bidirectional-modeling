@@ -80,6 +80,7 @@ from .provenance import (
     equivalence_fingerprint,
     macro_spec_fingerprint,
     observed_model_fingerprint,
+    satisfaction_claim_fingerprint,
 )
 from .realization import (
     CandidateGenerator,
@@ -190,6 +191,7 @@ __all__ = [
     "macro_spec_fingerprint",
     "observed_model_fingerprint",
     "pareto_partition",
+    "satisfaction_claim_fingerprint",
 ]
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
