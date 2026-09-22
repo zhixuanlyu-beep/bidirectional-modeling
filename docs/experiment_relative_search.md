@@ -93,7 +93,7 @@ S\subseteq D,\qquad \Phi(S)=\Phi(D)\ne\varnothing
 
 的最小基数证据。它不使用先前的剪枝结果或已筛选候选作为免费背景，也不要求唯一模型。\(\Phi(D)\) 有多个答案时，仍可压缩证据，但 `determined=False`。空版本空间和未知预测不能产生这种精确证书。
 
-`max_subsets` 控制组合搜索预算；耗尽则返回原始证据这个有效上界，同时设置 `minimum_cardinality=False`。零预算也不会声称已完成最小化。证书绑定协议、目标定义、全部候选声明及原始数据；扩展模型类、改变目标或替换证据后必须重做验证。`validates_macro` 还会重查声称的最小基数，验证开销可能是指数级，不能把它误称为廉价通用证明检查器。大空间应使用领域求解器或可验证的覆盖证明替代显式穷举。
+`max_subsets` 控制组合搜索预算；耗尽则返回原始证据这个有效上界，同时设置 `minimum_cardinality=False`。零预算也不会声称已完成最小化。证书绑定协议、目标定义、全部候选声明及原始数据；扩展模型类、改变目标或替换证据后必须重做验证。`verify_macro` 将充分性和最小性验证分开，并对最小性搜索设置 `max_subsets` 和共享操作预算。最小性检查仍可能是指数级，不能把它误称为廉价通用证明检查器；预算耗尽返回未决。大空间应使用领域求解器或可验证的覆盖证明替代显式穷举。
 
 示例中两条数据已区分目录内的 `x/z/xz`，但仍需三条数据才能排除响应宇宙中的整个可加模型族；两种证书的证明对象不同。
 
@@ -113,3 +113,73 @@ S\subseteq D,\qquad \Phi(S)=\Phi(D)\ne\varnothing
 - 通用 MDL 数据编码：这里精确匹配数据后按模型描述成本排序，不实现概率似然或 `L(D|M)`。
 
 这些限制不妨碍在有限域中验证算法的可靠性，但不能把有限域的确定性结果升级为开放世界的最终真理。
+
+
+## 0.12.1：预算、报告与兼容性
+
+所有公开搜索/验证/选点方法接受 `budget=SearchWorkBudget(...)`，默认每次调用创建最多 1,000,000 个语义操作的新预算。传入同一个实例可跨多次调用累计，结果中的 `work` 是不可变的累计快照，不会随下一次调用而变化。
+
+```python
+from bidirectional_modeling import SearchWorkBudget
+from bidirectional_modeling.search_examples import conflict_search_scenario
+
+search, data = conflict_search_scenario()
+budget = SearchWorkBudget(max_operations=10_000)
+report = search.search(data, budget=budget)
+assert report.determined
+assert report.full_quotient == (('x',), ('z',), ('xz',))
+assert report.surviving_quotient == (('xz',),)
+
+basis = search.compress_evidence(data, budget=budget)
+validation = search.verify_macro(basis, data, check_minimality=False, budget=budget)
+assert validation.sufficiency == 'valid'
+assert validation.minimality == 'not_checked'
+# 只验证了充分性，尚不能确认该证书声称的最小性。
+assert not validation.valid
+```
+
+### 工作量与取消
+
+| 计数 | 含义 |
+| --- | --- |
+| `world_queries` | 启动一次响应宇宙过滤，在分配过滤集合前计数 |
+| `response_checks` | 检查数据标签是否允许、比较响应是否符合观测 |
+| `constraint_checks` | 检查响应行是否满足约束 |
+| `candidate_checks` | 调度候选、收集宏观答案、检查目录成员 |
+| `certificate_checks` | 启动证书验证/学习，或检查一个候选是否继承冲突 |
+| `partition_checks` | 读取一个候选在一个实验上的分组响应 |
+| `pair_checks` | 在一个实验上比较一个候选对 |
+| `subset_checks` | 尝试一个证据子集 |
+
+`work.total` 为上述计数之和，预算在执行对应操作前扣除，因此不会超过 `max_operations`。这是算法语义操作上限，**不是严格时间或内存上限**：输入构造、目录/约束索引构建、集合分配、排序、指纹编码和结果组装没有按 CPU 指令计费。大输入仍需要有界构造器与后续索引/求解后端。
+
+通过 `SearchWorkBudget(cancelled=lambda: should_stop)` 提供协作取消信号，每次语义操作前检查。预算一旦取消或耗尽就保持停止；需要继续时创建新预算，并重放该操作。此版本不提供中途检查点恢复。
+
+`search` 捕获预算中断，保留已完成的相容、拒绝与剪枝结论，未完成候选进入 `undecided`。如果失败模型已经重放完毕，但冲突核提取尚未完成，保留该模型的拒绝结果，丢弃尚未完成的证书。`verify_macro` 则保留已经验证的充分性。
+
+其余返回简单值的方法（包括 `learn_conflict`、`validates_conflict`、`partition`、`compress_evidence`、`next_experiment`、`macro_identifiable`、`irreducible_against`）在操作预算中断时抛出 `SearchBudgetExceeded`，异常包含 `reason` 和 `work`。不能把异常转换为“模型失败”“没有可做实验”或“不可约性已证明”。`compress_evidence(max_subsets=...)` 的子集上限仍沿用旧行为：返回原始证据的有效上界；共享操作预算耗尽则抛出异常。
+
+### 充分性与最小性分开报告
+
+`verify_macro(certificate, data, check_minimality=True, max_subsets=10000)` 返回：
+
+- `sufficiency`：`valid` / `invalid` / `undecided`。
+- `minimality`：`valid` / `invalid` / `undecided` / `not_checked` / `not_claimed`。
+- `stop_reason`、本次 `subsets_checked` 与累计 `work`。
+
+最小性预算耗尽时，可以同时有 `sufficiency='valid'` 和 `minimality='undecided'`；这不是证书充分性失败。找到更小子集时最小性为 `invalid`，充分性仍可成立。只有充分性通过，而且声称的最小性也通过（或没有声称最小性），`valid` 才为真。
+
+兼容入口 `validates_macro` 仍返回布尔值，但默认验证有界。其 `False` 同时可能表示失败和未决，不能用它判定证据必然错误；需要原因时改用 `verify_macro`。`check_minimality=False` 可避免指数级最小性搜索，但仍重查数据绑定与证据充分性。
+
+### 商空间和停止原因
+
+- `full_quotient`：完整候选目录在全部允许实验上的分组；旧字段 `quotient` 保留相同含义。
+- `surviving_quotient`：上述分组限制到相容和未决候选。
+- `observed_quotient`：相容和未决候选仅按已经观测的实验分组。它可以被下一次实验细化，不是理论全域等价。
+- `experiment_domain` / `observed_experiments`：分别说明这两种实验范围。
+- `partition_complete`：两种分组是否都已完成。分组过程中耗尽预算时，该值为假，空字段不能被解释为候选已经全部排除。
+- `undecided_reasons`：逐个候选记录未知预测、候选重放预算耗尽或共享工作预算/取消导致的未决。
+
+`stop_reason` 区分 `determined`、`macro_ambiguous`、`no_compatible_candidate`、`inconsistent_evidence`、`unknown_predictions`、`replay_budget_exhausted`、`work_budget_exhausted` 和 `cancelled`。其中响应宇宙中不存在与数据相容的行才是 `inconsistent_evidence`；数据在宇宙中允许、但没有候选符合时是 `no_compatible_candidate`，应考虑扩展目录。
+
+`max_replays` 仍只限制候选重放数。即使设为零，输入检查与分组仍可能发生；若要限制整个操作流程的语义工作量，请同时传入共享 `SearchWorkBudget`。

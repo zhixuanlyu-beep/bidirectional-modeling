@@ -1,5 +1,6 @@
 """An experiment-bounded example of failed materials yielding a valid reconstruction."""
 from itertools import product
+from dataclasses import asdict
 
 from .search import (
     DescriptionLength, ExperimentHypothesisSearch, ResponseConstraint,
@@ -40,6 +41,13 @@ def build_search_demo_report():
     basis = search.compress_evidence(evidence)
     return {
         'scope': search.protocol.scope,
+        'full_quotient': report.full_quotient,
+        'surviving_quotient': report.surviving_quotient,
+        'observed_quotient': report.observed_quotient,
+        'partition_complete': report.partition_complete,
+        'stop_reason': report.stop_reason,
+        'work': asdict(report.work),
+        'sufficiency_only': asdict(search.verify_macro(basis, evidence, check_minimality=False)),
         'compatible': report.compatible,
         'rejected': report.rejected,
         'pruned': report.pruned,

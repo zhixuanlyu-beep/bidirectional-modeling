@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from itertools import combinations
 from fractions import Fraction
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 from .structural import fingerprint_value
 
@@ -22,6 +22,80 @@ def _name(value: str) -> None:
 def _natural(value: int) -> None:
     if type(value) is not int or value < 0:
         raise ValueError("costs and budgets must be nonnegative integers")
+
+
+@dataclass(frozen=True)
+class SearchWork:
+    """Cumulative semantic operations; excludes setup, hashing, sorting and I/O."""
+    world_queries: int = 0
+    response_checks: int = 0
+    constraint_checks: int = 0
+    candidate_checks: int = 0
+    certificate_checks: int = 0
+    partition_checks: int = 0
+    pair_checks: int = 0
+    subset_checks: int = 0
+
+    @property
+    def total(self) -> int:
+        return sum(getattr(self, f.name) for f in fields(self))
+
+
+class SearchBudgetExceeded(RuntimeError):
+    """An interrupted operation is undecided, never a falsification."""
+    def __init__(self, reason: str, work: SearchWork) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.work = work
+
+
+class SearchWorkBudget:
+    """Share one cumulative, cooperative budget across search/validation calls.
+
+    Cancellation is checked before each semantic operation. This is not a wall
+    clock, allocation or constructor limit. Once interrupted, a budget stays
+    stopped; create a new budget to resume by replaying the operation.
+    """
+    def __init__(self, max_operations: int = 1_000_000,
+                 cancelled: Optional[Callable[[], bool]] = None) -> None:
+        _natural(max_operations)
+        if cancelled is not None and not callable(cancelled):
+            raise TypeError("cancelled must be a callable")
+        self.max_operations = max_operations
+        self.cancelled = cancelled
+        self._counts = {f.name: 0 for f in fields(SearchWork)}
+        self._reason = None
+        self._total = 0
+
+    @property
+    def work(self) -> SearchWork:
+        return SearchWork(**self._counts)
+
+    def consume(self, category: str) -> None:
+        if category not in self._counts:
+            raise ValueError("unknown work category")
+        if self._reason is None:
+            if self.cancelled is not None and self.cancelled():
+                self._reason = "cancelled"
+            elif self._total >= self.max_operations:
+                self._reason = "work_budget_exhausted"
+        if self._reason is not None:
+            raise SearchBudgetExceeded(self._reason, self.work)
+        self._counts[category] += 1
+        self._total += 1
+
+
+@dataclass(frozen=True)
+class MacroValidationReport:
+    sufficiency: str
+    minimality: str
+    stop_reason: str
+    subsets_checked: int
+    work: SearchWork
+
+    @property
+    def valid(self) -> bool:
+        return self.sufficiency == "valid" and self.minimality in ("valid", "not_claimed")
 
 
 @dataclass(frozen=True)
@@ -176,6 +250,19 @@ class HypothesisSearchReport:
     determined: bool
     conflicts: Tuple[ConflictCertificate, ...]
     replay_checks: int
+    surviving_quotient: Tuple[Tuple[str, ...], ...] = ()
+    observed_quotient: Tuple[Tuple[str, ...], ...] = ()
+    partition_complete: bool = False
+    experiment_domain: Tuple[str, ...] = ()
+    observed_experiments: Tuple[str, ...] = ()
+    undecided_reasons: Tuple[Tuple[str, str], ...] = ()
+    stop_reason: str = "completed"
+    work: SearchWork = SearchWork()
+
+    @property
+    def full_quotient(self) -> Tuple[Tuple[str, ...], ...]:
+        """Explicit name for the backward-compatible full-catalogue quotient."""
+        return self.quotient
 
 
 class ExperimentHypothesisSearch:
@@ -215,56 +302,74 @@ class ExperimentHypothesisSearch:
                    h.commitments, h.materials) for h in self.hypotheses),
         ))
 
-    def _evidence(self, evidence):
+    def _evidence(self, evidence, budget):
         evidence = tuple(evidence)
         names = {e.name: i for i, e in enumerate(self.protocol.experiments)}
         for observation in evidence:
             if observation.experiment not in names:
                 raise ValueError("evidence lies outside the allowed experiment domain")
             index = names[observation.experiment]
-            if not any(w[index] == observation.response for w in self.protocol.worlds):
+            for world in self.protocol.worlds:
+                budget.consume("response_checks")
+                if world[index] == observation.response:
+                    break
+            else:
                 raise ValueError("observed response lies outside the declared universe")
         return evidence
 
-    def _worlds(self, commitments=(), evidence=()):
+    def _worlds(self, commitments=(), evidence=(), *, budget):
+        budget.consume("world_queries")
         possible = set(range(len(self.protocol.worlds)))
-        constraints = {c.name: c.worlds for c in self.protocol.constraints}
+        constraints = {c.name: set(c.worlds) for c in self.protocol.constraints}
         for name in commitments:
-            possible.intersection_update(constraints[name])
+            retained = set()
+            for i in sorted(possible):
+                budget.consume("constraint_checks")
+                if i in constraints[name]:
+                    retained.add(i)
+            possible = retained
         indices = {e.name: i for i, e in enumerate(self.protocol.experiments)}
         for observation in evidence:
-            possible = {i for i in possible if self.protocol.worlds[i][
-                indices[observation.experiment]] == observation.response}
+            retained = set()
+            for i in sorted(possible):
+                budget.consume("response_checks")
+                if self.protocol.worlds[i][indices[observation.experiment]] == observation.response:
+                    retained.add(i)
+            possible = retained
         return possible
 
-    def learn_conflict(self, commitments, evidence) -> Optional[ConflictCertificate]:
+    def learn_conflict(self, commitments, evidence, *, budget=None) -> Optional[ConflictCertificate]:
         """Extract an inclusion-minimal joint core, not blame for each member.
 
         Proof is exhaustive intersection in the caller-declared response universe.
         Data inconsistent on their own cannot certify a model conflict.
         """
-        evidence = self._evidence(evidence)
+        budget = budget if budget is not None else SearchWorkBudget()
+        budget.consume("certificate_checks")
+        evidence = self._evidence(evidence, budget)
         core = tuple(dict.fromkeys(commitments))
         known = {c.name for c in self.protocol.constraints}
         if any(c not in known for c in core):
             raise ValueError("unknown commitment")
-        if (not core or not self._worlds(evidence=evidence)
-                or not self._worlds(core) or self._worlds(core, evidence)):
+        if (not core or not self._worlds(evidence=evidence, budget=budget)
+                or not self._worlds(core, budget=budget) or self._worlds(core, evidence, budget=budget)):
             return None
         for name in tuple(core):
             trial = tuple(c for c in core if c != name)
-            if not self._worlds(trial, evidence):
+            if not self._worlds(trial, evidence, budget=budget):
                 core = trial
         support = evidence
         for observation in evidence:
             trial = tuple(o for o in support if o != observation)
-            if not self._worlds(core, trial):
+            if not self._worlds(core, trial, budget=budget):
                 support = trial
         return ConflictCertificate(self.protocol.fingerprint, core, support)
 
-    def validates_conflict(self, certificate: ConflictCertificate, evidence) -> bool:
+    def validates_conflict(self, certificate: ConflictCertificate, evidence, *, budget=None) -> bool:
         """Recheck binding, live evidence dependencies, and the actual contradiction."""
-        evidence = self._evidence(evidence)
+        budget = budget if budget is not None else SearchWorkBudget()
+        budget.consume("certificate_checks")
+        evidence = self._evidence(evidence, budget)
         if certificate.protocol_fingerprint != self.protocol.fingerprint:
             return False
         if not set(certificate.evidence).issubset(evidence):
@@ -274,16 +379,17 @@ class ExperimentHypothesisSearch:
             for c in certificate.commitments
         ):
             return False
-        return bool(self._worlds(evidence=certificate.evidence)
-                    and self._worlds(certificate.commitments)
-                    and not self._worlds(certificate.commitments, certificate.evidence))
+        return bool(self._worlds(evidence=certificate.evidence, budget=budget)
+                    and self._worlds(certificate.commitments, budget=budget)
+                    and not self._worlds(certificate.commitments, certificate.evidence, budget=budget))
 
-    def partition(self, experiments=None) -> Tuple[Tuple[str, ...], ...]:
+    def partition(self, experiments=None, *, budget=None) -> Tuple[Tuple[str, ...], ...]:
         """Full E gives theoretical equivalence; a subset gives provisional groups.
 
         Unknown predictions are separate unresolved representatives. These groups
         are an evaluation view and must never replace the structural catalogue.
         """
+        budget = budget if budget is not None else SearchWorkBudget()
         names = tuple(e.name for e in self.protocol.experiments)
         selected = names if experiments is None else tuple(experiments)
         if any(name not in names for name in selected):
@@ -291,74 +397,145 @@ class ExperimentHypothesisSearch:
         indices = tuple(names.index(name) for name in selected)
         groups = {}
         for h in sorted(self.hypotheses, key=lambda h: (h.description.total, h.name)):
-            signature = (("unknown", h.name) if h.world is None else
-                         ("known", tuple(self.protocol.worlds[h.world][i] for i in indices)))
+            budget.consume("candidate_checks")
+            values = []
+            if h.world is not None:
+                for i in indices:
+                    budget.consume("partition_checks")
+                    values.append(self.protocol.worlds[h.world][i])
+            signature = (("unknown", h.name) if h.world is None else ("known", tuple(values)))
             groups.setdefault(signature, []).append(h.name)
         return tuple(tuple(group) for group in groups.values())
 
-    def macro_identifiable(self) -> bool:
+    def macro_identifiable(self, *, budget=None) -> bool:
+        budget = budget if budget is not None else SearchWorkBudget()
         by_name = {h.name: h for h in self.hypotheses}
-        return bool(self.hypotheses) and all(h.world is not None for h in self.hypotheses) and all(
-            len({by_name[name].macro_answer for name in group}) == 1
-            for group in self.partition()
-        )
+        if not by_name:
+            return False
+        for h in self.hypotheses:
+            budget.consume("candidate_checks")
+            if h.world is None:
+                return False
+        for group in self.partition(budget=budget):
+            answers = set()
+            for name in group:
+                budget.consume("candidate_checks")
+                answers.add(by_name[name].macro_answer)
+            if len(answers) != 1:
+                return False
+        return True
 
-    def irreducible_against(self, hypothesis: str, lower_names) -> Optional[bool]:
+    def irreducible_against(self, hypothesis: str, lower_names, *, budget=None) -> Optional[bool]:
         """Whether no representative in the declared finite lower class substitutes it.
 
         The adapter defines the allowed lower-order language, not variable count.
         None means an empty reference class or unknown predictions. True is only
         relative to this explicit class, never all imaginable lower-order models.
         """
+        budget = budget if budget is not None else SearchWorkBudget()
         by_name = {h.name: h for h in self.hypotheses}
         lower_names = tuple(lower_names)
         if hypothesis not in by_name or any(n not in by_name for n in lower_names):
             raise ValueError("unknown hypothesis")
         candidate = by_name[hypothesis]
-        lower = tuple(by_name[n] for n in lower_names)
-        if candidate.world is None or not lower:
+        if candidate.world is None or not lower_names:
             return None
-        if any(h.world == candidate.world for h in lower):
-            return False
-        if any(h.world is None for h in lower):
-            return None
-        return True
+        unknown = False
+        for name in lower_names:
+            budget.consume("candidate_checks")
+            h = by_name[name]
+            if h.world == candidate.world:
+                return False
+            unknown = unknown or h.world is None
+        return None if unknown else True
 
-    def search(self, evidence=(), certificates=(), *, max_replays=None) -> HypothesisSearchReport:
-        evidence = self._evidence(evidence)
+    def search(self, evidence=(), certificates=(), *, max_replays=None,
+               budget=None) -> HypothesisSearchReport:
+        budget = budget if budget is not None else SearchWorkBudget()
         if max_replays is not None:
             _natural(max_replays)
-        active = [c for c in certificates if self.validates_conflict(c, evidence)]
-        compatible, pruned, rejected, undecided = [], [], [], []
+        evidence = tuple(evidence)
+        compatible, pruned, rejected = [], [], []
+        reasons = {}
+        active = []
         replay_checks = 0
-        possible = self._worlds(evidence=evidence)
-        for h in sorted(self.hypotheses, key=lambda h: (h.description.total, h.name)):
-            if any(set(c.commitments).issubset(h.commitments) for c in active):
-                pruned.append(h.name)
-            elif h.world is None or (max_replays is not None and replay_checks >= max_replays):
-                undecided.append(h.name)
-            else:
-                replay_checks += 1
-                if h.world in possible:
-                    compatible.append(h.name)
+        full, observed = (), ()
+        partition_complete = False
+        stopped = None
+        inconsistent = False
+        domain = tuple(e.name for e in self.protocol.experiments)
+        measured = tuple(name for name in domain if any(o.experiment == name for o in evidence))
+        try:
+            evidence = self._evidence(evidence, budget)
+            full = self.partition(budget=budget)
+            observed = self.partition(measured, budget=budget)
+            partition_complete = True
+            for c in certificates:
+                if self.validates_conflict(c, evidence, budget=budget):
+                    active.append(c)
+            possible = self._worlds(evidence=evidence, budget=budget)
+            inconsistent = not possible
+            for h in sorted(self.hypotheses, key=lambda h: (h.description.total, h.name)):
+                budget.consume("candidate_checks")
+                inherited = False
+                for c in active:
+                    budget.consume("certificate_checks")
+                    if set(c.commitments).issubset(h.commitments):
+                        inherited = True
+                        break
+                if inherited:
+                    pruned.append(h.name)
+                elif h.world is None:
+                    reasons[h.name] = "unknown_prediction"
+                elif max_replays is not None and replay_checks >= max_replays:
+                    reasons[h.name] = "replay_budget_exhausted"
                 else:
-                    rejected.append(h.name)
-                    certificate = self.learn_conflict(h.commitments, evidence)
-                    if certificate is not None and certificate not in active:
-                        active.append(certificate)
-        answers = tuple(sorted({h.macro_answer for h in self.hypotheses
-                                if h.name in compatible or h.name in undecided}))
+                    replay_checks += 1
+                    if h.world in possible:
+                        compatible.append(h.name)
+                    else:
+                        rejected.append(h.name)
+                        # If learning is interrupted the completed rejection remains valid.
+                        c = self.learn_conflict(h.commitments, evidence, budget=budget)
+                        if c is not None and c not in active:
+                            active.append(c)
+        except SearchBudgetExceeded as error:
+            stopped = error.reason
+        classified = set(compatible + pruned + rejected)
+        ordered = sorted(self.hypotheses, key=lambda h: (h.description.total, h.name))
+        undecided = tuple(h.name for h in ordered if h.name not in classified)
+        for name in undecided:
+            reasons.setdefault(name, stopped or "unknown_prediction")
+        survivors = set(compatible) | set(undecided)
+        def surviving(groups):
+            return tuple(tuple(n for n in group if n in survivors)
+                         for group in groups if any(n in survivors for n in group))
+        answers = tuple(sorted({h.macro_answer for h in self.hypotheses if h.name in survivors}))
+        determined = bool(compatible) and not undecided and len(answers) == 1
+        stop_reason = stopped or (
+            "replay_budget_exhausted" if "replay_budget_exhausted" in reasons.values() else
+            "inconsistent_evidence" if inconsistent else
+            "unknown_predictions" if undecided else
+            "determined" if determined else
+            "no_compatible_candidate" if not compatible else "macro_ambiguous"
+        )
         return HypothesisSearchReport(
-            tuple(compatible), tuple(pruned), tuple(rejected), tuple(undecided),
-            self.partition(), answers, bool(compatible) and not undecided and len(answers) == 1,
-            tuple(active), replay_checks,
+            tuple(compatible), tuple(pruned), tuple(rejected), undecided,
+            full, answers, determined, tuple(active), replay_checks,
+            surviving(full), surviving(observed), partition_complete, domain, measured,
+            tuple((n, reasons[n]) for n in undecided), stop_reason, budget.work,
         )
 
-    def _answers(self, evidence):
-        worlds = self._worlds(evidence=evidence)
-        return tuple(sorted({h.macro_answer for h in self.hypotheses if h.world in worlds}))
+    def _answers(self, evidence, budget):
+        worlds = self._worlds(evidence=evidence, budget=budget)
+        answers = set()
+        for h in self.hypotheses:
+            budget.consume("candidate_checks")
+            if h.world in worlds:
+                answers.add(h.macro_answer)
+        return tuple(sorted(answers))
 
-    def compress_evidence(self, evidence, *, max_subsets=10000) -> MacroEvidenceCertificate:
+    def compress_evidence(self, evidence, *, max_subsets=10000, budget=None) -> MacroEvidenceCertificate:
         """Exact cardinality search with a hard subset-count budget.
 
         Every subset is evaluated against the ORIGINAL catalogue, with no free
@@ -366,10 +543,11 @@ class ExperimentHypothesisSearch:
         minimum_cardinality=False, never a false optimality claim.
         """
         _natural(max_subsets)
-        evidence = self._evidence(evidence)
+        budget = budget if budget is not None else SearchWorkBudget()
+        evidence = self._evidence(evidence, budget)
         if any(h.world is None for h in self.hypotheses):
             raise ValueError("unknown predictions prevent an exact evidence certificate")
-        answers = self._answers(evidence)
+        answers = self._answers(evidence, budget)
         if not answers:
             raise ValueError("empty version space cannot certify a macro answer")
         checked = 0
@@ -378,47 +556,86 @@ class ExperimentHypothesisSearch:
                 if checked >= max_subsets:
                     return MacroEvidenceCertificate(self.fingerprint, evidence, evidence,
                                                     answers, len(answers) == 1, False, checked)
+                budget.consume("subset_checks")
                 checked += 1
-                if self._answers(subset) == answers:
+                if self._answers(subset, budget) == answers:
                     return MacroEvidenceCertificate(self.fingerprint, evidence, subset,
                                                     answers, len(answers) == 1, True, checked)
         raise AssertionError("full evidence must preserve its own answers")
 
-    def validates_macro(self, certificate: MacroEvidenceCertificate, evidence) -> bool:
-        evidence = self._evidence(evidence)
-        if (certificate.problem_fingerprint != self.fingerprint
-                or certificate.full_evidence != evidence
-                or not set(certificate.retained_evidence).issubset(evidence)
-                or any(h.world is None for h in self.hypotheses)):
-            return False
-        answers = self._answers(evidence)
-        if (not answers or certificate.answers != answers
-                or self._answers(certificate.retained_evidence) != answers
-                or certificate.determined != (len(answers) == 1)):
-            return False
-        if certificate.minimum_cardinality:
-            for size in range(len(certificate.retained_evidence)):
-                if any(self._answers(s) == answers for s in combinations(evidence, size)):
-                    return False
-        return True
+    def verify_macro(self, certificate: MacroEvidenceCertificate, evidence, *,
+                     check_minimality=True, max_subsets=10000, budget=None) -> MacroValidationReport:
+        """Verify sufficiency first, then optionally verify a minimality claim.
 
-    def next_experiment(self, evidence=()) -> Optional[SearchExperiment]:
+        Exhaustion preserves a proved sufficiency result. Neither skipping nor
+        exhausting the minimality check verifies a claimed optimum.
+        """
+        _natural(max_subsets)
+        budget = budget if budget is not None else SearchWorkBudget()
+        sufficient, minimality, checked = "undecided", "not_checked", 0
+        try:
+            budget.consume("certificate_checks")
+            evidence = self._evidence(evidence, budget)
+            if (certificate.problem_fingerprint != self.fingerprint
+                    or certificate.full_evidence != evidence
+                    or not set(certificate.retained_evidence).issubset(evidence)
+                    or any(h.world is None for h in self.hypotheses)):
+                return MacroValidationReport("invalid", minimality, "binding_mismatch", checked, budget.work)
+            answers = self._answers(evidence, budget)
+            if (not answers or certificate.answers != answers
+                    or self._answers(certificate.retained_evidence, budget) != answers
+                    or certificate.determined != (len(answers) == 1)):
+                return MacroValidationReport("invalid", minimality, "insufficient_evidence", checked, budget.work)
+            sufficient = "valid"
+            if not certificate.minimum_cardinality:
+                return MacroValidationReport(sufficient, "not_claimed", "completed", checked, budget.work)
+            if not check_minimality:
+                return MacroValidationReport(sufficient, minimality, "sufficiency_only", checked, budget.work)
+            minimality = "undecided"
+            for size in range(len(certificate.retained_evidence)):
+                for subset in combinations(evidence, size):
+                    if checked >= max_subsets:
+                        return MacroValidationReport(sufficient, minimality, "subset_budget_exhausted", checked, budget.work)
+                    budget.consume("subset_checks")
+                    checked += 1
+                    if self._answers(subset, budget) == answers:
+                        return MacroValidationReport(sufficient, "invalid", "smaller_basis_found", checked, budget.work)
+            return MacroValidationReport(sufficient, "valid", "completed", checked, budget.work)
+        except SearchBudgetExceeded as error:
+            return MacroValidationReport(sufficient, minimality, error.reason, checked, budget.work)
+
+    def validates_macro(self, certificate: MacroEvidenceCertificate, evidence, *,
+                        max_subsets=10000, budget=None) -> bool:
+        """Bounded boolean compatibility wrapper; False also includes undecided.
+
+        Use verify_macro to distinguish invalidity from resource exhaustion.
+        """
+        return self.verify_macro(certificate, evidence, max_subsets=max_subsets, budget=budget).valid
+
+    def next_experiment(self, evidence=(), *, budget=None) -> Optional[SearchExperiment]:
         """Greedy unequal-answer pair coverage per cost, not information gain.
 
         None means no known separating experiment; it is not a success status.
         """
-        evidence = self._evidence(evidence)
-        possible = self._worlds(evidence=evidence)
-        survivors = tuple({(h.world, h.macro_answer): h for h in self.hypotheses
-                           if h.world in possible}.values())
+        budget = budget if budget is not None else SearchWorkBudget()
+        evidence = self._evidence(evidence, budget)
+        possible = self._worlds(evidence=evidence, budget=budget)
+        unique = {}
+        for h in self.hypotheses:
+            budget.consume("candidate_checks")
+            if h.world in possible:
+                unique[h.world, h.macro_answer] = h
+        survivors = tuple(unique.values())
         measured = {o.experiment for o in evidence}
         ranked = []
         for i, experiment in enumerate(self.protocol.experiments):
             if experiment.name in measured:
                 continue
-            covered = sum(a.macro_answer != b.macro_answer
-                          and self.protocol.worlds[a.world][i] != self.protocol.worlds[b.world][i]
-                          for a, b in combinations(survivors, 2))
+            covered = 0
+            for a, b in combinations(survivors, 2):
+                budget.consume("pair_checks")
+                covered += (a.macro_answer != b.macro_answer
+                            and self.protocol.worlds[a.world][i] != self.protocol.worlds[b.world][i])
             if covered:
                 ranked.append((Fraction(covered, experiment.cost), -experiment.cost, -i, experiment))
         return max(ranked, key=lambda item: item[:3])[3] if ranked else None

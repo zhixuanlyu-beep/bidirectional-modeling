@@ -103,6 +103,11 @@ from .residual import (
 )
 
 from .search import (
+    MacroValidationReport,
+    SearchBudgetExceeded,
+    SearchWork,
+    SearchWorkBudget,
+
     ConflictCertificate,
     DescriptionLength,
     ExperimentHypothesisSearch,
@@ -116,6 +121,11 @@ from .search import (
 )
 
 __all__ = [
+    "MacroValidationReport",
+    "SearchBudgetExceeded",
+    "SearchWork",
+    "SearchWorkBudget",
+
     "ConflictCertificate",
     "DescriptionLength",
     "ExperimentHypothesisSearch",
@@ -216,4 +226,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.12.0"
+__version__ = "0.12.1"
