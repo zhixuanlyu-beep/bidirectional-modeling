@@ -183,3 +183,91 @@ assert not validation.valid
 `stop_reason` 区分 `determined`、`macro_ambiguous`、`no_compatible_candidate`、`inconsistent_evidence`、`unknown_predictions`、`replay_budget_exhausted`、`work_budget_exhausted` 和 `cancelled`。其中响应宇宙中不存在与数据相容的行才是 `inconsistent_evidence`；数据在宇宙中允许、但没有候选符合时是 `no_compatible_candidate`，应考虑扩展目录。
 
 `max_replays` 仍只限制候选重放数。即使设为零，输入检查与分组仍可能发生；若要限制整个操作流程的语义工作量，请同时传入共享 `SearchWorkBudget`。
+
+## 0.13.0：可执行模型、会话与对照基准
+
+### 从模型生成响应表
+
+`BidirectionalModelingEngine.prepare_hypothesis_search` 使用引擎已有的 `SatisfactionEvaluator`；也可以直接使用 `ExecutableSearchAdapter`。
+
+```python
+from bidirectional_modeling import (
+    BidirectionalModelingEngine, Context, DescriptionLength, FiniteStateModel,
+    ModelMetrics, ModelSearchCandidate, ModelSearchCase, ScenarioKey,
+    SearchExperiment, SearchProtocol, SearchObservation, SearchSession,
+)
+
+model = FiniteStateModel(
+    name='constant', states={'s': {'y': '0'}}, initial_states=('s',),
+    actions=('noop',), transition=lambda s, a, c: s,
+    readout=lambda s, c: dict(s), metrics=ModelMetrics(1, 1, 0),
+)
+protocol = SearchProtocol('exact binary output', 'code-v1',
+    (SearchExperiment('read', 'read final y'),), (('0',), ('1',)))
+case = ModelSearchCase('read', Context(), ScenarioKey('s', 'baseline'), 'y')
+prepared = BidirectionalModelingEngine().prepare_hypothesis_search(
+    protocol, (ModelSearchCandidate(model, DescriptionLength(relations=1)),),
+    (case,), target='output class', world_answers=('low', 'high'),
+)
+assert prepared.simulations_used == 2
+assert not prepared.diagnostics
+
+# 只有独立实验数据才成为 evidence；模型预测不会自动写入证据。
+session = SearchSession(prepared.search, (SearchObservation('read', '0', 'lab'),))
+assert session.run().determined
+```
+
+每个 `ModelSearchCase` 固定上下文、场景、时域和末步读出字段；必须按顺序覆盖协议的完整实验域。响应标签必须是字符串。`world_answers` 为响应宇宙的每一行定义目标答案，适配器据实际响应计算候选答案，避免逐模型手填标签。目标定义和读出协议分别绑定到目标/实验语义指纹。
+
+每个候选、每个用例收集两份完整 `TraceBatch`，检查批次绑定与两次观测模型指纹相同。未知场景、不完整覆盖、响应超出宇宙、无效承诺、运行异常或重复采集不一致都会生成诊断，候选保留为 `world=None`；不会当作实验反例。未决候选不携带未经适配确认的承诺。
+
+`max_simulations` 在全部候选、用例和两次采集之间共享。若自定义收集器抛出异常，无法确认其实际消耗，剩余额度全部预留，因而 `simulations_used` 在该情形是保守计费而非精确完成次数。操作预算与采集预算仍是两种不同资源。
+
+`batch_bindings` 返回每个候选/用例的两份批次协议指纹，便于外部归档关联。重复采集只能检查本次有限域内的可重复性，不证明任意未来行为。当前没有跨调用预测缓存，不能用同名但已修改的可执行模型冒用旧预测；应重新执行适配。会话只保存适配后的离散声明，不保存原始模型代码或完整轨迹。
+
+### 可恢复的证据会话
+
+```python
+from bidirectional_modeling import SearchSession
+from bidirectional_modeling.search_examples import conflict_search_scenario
+
+search, data = conflict_search_scenario()
+session = SearchSession(search, data)
+session.run()                       # 提取并保留共同冲突证书
+session.save('search-session.json') # 同目录临时文件 + 原子替换
+restored = SearchSession.load('search-session.json')
+assert restored.run().compatible == ('xz',)
+revoked = restored.replace_evidence(data[:1])
+assert revoked                     # 旧反例不再受新证据支持
+assert len(restored.run().compatible) == 3
+```
+
+会话 JSON 使用版本化 schema、完整问题指纹与内容校验和。加载时重新构造受验证的数据对象并验证冲突证书；不反序列化 Python 回调，不执行任意模型代码。`load` 默认限制输入为 5 MB；`from_json` 面向已在内存中的字符串。校验和用于损坏检查，不是真实性签名。
+
+`replace_evidence` 先完成证据检查和证书再验证，再更新状态；中断时保持原会话不变。事件记录旧/新证据指纹及失效证书标识。`add_hypothesis(h, parent='old')` 保留旧候选并记录共同保留、撤回和新加的承诺；它记录领域提供的重构，不自动生成重构。事件历史用于审计，不充当证明。
+
+搜索过程中耗尽预算不会删除尚未完成复核的旧证书；每次实际剪枝前仍然重新验证。扩大候选目录改变问题指纹，旧宏观证据证书不能直接复用；固定协议下的冲突证书仍可重新验证使用。并发写入同一会话文件目前采用最后一次替换的结果，不提供多进程合并或数据库事务。
+
+### 比较净开销
+
+运行 `bidirectional-modeling search-benchmark --json`，或调用：
+
+```python
+from bidirectional_modeling import benchmark_search
+from bidirectional_modeling.search_examples import conflict_search_scenario
+search, data = conflict_search_scenario()
+result = benchmark_search(search, data, rounds=5)
+assert all(row['agrees_with_reference'] for row in result['results'])
+```
+
+三种策略使用相同初始候选目录、固定证据、轮数与每种策略的累计操作预算：
+
+1. `full_replay`：每轮完整重放，关闭冲突学习。
+2. `failed_model_cache`：缓存此固定问题/证据下已拒绝的模型，后续只处理未缓存候选；缓存不会被用于宏观证据证明。
+3. `conflict_reuse`：保留全部结构候选，学习、复核并复用冲突证书。
+
+输出总耗时、受 `tracemalloc` 监测的 Python 分配峰值、候选重放数、分类操作量、已完成轮数、与完整重放的相容集合一致性及误剪名单。未完成全部轮数时，一致性字段为 `null`，并保留停止原因；不把预算未决当作结果不一致。各策略都在内存追踪开启时计时，时间包含追踪开销；内存不是进程 RSS。因内存追踪为进程全局工具，该基准要求独占追踪，不能与其他线程的追踪任务并发使用。
+
+当前是**预计算响应表之后的重复评估基准**：不包含模型预测准备成本，也不采集新实验，不测量新候选持续到来的在线场景。报告显式给出 `prediction_preparation_included=False` 与 `new_experiments=0`。真值对照计算不计入各策略耗时。
+
+小型 `x/z/xz` 示例的五轮结果中，完整重放、失败缓存、冲突复用分别重放 15、7、6 次，但语义操作量分别为 345、257、894。冲突复用减少重放，却增加证明开销，因此不能据此宣称整体加速。后续应加入高成本模型、大量矛盾继承者和新增候选场景，测量收益转折点。

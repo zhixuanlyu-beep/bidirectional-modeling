@@ -24,6 +24,8 @@
 
 `0.12.1` 为搜索、冲突证明、宏观证书验证与实验选点增加可共享的语义操作预算和协作取消；`verify_macro` 分开报告证据充分性与最小性，预算耗尽保留已完成的证明。搜索报告明确区分全目录商、存活候选商、已观测实验分组，并列出停止原因与逐项工作量。
 
+`0.13.0` 接通可执行模型与假设搜索：复用批次覆盖/绑定验证并重复采集检查响应；增加可保存、恢复和撤销证据依赖的 `SearchSession`，以及完整重放、失败模型缓存和冲突复用的对照基准。运行 `bidirectional-modeling search-benchmark --json` 可查看净开销与误剪检查。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │

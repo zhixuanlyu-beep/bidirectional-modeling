@@ -450,7 +450,7 @@ class ExperimentHypothesisSearch:
         return None if unknown else True
 
     def search(self, evidence=(), certificates=(), *, max_replays=None,
-               budget=None) -> HypothesisSearchReport:
+               budget=None, learn_conflicts=True) -> HypothesisSearchReport:
         budget = budget if budget is not None else SearchWorkBudget()
         if max_replays is not None:
             _natural(max_replays)
@@ -496,9 +496,10 @@ class ExperimentHypothesisSearch:
                     else:
                         rejected.append(h.name)
                         # If learning is interrupted the completed rejection remains valid.
-                        c = self.learn_conflict(h.commitments, evidence, budget=budget)
-                        if c is not None and c not in active:
-                            active.append(c)
+                        if learn_conflicts:
+                            c = self.learn_conflict(h.commitments, evidence, budget=budget)
+                            if c is not None and c not in active:
+                                active.append(c)
         except SearchBudgetExceeded as error:
             stopped = error.reason
         classified = set(compatible + pruned + rejected)

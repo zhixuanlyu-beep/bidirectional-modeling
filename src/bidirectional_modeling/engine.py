@@ -177,6 +177,12 @@ class BidirectionalModelingEngine:
         )
         self.scale_graph = scale_graph or ScaleGraph()
 
+    def prepare_hypothesis_search(self, protocol, candidates, cases, **options):
+        """Adapt executable models using this engine's satisfaction collector."""
+        from .search_adapter import ExecutableSearchAdapter
+        return ExecutableSearchAdapter(self.realizer.evaluator).prepare(
+            protocol, candidates, cases, **options)
+
     def realize(
         self,
         spec: MacroSpec,
