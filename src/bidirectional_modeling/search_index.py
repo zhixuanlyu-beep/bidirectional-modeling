@@ -19,25 +19,38 @@ class WorldMask:
             bits ^= low
 
 
+from dataclasses import dataclass
+from types import MappingProxyType
+
+
+@dataclass(frozen=True)
 class ResponseIndex:
+    protocol: object
+    responses: object
+    constraints: object
+    all_worlds: int
+
     def __init__(self, protocol, budget):
         # Publish only after this constructor finishes; a partial index is never used.
         budget.consume('index_operations')
-        self.protocol = protocol
-        self.responses = {}
-        self.constraints = {}
-        self.all_worlds = (1 << len(protocol.worlds))-1
+        responses = {}
+        constraints = {}
+        all_worlds = (1 << len(protocol.worlds))-1
         for i,world in enumerate(protocol.worlds):
             for experiment,response in zip(protocol.experiments,world):
                 budget.consume('index_entries')
                 key = experiment.name,response
-                self.responses[key] = self.responses.get(key,0) | (1 << i)
+                responses[key] = responses.get(key,0) | (1 << i)
         for constraint in protocol.constraints:
             bits = 0
             for i in constraint.worlds:
                 budget.consume('index_entries')
                 bits |= 1 << i
-            self.constraints[constraint.name] = bits
+            constraints[constraint.name] = bits
+        object.__setattr__(self, 'protocol', protocol)
+        object.__setattr__(self, 'responses', MappingProxyType(responses))
+        object.__setattr__(self, 'constraints', MappingProxyType(constraints))
+        object.__setattr__(self, 'all_worlds', all_worlds)
 
     def allows(self, observation, budget):
         budget.consume('response_checks')

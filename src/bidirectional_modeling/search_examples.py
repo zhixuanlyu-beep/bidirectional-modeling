@@ -65,3 +65,21 @@ def build_search_demo_report():
         'protocol_fingerprint': search.protocol.fingerprint,
         'problem_fingerprint': search.fingerprint,
     }
+
+
+def dynamic_search_scenario(copies=20):
+    """Growing failure families, evidence retraction, then recalibrated evidence."""
+    from dataclasses import replace
+    from .search import _natural
+    from .search_benchmark import SearchBenchmarkStep
+    _natural(copies)
+    search,data=conflict_search_scenario()
+    initial=search.with_hypotheses((search.hypotheses[0],search.hypotheses[2]))
+    additions=tuple(replace(search.hypotheses[1],name='z-copy-%d' % i) for i in range(copies))
+    steps=(
+        SearchBenchmarkStep('initial',data),
+        SearchBenchmarkStep('candidate-growth',data,additions),
+        SearchBenchmarkStep('evidence-retracted',data[:1]),
+        SearchBenchmarkStep('recalibrated',tuple(replace(o,source='lab-v2') for o in data)),
+    )
+    return initial,steps

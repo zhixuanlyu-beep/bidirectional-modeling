@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from itertools import combinations
 from fractions import Fraction
+from functools import cached_property
 from typing import Callable, Optional, Tuple
 
 from .structural import fingerprint_value
@@ -178,7 +179,7 @@ class SearchProtocol:
             if any(i >= len(self.worlds) for i in constraint.worlds):
                 raise ValueError("constraint references an unknown world")
 
-    @property
+    @cached_property
     def fingerprint(self) -> str:
         return fingerprint_value((
             "search-protocol-v1", self.scope, self.coding,
@@ -275,7 +276,7 @@ class ExperimentHypothesisSearch:
     shared materials never imply inheritance of logical commitments.
     """
 
-    __slots__ = ("_protocol", "_hypotheses", "_target", "_backend", "_world_answers", "_response_index")
+    __slots__ = ("_protocol", "_hypotheses", "_target", "_backend", "_world_answers", "_response_index", "_fingerprint")
 
     @property
     def protocol(self):
@@ -299,8 +300,11 @@ class ExperimentHypothesisSearch:
         return self._world_answers
 
     def with_hypotheses(self, hypotheses):
-        return ExperimentHypothesisSearch(self.protocol, hypotheses, self.target,
+        updated = ExperimentHypothesisSearch(self.protocol, hypotheses, self.target,
                     backend=self.backend, world_answers=self.world_answers)
+        # The index depends only on this exact immutable protocol, never on candidates.
+        updated._response_index = self._response_index
+        return updated
 
     def __init__(self, protocol: SearchProtocol,
                  hypotheses: Tuple[SearchHypothesis, ...], target: str, *, backend="scan",
@@ -310,6 +314,7 @@ class ExperimentHypothesisSearch:
             raise ValueError("backend must be scan or indexed")
         self._backend = backend
         self._response_index = None
+        self._fingerprint = None
         self._protocol = protocol
         self._hypotheses = tuple(hypotheses)
         self._target = target
@@ -337,14 +342,17 @@ class ExperimentHypothesisSearch:
 
     @property
     def fingerprint(self) -> str:
+        if self._fingerprint is not None:
+            return self._fingerprint
         legacy = (
             "search-problem-v1", self.protocol.fingerprint, self.target,
             tuple((h.name, h.world, h.macro_answer,
                    tuple(getattr(h.description, f.name) for f in fields(h.description)),
                    h.commitments, h.materials) for h in self.hypotheses),
         )
-        return fingerprint_value(legacy if self.world_answers is None else
+        self._fingerprint = fingerprint_value(legacy if self.world_answers is None else
                                  ("search-problem-v2", legacy, self.world_answers))
+        return self._fingerprint
 
     def _index(self, budget):
         from .search_index import ResponseIndex

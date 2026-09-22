@@ -30,6 +30,8 @@
 
 `0.14.1` 修复跨模块语义一致性：目标映射贯穿新增、重构和会话恢复；搜索问题公开配置只读；模型适配固定配置副本、复核声明并重放完整实验组。会话 schema 2 保存目标表，并可关联模型声明与两轮批次来源。
 
+`0.15.0` 缓存不可变协议/问题指纹，并在候选新增、重构时复用同协议的只读完整索引。动态基准覆盖候选增长、证据撤回、重新校准，逐阶段对照完整扫描，报告重复试验的中位耗时和失效记录；运行 `bidirectional-modeling search-updates-benchmark --json`。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │
