@@ -26,6 +26,8 @@
 
 `0.13.0` 接通可执行模型与假设搜索：复用批次覆盖/绑定验证并重复采集检查响应；增加可保存、恢复和撤销证据依赖的 `SearchSession`，以及完整重放、失败模型缓存和冲突复用的对照基准。运行 `bidirectional-modeling search-benchmark --json` 可查看净开销与误剪检查。
 
+`0.14.0` 增加可选的精确位集合索引后端和声明式 `ReconstructionRule`。索引按需构建且计入共享预算；扫描后端保留为对照。重构显式撤回/添加承诺，先验证新候选再更新会话。基准新增包含首次建索引开销的第四种策略。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │

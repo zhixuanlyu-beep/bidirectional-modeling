@@ -54,7 +54,7 @@ class SearchSession:
         if parent is not None and parent not in parents:
             raise ValueError('unknown reconstruction parent')
         updated = ExperimentHypothesisSearch(self.search.protocol,
-                    self.search.hypotheses+(hypothesis,),self.search.target)
+                    self.search.hypotheses+(hypothesis,),self.search.target,backend=self.search.backend)
         before = set(parents[parent].commitments) if parent is not None else set()
         after = set(hypothesis.commitments)
         self.search = updated
@@ -64,8 +64,18 @@ class SearchSession:
                                retained=sorted(before & after), withdrawn=sorted(before-after),
                                added=sorted(after-before)))
 
+    def reconstruct(self, rule, parent, **candidate):
+        parents = {h.name:h for h in self.search.hypotheses}
+        if parent not in parents:
+            raise ValueError('unknown reconstruction parent')
+        hypothesis = rule.apply(parents[parent], **candidate)
+        # add_hypothesis validates prediction/commitments before mutating anything.
+        self.add_hypothesis(hypothesis,parent=parent)
+        self.events[-1]['rule'] = rule.name
+        return hypothesis
+
     def to_json(self):
-        payload = dict(schema_version=1, protocol=asdict(self.search.protocol),
+        payload = dict(schema_version=1, backend=self.search.backend, protocol=asdict(self.search.protocol),
                        hypotheses=[asdict(h) for h in self.search.hypotheses],
                        target=self.search.target,
                        problem_fingerprint=self.search.fingerprint,
@@ -92,7 +102,7 @@ class SearchSession:
             tuple(ResponseConstraint(**c) for c in p['constraints']))
         hypotheses = tuple(SearchHypothesis(**dict(h,description=DescriptionLength(**h['description'])))
                            for h in payload['hypotheses'])
-        search = ExperimentHypothesisSearch(protocol,hypotheses,payload['target'])
+        search = ExperimentHypothesisSearch(protocol,hypotheses,payload['target'],backend=payload.get('backend','scan'))
         if search.fingerprint != payload['problem_fingerprint']:
             raise ValueError('session problem binding mismatch')
         evidence = tuple(SearchObservation(**o) for o in payload['evidence'])

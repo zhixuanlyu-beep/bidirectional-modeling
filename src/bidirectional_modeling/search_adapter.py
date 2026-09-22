@@ -55,7 +55,7 @@ class ExecutableSearchAdapter:
         self.evaluator = evaluator or SatisfactionEvaluator()
 
     def prepare(self, protocol: SearchProtocol, candidates, cases, *, target,
-                world_answers, max_simulations=10000):
+                world_answers, max_simulations=10000, backend="scan"):
         """Read the selected scenario's final field after two complete collections.
 
         Output labels must already be strings. Target semantics are an explicit
@@ -63,6 +63,8 @@ class ExecutableSearchAdapter:
         No observations are created here: predictions are never experimental data.
         """
         _natural(max_simulations)
+        if backend not in ('scan','indexed'):
+            raise ValueError('backend must be scan or indexed')
         _name(target)
         candidates, cases, world_answers = tuple(candidates), tuple(cases), tuple(world_answers)
         if len(world_answers) != len(protocol.worlds):
@@ -121,5 +123,5 @@ class ExecutableSearchAdapter:
                 hypothesis = SearchHypothesis(model.name,None,'unresolved',candidate.description,
                                               (),candidate.materials)
             hypotheses.append(hypothesis)
-        search = ExperimentHypothesisSearch(bound_protocol,tuple(hypotheses),bound_target)
+        search = ExperimentHypothesisSearch(bound_protocol,tuple(hypotheses),bound_target,backend=backend)
         return ModelSearchResult(search,used,tuple(bindings),tuple(diagnostics))

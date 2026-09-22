@@ -27,6 +27,8 @@ def _natural(value: int) -> None:
 @dataclass(frozen=True)
 class SearchWork:
     """Cumulative semantic operations; excludes setup, hashing, sorting and I/O."""
+    index_entries: int = 0
+    index_operations: int = 0
     world_queries: int = 0
     response_checks: int = 0
     constraint_checks: int = 0
@@ -274,8 +276,12 @@ class ExperimentHypothesisSearch:
     """
 
     def __init__(self, protocol: SearchProtocol,
-                 hypotheses: Tuple[SearchHypothesis, ...], target: str) -> None:
+                 hypotheses: Tuple[SearchHypothesis, ...], target: str, *, backend="scan") -> None:
         _name(target)
+        if backend not in ("scan", "indexed"):
+            raise ValueError("backend must be scan or indexed")
+        self.backend = backend
+        self._response_index = None
         self.protocol = protocol
         self.hypotheses = tuple(hypotheses)
         self.target = target
@@ -302,12 +308,22 @@ class ExperimentHypothesisSearch:
                    h.commitments, h.materials) for h in self.hypotheses),
         ))
 
+    def _index(self, budget):
+        from .search_index import ResponseIndex
+        if self._response_index is None or self._response_index.protocol is not self.protocol:
+            self._response_index = ResponseIndex(self.protocol, budget)
+        return self._response_index
+
     def _evidence(self, evidence, budget):
         evidence = tuple(evidence)
         names = {e.name: i for i, e in enumerate(self.protocol.experiments)}
         for observation in evidence:
             if observation.experiment not in names:
                 raise ValueError("evidence lies outside the allowed experiment domain")
+            if self.backend == "indexed":
+                if not self._index(budget).allows(observation,budget):
+                    raise ValueError("observed response lies outside the declared universe")
+                continue
             index = names[observation.experiment]
             for world in self.protocol.worlds:
                 budget.consume("response_checks")
@@ -319,6 +335,8 @@ class ExperimentHypothesisSearch:
 
     def _worlds(self, commitments=(), evidence=(), *, budget):
         budget.consume("world_queries")
+        if self.backend == "indexed":
+            return self._index(budget).filter(commitments,evidence,budget)
         possible = set(range(len(self.protocol.worlds)))
         constraints = {c.name: set(c.worlds) for c in self.protocol.constraints}
         for name in commitments:

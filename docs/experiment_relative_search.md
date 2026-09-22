@@ -271,3 +271,57 @@ assert all(row['agrees_with_reference'] for row in result['results'])
 当前是**预计算响应表之后的重复评估基准**：不包含模型预测准备成本，也不采集新实验，不测量新候选持续到来的在线场景。报告显式给出 `prediction_preparation_included=False` 与 `new_experiments=0`。真值对照计算不计入各策略耗时。
 
 小型 `x/z/xz` 示例的五轮结果中，完整重放、失败缓存、冲突复用分别重放 15、7、6 次，但语义操作量分别为 345、257、894。冲突复用减少重放，却增加证明开销，因此不能据此宣称整体加速。后续应加入高成本模型、大量矛盾继承者和新增候选场景，测量收益转折点。
+
+## 0.14.0：索引后端与声明式重构
+
+### 选择过滤后端
+
+```python
+from bidirectional_modeling import ExperimentHypothesisSearch, SearchWorkBudget
+from bidirectional_modeling.search_examples import conflict_search_scenario
+
+scan, data = conflict_search_scenario()
+indexed = ExperimentHypothesisSearch(scan.protocol, scan.hypotheses, scan.target,
+                                     backend='indexed')
+budget = SearchWorkBudget(100_000)
+assert indexed.search(data, budget=budget).compatible == scan.search(data).compatible
+assert budget.work.index_entries > 0
+assert indexed.fingerprint == scan.fingerprint
+```
+
+默认 `backend='scan'` 保留原有逐行过滤行为，作为兼容实现与正确性对照。`backend='indexed'` 为每个“实验、响应”及每个约束建立响应行位集合，通过精确交集过滤；不会合并结构候选，也不改变实验或宏观语义。实现策略不参与问题指纹，因此同一问题的证书可以跨这两个后端重新验证。
+
+第一次过滤或证据标签检查时按需构建索引，并计入共享预算：`index_entries` 统计读取的响应单元和约束成员；`index_operations` 统计索引初始化和位集合交集。构建中断时不发布部分索引，下次使用新预算完整重建。相同搜索器随后复用已建索引；替换协议对象后重建。索引属于运行时派生状态，不写进 JSON 会话；恢复会话时保留后端选择，索引重新构建。旧会话中没有 `backend` 字段时默认使用扫描。
+
+`ExecutableSearchAdapter.prepare(..., backend='indexed')` 与引擎的适配入口也接受该参数。新增或重构候选得到新的搜索器，当前会重新构建索引；尚未实现跨搜索器共享的全局索引缓存。
+
+位集合交集的一次操作不等于常数 CPU 时间，其成本随响应宇宙长度变化。两种后端的分类计数帮助解释工作构成，不能用总操作数比例直接宣称速度提升。协议仍需提供完整有限响应宇宙，索引解决重复过滤成本，**不解决宇宙本身的指数规模**，也不是符号求解器或惰性模型预测后端。
+
+### 重构规则
+
+```python
+from bidirectional_modeling import DescriptionLength, ReconstructionRule, SearchSession
+from bidirectional_modeling.search_examples import conflict_search_scenario
+
+search, data = conflict_search_scenario()
+session = SearchSession(search, data)
+session.run()
+rule = ReconstructionRule('independent-to-joint', withdraw=('additive',))
+session.reconstruct(rule, 'x', name='rebuilt', world=1, macro_answer='interaction',
+                    description=DescriptionLength(concepts=1, relations=2))
+assert 'rebuilt' in session.run().compatible
+```
+
+规则明确列出 `withdraw` 和 `add`。新候选的预测、目标答案和完整描述成本必须显式提供，材料可保留或替换；不会自动沿用父模型的正确性。规则不能撤回父模型未声明的约束，也不能同时撤回并添加同一约束。
+
+`SearchSession.reconstruct` 先构造并验证候选，再添加到会话；如果新预测违反保留的承诺，操作失败且会话不变。事件记录规则名、父候选和承诺变更。仍然继承失败组合的后代继续被剪枝；撤回该组合的新候选需要重新检查数据，不能仅因撤回了承诺就自动通过。
+
+这里“保留承诺”只针对有限协议中已声明的约束，不证明任意结构变换都保守，也不证明未来扩展实验域中的行为相同。此版本提供显式重构入口，不自动发明重构规则或证明无限低阶语言的覆盖完整性。
+
+### 冷启动对照与验证
+
+`search-benchmark` 现在增加 `indexed_conflict_reuse`。每种策略都创建新搜索器，索引策略首次建索引的时间、Python 分配峰值和操作量计入测量，避免拿免费预热的索引与冷启动扫描比较。
+
+在五轮 `x/z/xz` 示例中，扫描冲突复用与索引冲突复用均重放 6 次；分类语义操作总量分别为 894 和 399，后者包含 70 个建索引条目。是否节省实际时间仍看 `seconds`，而且小型案例不能代表所有规模。实验采集和模型预测准备仍不属于这项基准。
+
+测试穷举了两个二元实验上的全部 16 种约束允许集，比较所有响应向量及其证据子集下两种后端的相容集合、冲突核、最小证据、商分组与实验选点；另覆盖矛盾数据、未知预测、预算中断、协议替换、会话恢复和错误重构。

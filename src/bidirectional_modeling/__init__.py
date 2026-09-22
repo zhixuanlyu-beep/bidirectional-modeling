@@ -122,9 +122,11 @@ from .search import (
 
 from .search_adapter import ExecutableSearchAdapter, ModelSearchCandidate, ModelSearchCase, ModelSearchResult
 from .search_session import SearchSession
+from .search_reconstruction import ReconstructionRule
 from .search_benchmark import benchmark_search
 
 __all__ = [
+    "ReconstructionRule",
     "ExecutableSearchAdapter", "ModelSearchCandidate", "ModelSearchCase", "ModelSearchResult",
     "SearchSession", "benchmark_search",
     "MacroValidationReport",
@@ -232,4 +234,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
