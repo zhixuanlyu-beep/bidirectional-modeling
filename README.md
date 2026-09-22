@@ -20,6 +20,8 @@
 
 `0.11.0` 把同一证据链扩展到满足性验证和残差商。`TraceBatch` 现在绑定模型观测证据、上下文、时间范围、模拟上限、覆盖权威及批次结果；`evaluate_batch` 在 requirement 执行前后复核绑定，不能再把旧批次跨上下文或 horizon 重放。`SatisfactionCertificate` 进一步绑定具体规范、批次和资源协议，因此同名但语义不同的规范不能复用旧证书。`ResidualQuotientReport` 则绑定有界状态/转移证据、等价关系和全部搜索界。上下文与轨迹在回调边界深度隔离，原地修改不会污染调用方证据。
 
+`0.12.0` 增加实验限定的候选搜索层：先按全部允许实验的响应取商并保留结构代表，再按整套描述复杂度调度；从失败中提取可重放的共同冲突核，只剪除仍继承该矛盾的候选。新增宏观答案可识别性检查、最小证据子集、按宏观分歧/成本选实验和未决预算状态。详细定义与有限域边界见 [实验限定搜索](docs/experiment_relative_search.md)。
+
 ```text
 MacroSpec G ── Realizer ──> Pareto{(Model, complete Certificate)}
      ▲                              │
@@ -52,6 +54,8 @@ Concept refinement <── Counterexample / closure analysis
 
 ## 已实现组件
 
+- `ExperimentHypothesisSearch`：在外部声明的有限实验/响应域中执行复杂度排序、冲突证书复用、数据重放、宏观证据压缩与主动实验选择；模型材料可复用，失败约束只有被继承时才传播。
+
 - `FiniteStateModel`：有限状态、转移、行动、读出和透明资源指标。
 - `ResidualQuotientAnalyzer`：枚举有限可达状态，构造按上下文深度单调细化的残差分区；合并所有未来观察行为及动作支撑相同的微观状态，并返回最短区分动作序列、反例引导上下文基和可验证的偏商转移。
 - `CompositionRuleSelector`：先用共享操作测试排除观察、支撑或执行不一致的微观组合规则，再要求残差最小性证书，最后按透明的两段描述长度代理量排序；多实验用例必须全部通过。
@@ -76,6 +80,7 @@ python3 -m pip install -e '.[test]'
 
 bidirectional-modeling demo
 bidirectional-modeling demo --json
+bidirectional-modeling search-demo --json
 python3 -m unittest discover -s tests -v
 ```
 

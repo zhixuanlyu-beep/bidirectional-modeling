@@ -435,9 +435,13 @@ def _print_human(report: Dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the bidirectional modeling reference demo")
-    parser.add_argument("command", nargs="?", default="demo", choices=("demo",))
+    parser.add_argument("command", nargs="?", default="demo", choices=("demo", "search-demo"))
     parser.add_argument("--json", action="store_true", help="emit a machine-readable report")
     args = parser.parse_args()
+    if args.command == "search-demo":
+        from .search_examples import build_search_demo_report
+        print(json.dumps(build_search_demo_report(), ensure_ascii=False, indent=2, sort_keys=True))
+        return
     report = build_demo_report()
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))

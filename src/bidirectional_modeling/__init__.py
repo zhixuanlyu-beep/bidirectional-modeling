@@ -102,7 +102,31 @@ from .residual import (
     ResidualTransition,
 )
 
+from .search import (
+    ConflictCertificate,
+    DescriptionLength,
+    ExperimentHypothesisSearch,
+    HypothesisSearchReport,
+    MacroEvidenceCertificate,
+    ResponseConstraint,
+    SearchExperiment,
+    SearchHypothesis,
+    SearchObservation,
+    SearchProtocol,
+)
+
 __all__ = [
+    "ConflictCertificate",
+    "DescriptionLength",
+    "ExperimentHypothesisSearch",
+    "HypothesisSearchReport",
+    "MacroEvidenceCertificate",
+    "ResponseConstraint",
+    "SearchExperiment",
+    "SearchHypothesis",
+    "SearchObservation",
+    "SearchProtocol",
+
     "Aggregation",
     "BidirectionalModelingEngine",
     "CandidateEvaluation",
@@ -192,4 +216,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"

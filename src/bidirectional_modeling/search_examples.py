@@ -1,0 +1,59 @@
+"""An experiment-bounded example of failed materials yielding a valid reconstruction."""
+from itertools import product
+
+from .search import (
+    DescriptionLength, ExperimentHypothesisSearch, ResponseConstraint,
+    SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol,
+)
+
+
+def conflict_search_scenario():
+    worlds = tuple(product(('0', '1'), repeat=4))
+    experiments = tuple(SearchExperiment(name, 'binary do(x,z)=' + name)
+                        for name in ('00', '10', '01', '11'))
+    additive = ResponseConstraint('additive', tuple(
+        i for i, w in enumerate(worlds)
+        if int(w[3]) - int(w[1]) - int(w[2]) + int(w[0]) == 0
+    ))
+    protocol = SearchProtocol(
+        'binary x,z interventions; exact binary output; calibration-v1',
+        'demo integer code units v1 (illustrative, not optimal encoding)',
+        experiments, worlds, (additive,),
+    )
+    candidates = (
+        SearchHypothesis('x', worlds.index(('0','1','0','1')), 'additive',
+                         DescriptionLength(relations=1), ('additive',), ('x','z')),
+        SearchHypothesis('z', worlds.index(('0','0','1','1')), 'additive',
+                         DescriptionLength(relations=2), ('additive',), ('x','z')),
+        # Reuse materials, withdraw independent sufficiency, introduce joint action.
+        SearchHypothesis('xz', worlds.index(('0','0','0','1')), 'interaction',
+                         DescriptionLength(concepts=1, relations=2), (), ('x','z')),
+    )
+    evidence = tuple(SearchObservation(e.name, y, 'external-lab-v1')
+                     for e,y in zip(experiments, ('0','0','0','1')))
+    return ExperimentHypothesisSearch(protocol, candidates, 'nonadditive response'), evidence
+
+
+def build_search_demo_report():
+    search, evidence = conflict_search_scenario()
+    report = search.search(evidence)
+    basis = search.compress_evidence(evidence)
+    return {
+        'scope': search.protocol.scope,
+        'compatible': report.compatible,
+        'rejected': report.rejected,
+        'pruned': report.pruned,
+        'undecided': report.undecided,
+        'determined': report.determined,
+        'answers': report.answers,
+        'replay_checks': report.replay_checks,
+        'conflict_core': report.conflicts[0].commitments,
+        'conflict_evidence_count': len(report.conflicts[0].evidence),
+        'retained_macro_evidence': [o.experiment for o in basis.retained_evidence],
+        'minimum_cardinality': basis.minimum_cardinality,
+        'certificate_valid': search.validates_macro(basis, evidence),
+        'initial_next_experiment': search.next_experiment().name,
+        'irreducible_against_x_and_z': search.irreducible_against('xz', ('x','z')),
+        'protocol_fingerprint': search.protocol.fingerprint,
+        'problem_fingerprint': search.fingerprint,
+    }
