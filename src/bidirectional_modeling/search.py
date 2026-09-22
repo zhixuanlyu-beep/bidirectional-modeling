@@ -275,16 +275,50 @@ class ExperimentHypothesisSearch:
     shared materials never imply inheritance of logical commitments.
     """
 
+    __slots__ = ("_protocol", "_hypotheses", "_target", "_backend", "_world_answers", "_response_index")
+
+    @property
+    def protocol(self):
+        return self._protocol
+
+    @property
+    def hypotheses(self):
+        return self._hypotheses
+
+    @property
+    def target(self):
+        return self._target
+
+    @property
+    def backend(self):
+        return self._backend
+
+    @property
+    def world_answers(self):
+        """Authoritative target mapping, or None for a legacy labelled catalogue."""
+        return self._world_answers
+
+    def with_hypotheses(self, hypotheses):
+        return ExperimentHypothesisSearch(self.protocol, hypotheses, self.target,
+                    backend=self.backend, world_answers=self.world_answers)
+
     def __init__(self, protocol: SearchProtocol,
-                 hypotheses: Tuple[SearchHypothesis, ...], target: str, *, backend="scan") -> None:
+                 hypotheses: Tuple[SearchHypothesis, ...], target: str, *, backend="scan",
+                 world_answers=None) -> None:
         _name(target)
         if backend not in ("scan", "indexed"):
             raise ValueError("backend must be scan or indexed")
-        self.backend = backend
+        self._backend = backend
         self._response_index = None
-        self.protocol = protocol
-        self.hypotheses = tuple(hypotheses)
-        self.target = target
+        self._protocol = protocol
+        self._hypotheses = tuple(hypotheses)
+        self._target = target
+        self._world_answers = None if world_answers is None else tuple(world_answers)
+        if self.world_answers is not None:
+            if len(self.world_answers) != len(protocol.worlds):
+                raise ValueError("target mapping must cover the response universe")
+            for answer in self.world_answers:
+                _name(answer)
         if len({h.name for h in self.hypotheses}) != len(self.hypotheses):
             raise ValueError("duplicate hypothesis name")
         constraints = {c.name: set(c.worlds) for c in protocol.constraints}
@@ -296,17 +330,21 @@ class ExperimentHypothesisSearch:
             if h.world is not None:
                 if h.world >= len(protocol.worlds):
                     raise ValueError("hypothesis references an unknown world")
+                if self.world_answers is not None and h.macro_answer != self.world_answers[h.world]:
+                    raise ValueError("macro answer violates the authoritative target mapping")
                 if any(h.world not in constraints[c] for c in h.commitments):
                     raise ValueError("prediction violates a declared commitment")
 
     @property
     def fingerprint(self) -> str:
-        return fingerprint_value((
+        legacy = (
             "search-problem-v1", self.protocol.fingerprint, self.target,
             tuple((h.name, h.world, h.macro_answer,
                    tuple(getattr(h.description, f.name) for f in fields(h.description)),
                    h.commitments, h.materials) for h in self.hypotheses),
-        ))
+        )
+        return fingerprint_value(legacy if self.world_answers is None else
+                                 ("search-problem-v2", legacy, self.world_answers))
 
     def _index(self, budget):
         from .search_index import ResponseIndex

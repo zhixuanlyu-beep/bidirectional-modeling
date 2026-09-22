@@ -73,7 +73,7 @@ class AdapterTests(unittest.TestCase):
         p,c,cases = adapter_args()
         result = ExecutableSearchAdapter(Alternating()).prepare(p,c[:1],cases,target='out',world_answers=('a','b'))
         self.assertIsNone(result.search.hypotheses[0].world)
-        self.assertIn('non_deterministic_response',result.diagnostics[0][2])
+        self.assertIn('model_declaration_changed',result.diagnostics[0][2])
         class Broken:
             def collect(self,*args): raise RuntimeError('broken')
         result = ExecutableSearchAdapter(Broken()).prepare(p,c,cases,target='out',world_answers=('a','b'),max_simulations=5)

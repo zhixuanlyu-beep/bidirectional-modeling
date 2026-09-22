@@ -56,7 +56,9 @@ class IndexTests(unittest.TestCase):
         self.assertEqual(warm.work.index_entries,0)
         self.assertIs(indexed._response_index,old)
         # Same semantic response domain with changed protocol identity cannot reuse an index.
-        indexed.protocol=replace(indexed.protocol,scope='new scope')
+        with self.assertRaises(AttributeError): indexed.protocol=replace(indexed.protocol,scope='new scope')
+        indexed=ExperimentHypothesisSearch(replace(indexed.protocol,scope='new scope'),
+                indexed.hypotheses,indexed.target,backend='indexed')
         indexed.search(data)
         self.assertIsNot(indexed._response_index,old)
         with self.assertRaises(ValueError): indexed.search((SearchObservation('00','wrong','lab'),))

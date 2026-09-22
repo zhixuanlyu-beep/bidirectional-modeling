@@ -8,16 +8,32 @@ from pathlib import Path
 from .search import (ConflictCertificate, DescriptionLength, ExperimentHypothesisSearch,
                      ResponseConstraint, SearchExperiment, SearchHypothesis,
                      SearchObservation, SearchProtocol, SearchWorkBudget)
-from .structural import fingerprint_value
+from .structural import fingerprint_value, validate_fingerprint
 
 
 class SearchSession:
-    def __init__(self, search, evidence=(), certificates=(), *, budget=None):
+    def __init__(self, search, evidence=(), certificates=(), *, budget=None,
+                 model_bindings=(), prepared_problem_fingerprint=None):
         self.search = search
         self.evidence = search._evidence(evidence, budget if budget is not None else SearchWorkBudget())
         self.certificates = tuple(certificates)
         self.revision = 0
         self.events = []
+        self.model_bindings = tuple(tuple(row) for row in model_bindings)
+        self.prepared_problem_fingerprint = prepared_problem_fingerprint
+        if prepared_problem_fingerprint is not None:
+            validate_fingerprint(prepared_problem_fingerprint)
+        for row in self.model_bindings:
+            if len(row) != 5:
+                raise ValueError('model binding requires candidate, case, two batches and declaration')
+            for digest in row[2:]:
+                validate_fingerprint(digest)
+
+    @classmethod
+    def from_prepared(cls, prepared, evidence=(), *, budget=None):
+        return cls(prepared.search,evidence,budget=budget,
+                   model_bindings=prepared.batch_bindings,
+                   prepared_problem_fingerprint=prepared.search.fingerprint)
 
     def run(self, *, budget=None, max_replays=None):
         report = self.search.search(self.evidence,self.certificates,
@@ -53,8 +69,7 @@ class SearchSession:
         parents = {h.name:h for h in self.search.hypotheses}
         if parent is not None and parent not in parents:
             raise ValueError('unknown reconstruction parent')
-        updated = ExperimentHypothesisSearch(self.search.protocol,
-                    self.search.hypotheses+(hypothesis,),self.search.target,backend=self.search.backend)
+        updated = self.search.with_hypotheses(self.search.hypotheses+(hypothesis,))
         before = set(parents[parent].commitments) if parent is not None else set()
         after = set(hypothesis.commitments)
         self.search = updated
@@ -75,13 +90,15 @@ class SearchSession:
         return hypothesis
 
     def to_json(self):
-        payload = dict(schema_version=1, backend=self.search.backend, protocol=asdict(self.search.protocol),
+        payload = dict(schema_version=2, world_answers=self.search.world_answers, backend=self.search.backend, protocol=asdict(self.search.protocol),
                        hypotheses=[asdict(h) for h in self.search.hypotheses],
                        target=self.search.target,
                        problem_fingerprint=self.search.fingerprint,
                        evidence=[asdict(o) for o in self.evidence],
                        certificates=[asdict(c) for c in self.certificates],
-                       revision=self.revision,events=self.events)
+                       revision=self.revision,events=self.events,
+                       model_bindings=self.model_bindings,
+                       prepared_problem_fingerprint=self.prepared_problem_fingerprint)
         # Normalize tuples to JSON arrays before computing the checksum.
         payload = json.loads(json.dumps(payload))
         return json.dumps(dict(payload=payload,checksum=fingerprint_value(payload)),
@@ -94,7 +111,7 @@ class SearchSession:
         payload = document['payload']
         if document['checksum'] != fingerprint_value(payload):
             raise ValueError('session checksum mismatch')
-        if type(payload['schema_version']) is not int or payload['schema_version'] != 1:
+        if type(payload['schema_version']) is not int or payload['schema_version'] not in (1,2):
             raise ValueError('unsupported session schema')
         p = payload['protocol']
         protocol = SearchProtocol(p['scope'],p['coding'],
@@ -102,7 +119,8 @@ class SearchSession:
             tuple(ResponseConstraint(**c) for c in p['constraints']))
         hypotheses = tuple(SearchHypothesis(**dict(h,description=DescriptionLength(**h['description'])))
                            for h in payload['hypotheses'])
-        search = ExperimentHypothesisSearch(protocol,hypotheses,payload['target'],backend=payload.get('backend','scan'))
+        search = ExperimentHypothesisSearch(protocol,hypotheses,payload['target'],backend=payload.get('backend','scan'),
+                    world_answers=payload['world_answers'] if payload['schema_version'] == 2 else None)
         if search.fingerprint != payload['problem_fingerprint']:
             raise ValueError('session problem binding mismatch')
         evidence = tuple(SearchObservation(**o) for o in payload['evidence'])
@@ -112,7 +130,9 @@ class SearchSession:
         for c in certificates:
             if not search.validates_conflict(c,evidence,budget=budget):
                 raise ValueError('invalid or stale saved conflict certificate')
-        session = cls(search,evidence,certificates,budget=budget)
+        session = cls(search,evidence,certificates,budget=budget,
+                      model_bindings=payload.get('model_bindings',()),
+                      prepared_problem_fingerprint=payload.get('prepared_problem_fingerprint'))
         if type(payload['revision']) is not int or payload['revision'] < 0:
             raise ValueError('invalid session revision')
         if not isinstance(payload['events'],list):

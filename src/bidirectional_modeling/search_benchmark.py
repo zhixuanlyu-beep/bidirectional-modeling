@@ -17,7 +17,7 @@ def benchmark_search(search, evidence, *, rounds=5, max_operations=1_000_000):
     if any(h.world is None for h in search.hypotheses):
         raise ValueError('benchmark requires fully known candidate responses')
     reference = ExperimentHypothesisSearch(search.protocol,search.hypotheses,search.target,
-                                           backend="scan").search(evidence,learn_conflicts=False)
+                                           backend="scan",world_answers=search.world_answers).search(evidence,learn_conflicts=False)
     if reference.undecided:
         raise ValueError('reference search was incomplete')
     expected = set(reference.compatible)
@@ -31,7 +31,7 @@ def benchmark_search(search, evidence, *, rounds=5, max_operations=1_000_000):
         started = perf_counter()
         try:
             current = ExperimentHypothesisSearch(search.protocol,search.hypotheses,search.target,
-                backend='indexed' if mode == 'indexed_conflict_reuse' else 'scan')
+                backend='indexed' if mode == 'indexed_conflict_reuse' else 'scan',world_answers=search.world_answers)
             for _ in range(rounds):
                 report = current.search(evidence,certificates,budget=budget,
                                         learn_conflicts=mode in ('conflict_reuse','indexed_conflict_reuse'))
@@ -47,7 +47,8 @@ def benchmark_search(search, evidence, *, rounds=5, max_operations=1_000_000):
                     # Cache is valid only for this exact fixed problem/evidence.
                     # No certificates/minimality claims use the reduced catalogue.
                     current = ExperimentHypothesisSearch(search.protocol,
-                        tuple(h for h in search.hypotheses if h.name not in failures),search.target)
+                        tuple(h for h in search.hypotheses if h.name not in failures),search.target,
+                        world_answers=search.world_answers)
                 elif mode in ('conflict_reuse','indexed_conflict_reuse'):
                     certificates = report.conflicts
             elapsed = perf_counter()-started
