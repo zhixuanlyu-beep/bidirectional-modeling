@@ -80,6 +80,7 @@ jobs:
               "bidirectional_modeling/search_index.py",
               "bidirectional_modeling/search_reconstruction.py",
               "bidirectional_modeling/search_queries.py",
+              "bidirectional_modeling/search_lazy.py",
           }
           missing = required - names
           if missing:
@@ -88,7 +89,7 @@ jobs:
       - name: Install built wheel and smoke-test it
         run: |
           python -m pip install dist/*.whl
-          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.16.0'"
+          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.17.0'"
           bidirectional-modeling demo --json > /dev/null
           bidirectional-modeling search-demo --json > /dev/null
           bidirectional-modeling search-benchmark --json > /dev/null

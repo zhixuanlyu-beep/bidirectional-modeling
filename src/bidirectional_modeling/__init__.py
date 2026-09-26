@@ -131,7 +131,10 @@ from .search_queries import (
     query_fingerprint, verify_query_result,
 )
 
+from .search_lazy import LazyExecutableSearch, LazyQueryResult
+
 __all__ = [
+    "LazyExecutableSearch", "LazyQueryResult",
     "ConstraintQuery", "MacroAlternativeQuery", "LowerSubstituteQuery", "QueryResult",
     "QueryStatus", "QueryVerification", "SearchQuery", "SearchQueryBackend", "FiniteSearchQueryBackend",
     "query_fingerprint", "verify_query_result",
@@ -244,4 +247,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.16.0"
+__version__ = "0.17.0"
