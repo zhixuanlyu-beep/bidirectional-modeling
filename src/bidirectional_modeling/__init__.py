@@ -125,7 +125,16 @@ from .search_session import SearchSession
 from .search_reconstruction import ReconstructionRule
 from .search_benchmark import benchmark_search, benchmark_search_updates, SearchBenchmarkStep
 
+from .search_queries import (
+    ConstraintQuery, MacroAlternativeQuery, LowerSubstituteQuery, QueryResult,
+    QueryStatus, QueryVerification, SearchQuery, SearchQueryBackend, FiniteSearchQueryBackend,
+    query_fingerprint, verify_query_result,
+)
+
 __all__ = [
+    "ConstraintQuery", "MacroAlternativeQuery", "LowerSubstituteQuery", "QueryResult",
+    "QueryStatus", "QueryVerification", "SearchQuery", "SearchQueryBackend", "FiniteSearchQueryBackend",
+    "query_fingerprint", "verify_query_result",
     "benchmark_search_updates", "SearchBenchmarkStep",
     "ReconstructionRule",
     "ExecutableSearchAdapter", "ModelSearchCandidate", "ModelSearchCase", "ModelSearchResult",
@@ -235,4 +244,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"

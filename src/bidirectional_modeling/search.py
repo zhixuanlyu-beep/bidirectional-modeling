@@ -38,6 +38,7 @@ class SearchWork:
     partition_checks: int = 0
     pair_checks: int = 0
     subset_checks: int = 0
+    query_checks: int = 0
 
     @property
     def total(self) -> int:
@@ -353,6 +354,11 @@ class ExperimentHypothesisSearch:
         self._fingerprint = fingerprint_value(legacy if self.world_answers is None else
                                  ("search-problem-v2", legacy, self.world_answers))
         return self._fingerprint
+
+    def query(self, request, *, budget=None):
+        """Run a typed existential query with explicit FOUND/ABSENT/UNKNOWN."""
+        from .search_queries import FiniteSearchQueryBackend
+        return FiniteSearchQueryBackend().execute(self, request, budget=budget)
 
     def _index(self, budget):
         from .search_index import ResponseIndex

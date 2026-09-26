@@ -79,6 +79,7 @@ jobs:
               "bidirectional_modeling/search_benchmark.py",
               "bidirectional_modeling/search_index.py",
               "bidirectional_modeling/search_reconstruction.py",
+              "bidirectional_modeling/search_queries.py",
           }
           missing = required - names
           if missing:
@@ -87,8 +88,17 @@ jobs:
       - name: Install built wheel and smoke-test it
         run: |
           python -m pip install dist/*.whl
-          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.15.0'"
+          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.16.0'"
           bidirectional-modeling demo --json > /dev/null
           bidirectional-modeling search-demo --json > /dev/null
           bidirectional-modeling search-benchmark --json > /dev/null
           bidirectional-modeling search-updates-benchmark --json > /dev/null
+          python - <<'PYCODE'
+          from bidirectional_modeling import ConstraintQuery, QueryStatus, verify_query_result
+          from bidirectional_modeling.search_examples import conflict_search_scenario
+          problem, evidence = conflict_search_scenario()
+          query = ConstraintQuery(evidence=evidence)
+          receipt = problem.query(query)
+          assert receipt.status is QueryStatus.FOUND
+          assert verify_query_result(problem, query, receipt).status == 'valid'
+          PYCODE
