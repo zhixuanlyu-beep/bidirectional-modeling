@@ -4,6 +4,10 @@
 
 这是“宏观目的 ↔ 介观模型 ↔ 微观结构”的可运行参考实现。它不假设两个方向存在唯一答案，而是返回带验证证书、反例、边界和排序分数的候选集合。
 
+`0.19.0` 将固定协议中的搜索扩展到可验证的情境变化：新增情境网络、跨协议冲突重证与会话迁移、有限局部拼接、部分预测个体排除、有界布尔 AST 重构及低阶语言覆盖，以及可只读取保留证据复核的宏观充分性证书。运行 `bidirectional-modeling context-demo --json` 查看六项贯通验收，接口、证明范围和兼容性见 [情境网络与结构重构](docs/context_network.md)。
+
+固定有限模型是每次计算的局部工作条件；情境之间可以扩展、细化、限制或重构。框架不要求所有情境属于同一个预设全局状态空间，也不据此宣称现实不存在终极底层。
+
 从 `0.5.0` 起，尺度之间的状态投影不再只隐含在模型读出中：`Correspondence` 把粗粒化映射和场景映射声明为一等对象，`CorrespondenceValidator` 用上下层两个可执行模型检查动态交换图是否成立。
 
 `0.6.0` 进一步把证书绑定到规范化的上下文指纹，并引入校准/留出验证套件：在已知场景上相容只产生 `compatibility_passed`，只有全部用例通过且至少包含一个声明为独立来源的留出用例，套件的 `passed` 才为真。
@@ -99,6 +103,7 @@ python3 -m pip install -e '.[test]'
 bidirectional-modeling demo
 bidirectional-modeling demo --json
 bidirectional-modeling search-demo --json
+bidirectional-modeling context-demo --json
 python3 -m unittest discover -s tests -v
 ```
 
@@ -329,3 +334,4 @@ context = Context(
 ## 开发验证
 
 CI 在 Python 3.9、3.11 和 3.13 上运行全部单元测试、覆盖率门槛、JSON 演示，并额外构建和检查 wheel 内容。许可证为 MIT。
+

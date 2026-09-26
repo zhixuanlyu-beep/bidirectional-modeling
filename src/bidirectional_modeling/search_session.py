@@ -89,6 +89,10 @@ class SearchSession:
         self.events[-1]['rule'] = rule.name
         return hypothesis
 
+    def migrate_context(self, target_search, transition, target_evidence, evidence_links, *, budget=None):
+        from .certificate_transport import migrate_session
+        return migrate_session(self, target_search, transition, target_evidence, evidence_links, budget=budget)
+
     def to_json(self):
         payload = dict(schema_version=2, world_answers=self.search.world_answers, backend=self.search.backend, protocol=asdict(self.search.protocol),
                        hypotheses=[asdict(h) for h in self.search.hypotheses],
@@ -165,3 +169,4 @@ class SearchSession:
         if len(data) > max_bytes:
             raise ValueError('session exceeds input limit')
         return cls.from_json(data.decode('utf-8'),budget=budget)
+

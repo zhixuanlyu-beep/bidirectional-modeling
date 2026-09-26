@@ -160,3 +160,53 @@ def verify_partial_prediction(protocol, candidate, cases, prediction, *,
     if replay.prediction != prediction:
         return PartialPredictionVerification('invalid', 'replay_disagrees', bounded.used)
     return PartialPredictionVerification('valid', 'selected_matrix_replayed', bounded.used)
+
+
+
+@dataclass(frozen=True)
+class CandidateExclusionCertificate:
+    """One authenticated-by-replay prediction contradicts one supplied observation.
+
+    This rejects only this candidate/version, never its structural descendants.
+    Observation provenance remains an experiment-owner declaration.
+    """
+    prediction: PartialPrediction
+    observation: object
+
+
+@dataclass(frozen=True)
+class EvidenceScreeningResult:
+    declaration_fingerprint: str
+    evidence: tuple
+    excluded: tuple
+    matching_evidence: tuple
+    undecided: tuple
+    certificates: tuple
+    simulations_used: int
+    reason: str
+
+
+def verify_candidate_exclusion(protocol, candidate, cases, certificate, evidence, *,
+                               max_simulations=10000, budget=None, evaluator=None):
+    observation = certificate.observation
+    prediction = certificate.prediction
+    if observation not in evidence:
+        return PartialPredictionVerification('invalid', 'evidence_dependency_missing', 0)
+    values = dict(zip(prediction.experiments, prediction.responses))
+    if observation.experiment not in values or values[observation.experiment] == observation.response:
+        return PartialPredictionVerification('invalid', 'no_prediction_conflict', 0)
+    names = tuple(e.name for e in protocol.experiments)
+    budget = budget if budget is not None else SearchWorkBudget()
+    if observation.experiment not in names:
+        return PartialPredictionVerification('invalid', 'observation_outside_domain', 0)
+    try:
+        for row in protocol.worlds:
+            budget.consume('response_checks')
+            if row[names.index(observation.experiment)] == observation.response:
+                break
+        else:
+            return PartialPredictionVerification('invalid', 'observation_outside_domain', 0)
+    except SearchBudgetExceeded as error:
+        return PartialPredictionVerification('undecided', error.reason, 0)
+    return verify_partial_prediction(protocol, candidate, cases, prediction,
+        max_simulations=max_simulations, budget=budget, evaluator=evaluator)

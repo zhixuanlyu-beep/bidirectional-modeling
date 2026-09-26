@@ -252,4 +252,38 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.18.1"
+__version__ = "0.19.0"
+
+
+from .context_network import (
+    ModelingContext, ContextChange, ContextTransition, ContextTransitionReport,
+    ContextNetwork, validate_context_transition,
+)
+from .certificate_transport import (
+    TransportedConflict, transport_conflict, verify_transported_conflict,
+    ContextMigrationResult, migrate_session,
+)
+from .gluing import LocalDescription, GluingProblem, GluingReport, solve_gluing, verify_gluing_report
+from .macro_certificates import (
+    MacroSufficiencyCertificate, MacroSufficiencyResult,
+    certify_macro_sufficiency, verify_macro_sufficiency,
+)
+from .search_partial import (
+    CandidateExclusionCertificate, EvidenceScreeningResult, verify_candidate_exclusion,
+)
+from .boolean_reconstruction import (
+    BooleanExpression, BooleanLanguage, BooleanCatalogue, enumerate_boolean_language,
+    BooleanSubstituteReport, find_boolean_substitute, reconstruct_boolean, verify_boolean_substitute,
+)
+
+__all__ += [
+    'ModelingContext', 'ContextChange', 'ContextTransition', 'ContextTransitionReport',
+    'ContextNetwork', 'validate_context_transition', 'TransportedConflict',
+    'transport_conflict', 'verify_transported_conflict', 'ContextMigrationResult', 'migrate_session',
+    'LocalDescription', 'GluingProblem', 'GluingReport', 'solve_gluing', 'verify_gluing_report',
+    'MacroSufficiencyCertificate', 'MacroSufficiencyResult', 'certify_macro_sufficiency',
+    'verify_macro_sufficiency', 'CandidateExclusionCertificate', 'EvidenceScreeningResult',
+    'verify_candidate_exclusion', 'BooleanExpression', 'BooleanLanguage', 'BooleanCatalogue',
+    'enumerate_boolean_language', 'BooleanSubstituteReport', 'find_boolean_substitute',
+    'reconstruct_boolean', 'verify_boolean_substitute',
+]
