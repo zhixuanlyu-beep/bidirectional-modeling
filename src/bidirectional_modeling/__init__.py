@@ -133,7 +133,12 @@ from .search_queries import (
 
 from .search_lazy import LazyExecutableSearch, LazyQueryResult
 
+from .search_partial import (PartialPrediction, PartialPredictionResult,
+    PartialPredictionVerification, collect_partial_prediction, verify_partial_prediction)
+
 __all__ = [
+    "PartialPrediction", "PartialPredictionResult", "PartialPredictionVerification",
+    "collect_partial_prediction", "verify_partial_prediction",
     "LazyExecutableSearch", "LazyQueryResult",
     "ConstraintQuery", "MacroAlternativeQuery", "LowerSubstituteQuery", "QueryResult",
     "QueryStatus", "QueryVerification", "SearchQuery", "SearchQueryBackend", "FiniteSearchQueryBackend",
@@ -247,4 +252,4 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.17.0"
+__version__ = "0.18.0"
