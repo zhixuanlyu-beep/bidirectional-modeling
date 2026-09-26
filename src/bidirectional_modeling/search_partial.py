@@ -5,6 +5,9 @@ These are model predictions, never observations or complete-world witnesses.
 from dataclasses import asdict, dataclass, replace
 from typing import Optional, Tuple
 
+from .core import ResourceBudget
+from .evaluation import SatisfactionEvaluator
+from .provenance import trace_batch_protocol_fingerprint
 from .search import SearchBudgetExceeded, SearchProtocol, SearchWorkBudget, _natural
 from .search_adapter import ExecutableSearchAdapter, model_declaration_fingerprint
 from .structural import fingerprint_value, isolated_copy
@@ -17,6 +20,7 @@ class PartialPrediction:
     experiments: Tuple[str, ...]
     responses: Tuple[str, ...]
     batch_bindings: tuple
+    simulation_limit: Optional[int] = None
 
     def __post_init__(self):
         for field in ('experiments', 'responses', 'batch_bindings'):
@@ -24,7 +28,7 @@ class PartialPrediction:
 
     @property
     def fingerprint(self):
-        return fingerprint_value(('partial-prediction-v1', asdict(self)))
+        return fingerprint_value(('partial-prediction-v2', asdict(self)))
 
 
 @dataclass(frozen=True)
@@ -88,13 +92,53 @@ def collect_partial_prediction(protocol, candidate, cases, experiments, *,
         return PartialPredictionResult(None, prepared.simulations_used, 'prediction_unresolved',
                                        prepared.diagnostics)
     prediction = PartialPrediction(digest, candidate.model.name, selected,
-                                   projected.worlds[h.world], prepared.batch_bindings)
+                                   projected.worlds[h.world], prepared.batch_bindings, max_simulations)
     return PartialPredictionResult(prediction, prepared.simulations_used, 'selected_matrix_replayed')
+
+
+class _BoundedReplayEvaluator:
+    """Replay original batch protocols under a separate execution ceiling."""
+    def __init__(self, evaluator, limit):
+        self.evaluator = evaluator or SatisfactionEvaluator()
+        self.limit = limit
+        self.used = 0
+
+    def collect(self, model, context, horizon, original_budget):
+        remaining = self.limit - self.used
+        if remaining <= 0:
+            raise RuntimeError('verification_simulation_budget_exhausted')
+        cap = min(remaining, original_budget.max_simulations)
+        try:
+            batch = self.evaluator.collect(model, context, horizon,
+                                          ResourceBudget(max_simulations=cap))
+        except Exception:
+            self.used = self.limit
+            raise
+        self.used += batch.simulations_used
+        # Only complete, independently bound batches can be restated under the
+        # original (possibly larger) limit. Never upgrade incomplete evidence.
+        if batch.complete and batch.binds(model, context, horizon):
+            limit = original_budget.max_simulations
+            boundaries = batch.boundaries
+            if cap < limit:
+                # At an exact cap, the collector records an iterator-exhaustion
+                # warning even when the independent manifest proves coverage.
+                # It would not occur under the larger original limit. Preserve
+                # all other diagnostics and never normalize incomplete batches.
+                boundaries = tuple(b for b in boundaries if not (
+                    b.startswith('partial verification covers ')
+                    and 'of an unproven total because the simulation budget was exhausted' in b))
+            digest = trace_batch_protocol_fingerprint(batch.model_fingerprint,
+                batch.context_fingerprint, batch.horizon, limit, batch.coverage_authority,
+                batch.complete, batch.coverage, boundaries)
+            return replace(batch, simulation_limit=limit, protocol_fingerprint=digest, boundaries=boundaries)
+        return batch
 
 
 def verify_partial_prediction(protocol, candidate, cases, prediction, *,
                               max_simulations=10000, budget=None, evaluator=None):
     """Independently rerun the selected matrix; fingerprint equality alone is insufficient."""
+    _natural(max_simulations)
     cases = tuple(cases)
     if prediction.input_fingerprint != _binding(protocol, candidate, cases):
         return PartialPredictionVerification('invalid', 'binding_mismatch', 0)
@@ -104,10 +148,15 @@ def verify_partial_prediction(protocol, candidate, cases, prediction, *,
             or len(prediction.responses) != len(selected)
             or prediction.candidate != candidate.model.name):
         return PartialPredictionVerification('invalid', 'malformed_prediction', 0)
+    if prediction.simulation_limit is None:
+        return PartialPredictionVerification('undecided', 'missing_collection_protocol', 0)
+    if type(prediction.simulation_limit) is not int or prediction.simulation_limit < 0:
+        return PartialPredictionVerification('invalid', 'invalid_collection_protocol', 0)
+    bounded = _BoundedReplayEvaluator(evaluator, max_simulations)
     replay = collect_partial_prediction(protocol, candidate, cases, selected,
-        max_simulations=max_simulations, budget=budget, evaluator=evaluator)
+        max_simulations=prediction.simulation_limit, budget=budget, evaluator=bounded)
     if replay.prediction is None:
-        return PartialPredictionVerification('undecided', replay.reason, replay.simulations_used)
+        return PartialPredictionVerification('undecided', replay.reason, bounded.used)
     if replay.prediction != prediction:
-        return PartialPredictionVerification('invalid', 'replay_disagrees', replay.simulations_used)
-    return PartialPredictionVerification('valid', 'selected_matrix_replayed', replay.simulations_used)
+        return PartialPredictionVerification('invalid', 'replay_disagrees', bounded.used)
+    return PartialPredictionVerification('valid', 'selected_matrix_replayed', bounded.used)

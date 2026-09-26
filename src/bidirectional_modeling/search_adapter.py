@@ -68,6 +68,10 @@ def model_declaration_fingerprint(model):
     return fingerprint_value(declaration)
 
 
+class PredictionDomainError(ValueError):
+    """A completed prediction lies outside the declared response universe."""
+
+
 class ExecutableSearchAdapter:
     def __init__(self, evaluator=None):
         self.evaluator = evaluator or SatisfactionEvaluator()
@@ -140,6 +144,8 @@ class ExecutableSearchAdapter:
                                      declaration))
                 if tuple(c.fingerprint for c in cases) != case_ids:
                     raise RuntimeError('experiment declaration changed during collection')
+                if tuple(responses) not in protocol.worlds:
+                    raise PredictionDomainError('prediction_outside_response_universe')
                 world = protocol.worlds.index(tuple(responses))
                 hypothesis = SearchHypothesis(name, world, world_answers[world],
                                               candidate.description, candidate.commitments, candidate.materials)

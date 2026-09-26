@@ -58,6 +58,7 @@ class LazyExecutableSearch:
 
     @property
     def snapshot(self):
+        self._check_declaration()
         return self._search
 
     def _check_declaration(self):
@@ -67,7 +68,8 @@ class LazyExecutableSearch:
 
     def _reject_cached_drift(self, diagnostics):
         for name, _, reason in diagnostics:
-            if reason in ('model_declaration_changed', 'non_deterministic_response') and (
+            if reason in ('model_declaration_changed', 'non_deterministic_response',
+                          'prediction_outside_response_universe') and (
                     name in self._partial or any(h.name == name and h.world is not None
                                                  for h in self._search.hypotheses)):
                 self._invalidated = True
@@ -146,12 +148,22 @@ class LazyExecutableSearch:
         else:
             order = tuple(c.model.name for c in self._candidates)
         candidates = {c.model.name: c for c in self._candidates}
+        hypotheses = {h.name: h for h in self._search.hypotheses}
+        new_bindings = []
+        # Filter evidence once. Completed candidates are tested individually;
+        # only the initial and final receipts scan the whole catalogue.
+        possible = None
+        if not isinstance(query, (ConstraintQuery, LowerSubstituteQuery)) and receipt.status is QueryStatus.UNKNOWN:
+            try:
+                possible = self._search._worlds(evidence=query.evidence, budget=budget)
+            except SearchBudgetExceeded:
+                receipt = self._search.query(query, budget=budget)
         for name in dict.fromkeys(order):
             if receipt.status is not QueryStatus.UNKNOWN:
                 break
             if receipt.reason in ('work_budget_exhausted', 'cancelled'):
                 break
-            if any(h.name == name and h.world is not None for h in self._search.hypotheses):
+            if hypotheses[name].world is not None:
                 continue
             if used >= max_simulations:
                 diagnostics.append((name, 'RuntimeError', 'simulation_budget_exhausted'))
@@ -159,15 +171,12 @@ class LazyExecutableSearch:
             try:
                 budget.consume('query_checks')
             except SearchBudgetExceeded:
-                receipt = self._search.query(query, budget=budget)
                 break
             prepared = self._adapter.prepare(self._protocol, (candidates[name],), self._cases,
                 target=self._target, world_answers=self._answers,
                 max_simulations=max_simulations-used, backend=self._backend)
             used += prepared.simulations_used
             diagnostics.extend(prepared.diagnostics)
-            # Reject drift before publishing any new cache entry or receipt.
-            self._check_declaration()
             self._reject_cached_drift(prepared.diagnostics)
             hypothesis = prepared.search.hypotheses[0]
             if hypothesis.world is not None:
@@ -178,10 +187,39 @@ class LazyExecutableSearch:
                         for n, r in zip(partial.experiments, partial.responses)):
                     self._invalidated = True
                     raise ValueError('partial response changed; create a new instance')
-                self._search = self._search.with_hypotheses(tuple(
-                    hypothesis if h.name == name else h for h in self._search.hypotheses))
-                self._bindings += prepared.batch_bindings
+                hypotheses[name] = hypothesis
+                new_bindings.extend(prepared.batch_bindings)
                 resolved.append(name)
+                try:
+                    budget.consume('candidate_checks')
+                except SearchBudgetExceeded:
+                    break
+                if isinstance(query, LowerSubstituteQuery):
+                    target = hypotheses[query.candidate]
+                    if name == query.candidate:
+                        # Scan cached lower candidates once after resolving the target.
+                        try:
+                            found = False
+                            for lower in query.lower_names:
+                                budget.consume('candidate_checks')
+                                if hypotheses[lower].world == target.world:
+                                    found = True
+                                    break
+                        except SearchBudgetExceeded:
+                            break
+                        if found:
+                            break
+                    elif target.world is not None and hypothesis.world == target.world:
+                        break
+                elif hypothesis.world in possible and hypothesis.macro_answer != query.answer:
+                    break
+        # Publish successful candidates together; avoid rebuilding/fingerprinting
+        # the whole catalogue for each candidate. Prior returned snapshots stay fixed.
+        self._check_declaration()
+        if resolved:
+            self._search = self._search.with_hypotheses(tuple(hypotheses.values()))
+            self._bindings += tuple(new_bindings)
+        if order and receipt.status is QueryStatus.UNKNOWN:
             receipt = self._search.query(query, budget=budget)
         return LazyQueryResult(self._search, receipt, used, tuple(resolved),
                                self._bindings, tuple(diagnostics), self._declaration)

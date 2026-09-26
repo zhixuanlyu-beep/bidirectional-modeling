@@ -181,9 +181,12 @@ class PartialTests(unittest.TestCase):
                 return super().simulate(context, horizon)
         lazy = self.lazy((p, replace(c, model=Stateful()), cases))
         self.assertIsNotNone(lazy.predict_experiments('external', ('a',)).prediction)
+        historical = lazy.snapshot
         with self.assertRaisesRegex(ValueError, 'prediction drift'):
             lazy.predict_experiments('external', ('b',))
-        self.assertIsNone(lazy.snapshot.hypotheses[0].world)
+        with self.assertRaises(ValueError):
+            _ = lazy.snapshot
+        self.assertIsNone(historical.hypotheses[0].world)
 
     def test_input_validation(self):
         args = partial_args()
