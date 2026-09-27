@@ -15,7 +15,7 @@ from .core import (
     MacroSpec,
     UndefinedTransition,
 )
-from .structural import freeze_value, isolated_mapping
+from ._exploration import explore_reachable
 
 
 class ClosureAnalyzer:
@@ -34,12 +34,6 @@ class ClosureAnalyzer:
         depth_limit = spec.horizon if max_depth is None else max_depth
         if depth_limit < 0:
             raise ValueError("max_depth must be non-negative")
-
-        def state_key(state: Mapping[str, Any]) -> Tuple[Any, ...]:
-            return freeze_value(
-                dict(state),
-                purpose="closure state deterministic structural identity",
-            )
 
         analysis_errors = []
         error_keys = set()
@@ -72,81 +66,17 @@ class ClosureAnalyzer:
                 )
             )
 
-        complete = True
-        initial = []
-        seen = set()
-        for name in model.initial_states:
-            if len(initial) >= max_states:
-                complete = False
-                break
-            try:
-                state = isolated_mapping(
-                    model.states[name], purpose="closure initial state"
-                )
-                key = state_key(state)
-            except Exception as error:
-                complete = False
-                record_error("initial-state identity", error, initial_state=name)
-                continue
-            initial.append((name, state))
-            seen.add(key)
-
-        reachable = list(initial)
-        frontier = list(reachable)
-        actions = tuple(
-            dict.fromkeys(
-                ("noop",)
-                + tuple(action for action in model.actions if action != "noop")
-            )
-        )
-        for depth in range(1, depth_limit + 1):
-            next_frontier = []
-            for source_name, state in frontier:
-                for action in actions:
-                    try:
-                        next_state = model.audited_step(state, action, context)
-                    except UndefinedTransition:
-                        continue
-                    except Exception as error:
-                        complete = False
-                        record_error(
-                            "reachable transition",
-                            error,
-                            source_state=source_name,
-                            action=action,
-                        )
-                        continue
-                    try:
-                        key = state_key(next_state)
-                    except Exception as error:
-                        complete = False
-                        record_error(
-                            "successor identity",
-                            error,
-                            source_state=source_name,
-                            action=action,
-                        )
-                        continue
-                    if key in seen:
-                        continue
-                    if len(reachable) >= max_states:
-                        complete = False
-                        break
-                    seen.add(key)
-                    named = ("%s --%s--> reachable:%d:%d" % (source_name, action, depth, len(reachable)), next_state)
-                    reachable.append(named)
-                    next_frontier.append(named)
-                if not complete:
-                    break
-            frontier = next_frontier
-            if not complete or not frontier:
-                break
-
-        # Reaching the caller's depth bound with an unexpanded frontier proves
-        # only bounded non-refutation, never exhaustion of the reachable state
-        # space.  Keep the report incomplete until the frontier is empty.
-        if complete and frontier:
-            complete = False
+        exploration = explore_reachable(model, context, max_depth=depth_limit, max_states=max_states)
+        complete = exploration.complete
+        for phase, error, witness in exploration.errors:
+            record_error(phase, error, **witness)
+        reachable = [
+            (state.source_initial_state if not state.actions else
+             '%s --%s--> reachable:%d' % (state.source_initial_state, '/'.join(state.actions), state.index),
+             state.micro_state)
+            for state in exploration.states
+        ]
+        actions = exploration.actions
 
         violations = []
         checked = 0
@@ -398,3 +328,4 @@ class ConceptLibrary:
         )
         self._concepts[name] = updated
         return updated
+

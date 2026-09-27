@@ -2,12 +2,12 @@
 import json
 import os
 import tempfile
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .search import (ConflictCertificate, DescriptionLength, ExperimentHypothesisSearch,
                      ResponseConstraint, SearchExperiment, SearchHypothesis,
-                     SearchObservation, SearchProtocol, SearchWorkBudget)
+                     SearchObservation, SearchProtocol, SearchWorkBudget, SearchBudgetExceeded)
 from .structural import fingerprint_value, validate_fingerprint
 
 
@@ -90,7 +90,6 @@ class SearchSession:
         return hypothesis
 
     def migrate_context(self, target_search, transition, target_evidence, evidence_links, *, budget=None):
-        from .certificate_transport import migrate_session
         return migrate_session(self, target_search, transition, target_evidence, evidence_links, budget=budget)
 
     def to_json(self):
@@ -170,3 +169,42 @@ class SearchSession:
             raise ValueError('session exceeds input limit')
         return cls.from_json(data.decode('utf-8'),budget=budget)
 
+
+
+@dataclass(frozen=True)
+class ContextMigrationResult:
+    status: str
+    reason: str
+    session: object = None
+    transports: tuple = ()
+
+
+def migrate_session(session, target_search, transition, target_evidence, evidence_links, *, budget=None):
+    """Fork a new session transactionally; the source session remains unchanged."""
+    from .certificate_transport import _transport_conflict
+    from .context_network import _prepare_context_transition
+    budget = budget if budget is not None else SearchWorkBudget()
+    target_evidence, evidence_links = tuple(target_evidence), tuple(evidence_links)
+    if (session.search.protocol.fingerprint != transition.source.protocol.fingerprint or
+            target_search.protocol.fingerprint != transition.target.protocol.fingerprint):
+        return ContextMigrationResult('not_applicable', 'protocol_binding_mismatch')
+    prepared = _prepare_context_transition(transition, budget=budget)
+    report, _ = prepared
+    if report.status != 'valid':
+        return ContextMigrationResult('undecided' if report.status == 'undecided' else 'not_applicable', report.reason)
+    receipts = []
+    try:
+        for certificate in session.certificates:
+            receipt = _transport_conflict(session.search, target_search, transition, certificate,
+                session.evidence, target_evidence, evidence_links, prepared, budget=budget)
+            receipts.append(receipt)
+            if receipt.status == 'undecided':
+                return ContextMigrationResult('undecided', receipt.reason, transports=tuple(receipts))
+        migrated = SearchSession(target_search, target_evidence,
+            tuple(r.certificate for r in receipts if r.status == 'verified'), budget=budget)
+    except SearchBudgetExceeded as error:
+        return ContextMigrationResult('undecided', error.reason, transports=tuple(receipts))
+    migrated.events.append(dict(kind='context_migrated',
+        source_problem=session.search.fingerprint, source_revision=session.revision,
+        transition=transition.fingerprint, transports=[asdict(r) for r in receipts]))
+    return ContextMigrationResult('completed', 'new_context_session', migrated, tuple(receipts))

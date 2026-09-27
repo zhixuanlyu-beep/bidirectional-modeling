@@ -1,8 +1,10 @@
-# 0.19.0：情境网络、结构重构与小证据验证
+# 情境转换、证书迁移与小证据验证
 
 固定有限模型是每次计算的局部工作条件。框架允许通过显式转换扩展、限制、细化或重构这些条件，不要求所有情境属于预先存在的同一个全局状态空间。该实现不主张已经证明现实没有终极底层。
 
-## 一次运行六项验收
+本轮核心是协议转换、证书迁移、部分排除与宏观充分性。布尔重构和拼接属于随包提供的可选扩展，通用调用链不依赖它们。
+
+## 贯通验收
 
 ```bash
 bidirectional-modeling context-demo --json
@@ -37,7 +39,7 @@ bidirectional-modeling context-demo --json
 
 `validate_context_transition` 返回 `valid / invalid / undecided`。`split_source_worlds`、`unrepresented_source_worlds`、`unmatched_target_worlds` 统计的是声明的响应行，不能称为结构候选被淘汰的数量。只有覆盖完整源实验时才报告拆分类数。
 
-`ContextNetwork` 保存通过验证的直接转换，公开只读映射。名称相同而定义变化的节点被拒绝，应使用新的版本名。多条边不自动组成端到端证明；不同节点可以拥有独立响应域。
+`bidirectional_modeling.context_network.ContextNetwork` 是可选的直接边容器，保存通过验证的直接转换，公开只读映射。名称相同而定义变化的节点被拒绝，应使用新的版本名。多条边不自动组成端到端证明；不同节点可以拥有独立响应域。
 
 ## 证书迁移与会话
 
@@ -62,14 +64,16 @@ if receipt.status == 'verified':
 
 `source_session.migrate_context(target_search, transition, target_evidence, evidence_links)` 创建新会话，保持源会话不变。未决时不发布新会话；已验证证书进入新会话，不适用的证书留在迁移记录中。新会话继续使用 schema 2，保存迁移来源事件；恢复时重验目标冲突证书。事件历史不是签名，独立重验跨情境迁移仍需提供原协议、转换和源证据。
 
+会话迁移由 `search_session` 负责，一次迁移内只准备一次转换关系并供各证书使用；独立复核仍重新验证转换。旧 `certificate_transport.migrate_session` 导入继续兼容。
+
 数据来源标签与 evidence_links 都是调用方声明，不提供实验真实性或身份认证。转换也不会替代对实际校准条件的外部确认。
 
-## 局部—整体拼接
+## 可选：局部—整体拼接
 
 `LocalDescription` 是局部变量及其允许赋值关系。`GluingProblem.domains` 给出有限字符串域，默认整体类是其笛卡尔积；也可用 `global_assignments` 声明更窄的整体类。
 
 ```python
-from bidirectional_modeling import LocalDescription, GluingProblem, solve_gluing
+from bidirectional_modeling.extensions.gluing import LocalDescription, GluingProblem, solve_gluing
 
 same = (('0', '0'), ('1', '1'))
 different = (('0', '1'), ('1', '0'))
@@ -84,6 +88,8 @@ assert report.overlap_consistent and report.status == 'absent'
 ```
 
 `found` 携带整体赋值；`absent` 表示穷尽声明的整体类后没有赋值；`unknown` 保留预算未决。`overlap_consistent` 在未完成检查时为 `None`。重叠不一致与不存在整体赋值是两个不同检查，报告不会把它们混同。
+
+存在性复核直接检查给定整体赋值的域、整体类成员资格和局部关系，不重新求解整个问题。不存在性复核检查所给冲突核；仅在声明极小时才逐项检查删除后的可满足性。
 
 冲突核为包含意义下极小，不声称最小基数。核最小化中断时，已证明的 `absent` 仍成立，但 `core_minimal=False`。`verify_gluing_report` 重验实际核心和所声称的极小性，不信任外部标志。显式空整体类会返回空核心，表示失败来自整体类自身的限制。
 
@@ -101,17 +107,21 @@ for certificate in screen.certificates:
     )
 ```
 
-实验按协议声明的成本从低到高筛查。一个已重放验证的预测与同域有效观测冲突，即停止该候选的后续模拟。报告同时给出 `excluded`、`matching_evidence` 和 `undecided`。
+实验按协议声明的成本从低到高筛查，以 1、2、4、… 个实验的倍增前缀联合重放，末批覆盖剩余实验。每批保留两轮完整重放与漂移检查，避免逐次追加导致累计二次方工作量；代价是冲突可能到批次结束才被发现。一个已重放验证的预测与同域有效观测冲突，即停止该候选的后续模拟。报告同时给出 `excluded`、`matching_evidence` 和 `undecided`。
 
 `matching_evidence` 仅表示吻合此次提供的数据，不证明完整预测、全部承诺或目标答案。部分筛查不会删改全目录，也不把部分行伪装为 `world`。撤回观测后再次筛查即可重新考虑候选。原有 `execute` 的完整响应语义保持不变；调用者使用筛查结果时必须保留个体排除证书，不能将缩减目录当作免费背景来证明原目录的宏观答案。
 
 `verify_candidate_exclusion` 检查活跃观测依赖，并独立重放相应的部分实验矩阵。预算不足返回未决。个体证书不能用于排除模型族、后代或同名新版本。输入声明不变时的缓存仍依赖原有确定性/回调纯度约定；重验会检查实际执行。
 
-## 有界布尔重构与低阶覆盖
+## 可选：有界布尔重构与低阶覆盖
+
+使用 `bidirectional_modeling.extensions.boolean` 显式导入本节接口。
 
 `BooleanExpression` 是由常量、变量、取反、AND、OR、XOR 构成的规范 AST；二元交换操作按规范顺序排序。`replace(path, replacement)` 替换明确的子树，`to_model` 生成兼容既有模型验证器的可执行模型，布尔输入来自 `Context.environment`。
 
 `BooleanLanguage` 明确变量、允许操作、常量开关及最大节点数。`enumerate_boolean_language` 只在穷尽该语言后声明 `complete=True`；预算截断不证明低阶类已被排除。`find_boolean_substitute` 比较指定实验输入上的响应，返回 `found / absent / unknown`；报告绑定目标 AST、语言和输入域，可用 `verify_boolean_substitute` 独立重验。目标不要求属于低阶语言本身。
+
+替代搜索流式生成规范 AST 并立即比较，找到首个见证就停止。`found` 复核只检查见证的语言成员资格与指定输入响应，允许不同但有效的替代见证；`absent` 仍须穷尽有界语言。
 
 描述长度采用版本固定的语言 JSON 头、节点数 gamma 编码和等宽前缀 AST token 计数，并返回现有 `DescriptionLength`。这是明确编码下的长度，不是任意 Python 代码的 Kolmogorov 复杂度。
 

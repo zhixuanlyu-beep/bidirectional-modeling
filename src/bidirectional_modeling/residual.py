@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Deque, Dict, Iterable, Mapping, Optional, Sequence, Tuple
+
+from ._exploration import Edge as _Edge, explore_reachable
 
 from .core import (
     Context,
@@ -32,11 +33,6 @@ from .structural import (
     isolated_mapping,
     validate_fingerprint,
 )
-
-
-class _Edge(Enum):
-    UNDEFINED = "undefined"
-    UNKNOWN = "unknown"
 
 
 def _freeze(value: Any) -> FrozenValue:
@@ -457,65 +453,28 @@ class ResidualQuotientAnalyzer:
                 )
         equivalence_signature = equivalence.semantic_signature()
 
-        actions = tuple(
-            dict.fromkeys(
-                ("noop",)
-                + tuple(action for action in model.actions if action != "noop")
-            )
-        )
-        states = []
-        state_indices: Dict[FrozenValue, int] = {}
-        observation_keys = []
-        initial_indices = []
-        frontier: Deque[int] = deque()
-        transitions: Dict[Tuple[int, str], Any] = {}
-        transition_evaluations = 0
-        state_limit_hit = False
-        reachability_limit_hit = False
+        def observe(state):
+            observation = model.audited_observe(state, context)
+            return observation, equivalence.signature(observation)
 
-        def add_state(
-            state: Mapping[str, Any],
-            source_initial_state: str,
-            path: Tuple[str, ...],
-        ) -> Tuple[int, bool]:
-            micro_state = isolated_mapping(
-                state, purpose="residual microstate"
-            )
-            key = _state_key(micro_state)
-            known = state_indices.get(key)
-            if known is not None:
-                return known, False
-            observation = model.audited_observe(micro_state, context)
-            signature = equivalence.signature(observation)
-            index = len(states)
-            state_indices[key] = index
-            states.append(
-                ResidualState(
-                    index=index,
-                    source_initial_state=source_initial_state,
-                    actions=path,
-                    micro_state=micro_state,
-                    observation=observation,
-                    observation_signature=signature,
-                )
-            )
-            observation_keys.append(_freeze(signature))
-            frontier.append(index)
-            return index, True
-
-        for initial_name in model.initial_states:
-            initial_key = _state_key(model.states[initial_name])
-            if initial_key not in state_indices and len(states) >= max_states:
-                state_limit_hit = True
-                boundaries.append(
-                    "initial-state enumeration reached max_states=%d before %r"
-                    % (max_states, initial_name)
-                )
-                break
-            state_index, _ = add_state(
-                model.states[initial_name], initial_name, ()
-            )
-            initial_indices.append((initial_name, state_index))
+        exploration = explore_reachable(model, context, max_depth=max_reachability_depth,
+            max_states=max_states, observe=observe, raise_initial_errors=True)
+        states = [ResidualState(state.index, state.source_initial_state, state.actions,
+                                state.micro_state, state.observation, state.observation_signature)
+                  for state in exploration.states]
+        actions = exploration.actions
+        transitions = exploration.transitions
+        initial_indices = exploration.initial_indices
+        transition_evaluations = exploration.transition_evaluations
+        observation_keys = [_freeze(state.observation_signature) for state in states]
+        for _, error, witness in exploration.errors:
+            boundaries.append('transition from state %d under %r could not be certified: %s' % (
+                witness['source_state'], witness['action'], error))
+        if exploration.state_limit_hit:
+            boundaries.append('reachable-state enumeration reached max_states=%d' % max_states)
+        if exploration.depth_limit_hit:
+            boundaries.append('reachable-state enumeration stopped at depth %d' % max_reachability_depth)
+        complete = binding_complete and exploration.complete
 
         if not states:
             boundaries.append(
@@ -555,64 +514,6 @@ class ResidualQuotientAnalyzer:
                 transition_evaluations=0,
                 boundaries=tuple(boundaries),
             )
-
-        while frontier:
-            state_index = frontier.popleft()
-            state = states[state_index]
-            depth = len(state.actions)
-            if (
-                max_reachability_depth is not None
-                and depth >= max_reachability_depth
-            ):
-                reachability_limit_hit = True
-                for action in actions:
-                    transitions[(state_index, action)] = _Edge.UNKNOWN
-                continue
-
-            for action in actions:
-                transition_evaluations += 1
-                try:
-                    successor = model.audited_step(
-                        state.micro_state, action, context
-                    )
-                    key = _state_key(successor)
-                    successor_index = state_indices.get(key)
-                    if successor_index is None:
-                        if len(states) >= max_states:
-                            state_limit_hit = True
-                            transitions[(state_index, action)] = _Edge.UNKNOWN
-                            continue
-                        successor_index, _ = add_state(
-                            successor,
-                            state.source_initial_state,
-                            state.actions + (action,),
-                        )
-                    transitions[(state_index, action)] = successor_index
-                except UndefinedTransition:
-                    transitions[(state_index, action)] = _Edge.UNDEFINED
-                except Exception as error:
-                    transitions[(state_index, action)] = _Edge.UNKNOWN
-                    boundaries.append(
-                        "transition from state %d under %r could not be certified: %s"
-                        % (state_index, action, error)
-                    )
-
-        if state_limit_hit:
-            boundaries.append(
-                "reachable-state enumeration reached max_states=%d" % max_states
-            )
-        if reachability_limit_hit:
-            boundaries.append(
-                "reachable-state enumeration stopped at depth %d"
-                % max_reachability_depth
-            )
-
-        complete = binding_complete and (
-            not state_limit_hit
-            and not reachability_limit_hit
-            and len(transitions) == len(states) * len(actions)
-            and all(target is not _Edge.UNKNOWN for target in transitions.values())
-        )
 
         initial_partition = _normalize_partition(observation_keys)
         distinctions = []
@@ -914,3 +815,4 @@ class ResidualQuotientAnalyzer:
                 context_basis_reproduces_partition
             ),
         )
+

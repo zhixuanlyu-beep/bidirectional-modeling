@@ -119,10 +119,11 @@ class ContextTransitionReport:
     unmatched_target_worlds: int = 0
 
 
-def validate_context_transition(transition, *, budget=None):
+def _prepare_context_transition(transition, *, budget=None):
     budget = budget if budget is not None else SearchWorkBudget()
+    relation = []
     def result(status, reason, *counts):
-        return ContextTransitionReport(transition.fingerprint, status, reason, *counts)
+        return ContextTransitionReport(transition.fingerprint, status, reason, *counts), tuple(relation)
     source_names = {e.name for e in transition.source.protocol.experiments}
     target_names = {e.name for e in transition.target.protocol.experiments}
     mapped_source = {a for a, _ in transition.experiments}
@@ -136,6 +137,7 @@ def validate_context_transition(transition, *, budget=None):
     try:
         for row in transition.target.protocol.worlds:
             matches = transition.matching_source_worlds(row, budget)
+            relation.append(matches)
             unmatched += not bool(matches)
             for i in matches:
                 counts[i] += 1
@@ -151,6 +153,10 @@ def validate_context_transition(transition, *, budget=None):
         return result('undecided', error.reason)
     except ValueError as error:
         return result('invalid', str(error))
+
+
+def validate_context_transition(transition, *, budget=None):
+    return _prepare_context_transition(transition, budget=budget)[0]
 
 
 class ContextNetwork:

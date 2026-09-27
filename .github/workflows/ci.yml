@@ -90,6 +90,10 @@ jobs:
               "bidirectional_modeling/boolean_reconstruction.py",
               "bidirectional_modeling/macro_certificates.py",
               "bidirectional_modeling/context_examples.py",
+              "bidirectional_modeling/_exploration.py",
+              "bidirectional_modeling/extensions/__init__.py",
+              "bidirectional_modeling/extensions/boolean.py",
+              "bidirectional_modeling/extensions/gluing.py",
           }
           missing = required - names
           if missing:

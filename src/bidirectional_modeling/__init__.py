@@ -1,5 +1,4 @@
 """Verifiable bidirectional macro-purpose ↔ micro-structure modeling."""
-
 from .correspondence import (
     Correspondence,
     CorrespondenceCaseResult,
@@ -14,6 +13,7 @@ from .correspondence import (
     ScalePath,
     correspondence_fingerprint,
 )
+
 from .composition import (
     CompositionCaseResult,
     CompositionExperiment,
@@ -24,6 +24,7 @@ from .composition import (
     CompositionTest,
     CompositionTestResult,
 )
+
 from .core import (
     Aggregation,
     CandidateEvaluation,
@@ -58,6 +59,7 @@ from .core import (
     Trace,
     UndefinedTransition,
 )
+
 from .engine import (
     BidirectionalModelingEngine,
     MacroRoundTripReport,
@@ -66,6 +68,7 @@ from .engine import (
     RefinementStep,
     behaviorally_equivalent,
 )
+
 from .evaluation import SatisfactionEvaluator, TraceBatch
 from .interpretation import (
     CatalogHypothesisGenerator,
@@ -74,6 +77,7 @@ from .interpretation import (
     Interpreter,
     ObservedEffectGenerator,
 )
+
 from .probes import HorizonExtensionProbe
 from .provenance import (
     context_fingerprint,
@@ -81,6 +85,7 @@ from .provenance import (
     macro_spec_fingerprint,
     observed_model_fingerprint,
 )
+
 from .realization import (
     CandidateGenerator,
     ParametricCandidateGenerator,
@@ -89,6 +94,7 @@ from .realization import (
     RegistryGenerator,
     pareto_partition,
 )
+
 from .refinement import ClosureAnalyzer, ConceptLibrary
 from .residual import (
     DistinguishingContext,
@@ -107,7 +113,6 @@ from .search import (
     SearchBudgetExceeded,
     SearchWork,
     SearchWorkBudget,
-
     ConflictCertificate,
     DescriptionLength,
     ExperimentHypothesisSearch,
@@ -121,10 +126,8 @@ from .search import (
 )
 
 from .search_adapter import ExecutableSearchAdapter, ModelSearchCandidate, ModelSearchCase, ModelSearchResult
-from .search_session import SearchSession
+from .search_session import SearchSession, ContextMigrationResult, migrate_session
 from .search_reconstruction import ReconstructionRule
-from .search_benchmark import benchmark_search, benchmark_search_updates, SearchBenchmarkStep
-
 from .search_queries import (
     ConstraintQuery, MacroAlternativeQuery, LowerSubstituteQuery, QueryResult,
     QueryStatus, QueryVerification, SearchQuery, SearchQueryBackend, FiniteSearchQueryBackend,
@@ -132,7 +135,6 @@ from .search_queries import (
 )
 
 from .search_lazy import LazyExecutableSearch, LazyQueryResult
-
 from .search_partial import (PartialPrediction, PartialPredictionResult,
     PartialPredictionVerification, collect_partial_prediction, verify_partial_prediction)
 
@@ -143,15 +145,13 @@ __all__ = [
     "ConstraintQuery", "MacroAlternativeQuery", "LowerSubstituteQuery", "QueryResult",
     "QueryStatus", "QueryVerification", "SearchQuery", "SearchQueryBackend", "FiniteSearchQueryBackend",
     "query_fingerprint", "verify_query_result",
-    "benchmark_search_updates", "SearchBenchmarkStep",
     "ReconstructionRule",
     "ExecutableSearchAdapter", "ModelSearchCandidate", "ModelSearchCase", "ModelSearchResult",
-    "SearchSession", "benchmark_search",
+    "SearchSession",
     "MacroValidationReport",
     "SearchBudgetExceeded",
     "SearchWork",
     "SearchWorkBudget",
-
     "ConflictCertificate",
     "DescriptionLength",
     "ExperimentHypothesisSearch",
@@ -162,7 +162,6 @@ __all__ = [
     "SearchHypothesis",
     "SearchObservation",
     "SearchProtocol",
-
     "Aggregation",
     "BidirectionalModelingEngine",
     "CandidateEvaluation",
@@ -254,36 +253,63 @@ __all__ = [
 
 __version__ = "0.19.0"
 
-
 from .context_network import (
     ModelingContext, ContextChange, ContextTransition, ContextTransitionReport,
-    ContextNetwork, validate_context_transition,
+    validate_context_transition,
 )
+
 from .certificate_transport import (
     TransportedConflict, transport_conflict, verify_transported_conflict,
-    ContextMigrationResult, migrate_session,
 )
-from .gluing import LocalDescription, GluingProblem, GluingReport, solve_gluing, verify_gluing_report
+
 from .macro_certificates import (
     MacroSufficiencyCertificate, MacroSufficiencyResult,
     certify_macro_sufficiency, verify_macro_sufficiency,
 )
+
 from .search_partial import (
     CandidateExclusionCertificate, EvidenceScreeningResult, verify_candidate_exclusion,
-)
-from .boolean_reconstruction import (
-    BooleanExpression, BooleanLanguage, BooleanCatalogue, enumerate_boolean_language,
-    BooleanSubstituteReport, find_boolean_substitute, reconstruct_boolean, verify_boolean_substitute,
 )
 
 __all__ += [
     'ModelingContext', 'ContextChange', 'ContextTransition', 'ContextTransitionReport',
-    'ContextNetwork', 'validate_context_transition', 'TransportedConflict',
+    'validate_context_transition', 'TransportedConflict',
     'transport_conflict', 'verify_transported_conflict', 'ContextMigrationResult', 'migrate_session',
-    'LocalDescription', 'GluingProblem', 'GluingReport', 'solve_gluing', 'verify_gluing_report',
     'MacroSufficiencyCertificate', 'MacroSufficiencyResult', 'certify_macro_sufficiency',
     'verify_macro_sufficiency', 'CandidateExclusionCertificate', 'EvidenceScreeningResult',
-    'verify_candidate_exclusion', 'BooleanExpression', 'BooleanLanguage', 'BooleanCatalogue',
-    'enumerate_boolean_language', 'BooleanSubstituteReport', 'find_boolean_substitute',
-    'reconstruct_boolean', 'verify_boolean_substitute',
+    'verify_candidate_exclusion',
 ]
+# One compatibility cycle: explicit legacy imports still work, but optional
+# domains and benchmarks are not imported by the core or advertised in __all__.
+_COMPAT_EXPORTS = {
+    'BooleanExpression': '.extensions.boolean',
+    'BooleanLanguage': '.extensions.boolean',
+    'BooleanCatalogue': '.extensions.boolean',
+    'enumerate_boolean_language': '.extensions.boolean',
+    'BooleanSubstituteReport': '.extensions.boolean',
+    'find_boolean_substitute': '.extensions.boolean',
+    'reconstruct_boolean': '.extensions.boolean',
+    'verify_boolean_substitute': '.extensions.boolean',
+    'LocalDescription': '.extensions.gluing',
+    'GluingProblem': '.extensions.gluing',
+    'GluingReport': '.extensions.gluing',
+    'solve_gluing': '.extensions.gluing',
+    'verify_gluing_report': '.extensions.gluing',
+    'benchmark_search': '.search_benchmark',
+    'benchmark_search_updates': '.search_benchmark',
+    'SearchBenchmarkStep': '.search_benchmark',
+    'ContextNetwork': '.context_network',
+}
+
+
+def __getattr__(name):
+    module = _COMPAT_EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(name)
+    from importlib import import_module
+    from warnings import warn
+    warn('%s is a compatibility export; import it from %s%s' % (name, __name__, module),
+         DeprecationWarning, stacklevel=2)
+    value = getattr(import_module(module, __name__), name)
+    globals()[name] = value
+    return value

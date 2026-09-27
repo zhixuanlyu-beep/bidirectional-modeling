@@ -2,12 +2,12 @@
 from dataclasses import replace
 from itertools import product
 
-from .boolean_reconstruction import (BooleanExpression, BooleanLanguage, find_boolean_substitute,
+from .extensions.boolean import (BooleanExpression, BooleanLanguage, find_boolean_substitute,
                                      reconstruct_boolean)
 from .certificate_transport import transport_conflict
 from .context_network import ModelingContext, ContextChange, ContextTransition, validate_context_transition
 from .core import Context, ScenarioKey
-from .gluing import LocalDescription, GluingProblem, solve_gluing
+from .extensions.gluing import LocalDescription, GluingProblem, solve_gluing
 from .macro_certificates import certify_macro_sufficiency, verify_macro_sufficiency
 from .search import (SearchProtocol, SearchExperiment, SearchObservation, ResponseConstraint,
                      ExperimentHypothesisSearch, SearchHypothesis)

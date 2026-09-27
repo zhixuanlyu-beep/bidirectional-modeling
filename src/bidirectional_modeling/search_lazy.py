@@ -151,12 +151,17 @@ class LazyExecutableSearch:
             else:
                 costs = {e.name: e.cost for e in self._protocol.experiments}
                 ordered = sorted(evidence, key=lambda o: costs[o.experiment])
+                # Extend prefixes geometrically: joint replay remains intact,
+                # but successful screening performs O(k), not O(k**2), simulations.
+                experiments = tuple(dict.fromkeys(o.experiment for o in ordered))
                 for candidate in self._candidates:
                     name = candidate.model.name
                     all_matched = True
-                    for observation in ordered:
+                    stop = 1
+                    while experiments:
                         budget.consume('candidate_checks')
-                        result = self.predict_experiments(name, (observation.experiment,),
+                        selected = experiments[:stop]
+                        result = self.predict_experiments(name, selected,
                             max_simulations=max_simulations-used, budget=budget)
                         used += result.simulations_used
                         if result.prediction is None:
@@ -164,11 +169,16 @@ class LazyExecutableSearch:
                             reason = result.reason
                             break
                         values = dict(zip(result.prediction.experiments, result.prediction.responses))
-                        if values[observation.experiment] != observation.response:
-                            certificates.append(CandidateExclusionCertificate(result.prediction, observation))
+                        conflict = next((o for o in ordered if o.experiment in values
+                                         and values[o.experiment] != o.response), None)
+                        if conflict is not None:
+                            certificates.append(CandidateExclusionCertificate(result.prediction, conflict))
                             excluded.append(name)
                             all_matched = False
                             break
+                        if stop >= len(experiments):
+                            break
+                        stop = min(2*stop, len(experiments))
                     if all_matched:
                         matching.append(name)
         except SearchBudgetExceeded as error:
