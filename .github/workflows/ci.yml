@@ -86,8 +86,6 @@ jobs:
               "bidirectional_modeling/search_partial.py",
               "bidirectional_modeling/context_network.py",
               "bidirectional_modeling/certificate_transport.py",
-              "bidirectional_modeling/gluing.py",
-              "bidirectional_modeling/boolean_reconstruction.py",
               "bidirectional_modeling/macro_certificates.py",
               "bidirectional_modeling/context_examples.py",
               "bidirectional_modeling/_exploration.py",

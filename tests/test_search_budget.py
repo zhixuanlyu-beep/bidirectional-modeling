@@ -1,3 +1,4 @@
+from bidirectional_modeling.search_queries import LowerSubstituteQuery, QueryStatus
 """Regression checks for bounded proof checking and unambiguous result domains."""
 import unittest
 from dataclasses import replace
@@ -147,9 +148,10 @@ class SearchBudgetTests(unittest.TestCase):
             lambda b: self.search.compress_evidence(self.data,budget=b),
             lambda b: self.search.partition(budget=b),
             lambda b: self.search.macro_identifiable(budget=b),
-            lambda b: self.search.irreducible_against("xz",("x", "z"),budget=b),
             lambda b: self.search.next_experiment(budget=b),
         )
+        result = self.search.query(LowerSubstituteQuery("xz", ("x", "z")), budget=SearchWorkBudget(0))
+        self.assertEqual(result.status, QueryStatus.UNKNOWN)
         for operation in operations:
             with self.assertRaises(SearchBudgetExceeded):
                 operation(SearchWorkBudget(0))
@@ -179,3 +181,4 @@ class SearchBudgetTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

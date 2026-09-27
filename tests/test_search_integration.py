@@ -4,12 +4,8 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine, Context, DescriptionLength, ExecutableSearchAdapter,
-    FiniteStateModel, ModelMetrics, ModelSearchCandidate, ModelSearchCase, ScenarioKey,
-    SearchBudgetExceeded, SearchExperiment, SearchHypothesis, SearchObservation,
-    SearchProtocol, SearchSession, SearchWorkBudget, benchmark_search,
-)
+from bidirectional_modeling import (BidirectionalModelingEngine, Context, DescriptionLength, ExecutableSearchAdapter, FiniteStateModel, ModelMetrics, ModelSearchCandidate, ModelSearchCase, ScenarioKey, SearchBudgetExceeded, SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol, SearchSession, SearchWorkBudget)
+from bidirectional_modeling.search_benchmark import (benchmark_search)
 from bidirectional_modeling.search_examples import conflict_search_scenario
 from bidirectional_modeling.structural import fingerprint_value
 
@@ -156,3 +152,4 @@ class BenchmarkTests(unittest.TestCase):
         unknown=replace(search.hypotheses[0],world=None)
         from bidirectional_modeling import ExperimentHypothesisSearch
         with self.assertRaises(ValueError): benchmark_search(ExperimentHypothesisSearch(search.protocol,(unknown,),search.target),data)
+

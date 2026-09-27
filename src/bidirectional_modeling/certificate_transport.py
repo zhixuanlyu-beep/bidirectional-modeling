@@ -91,11 +91,3 @@ def verify_transported_conflict(receipt, source_search, target_search, transitio
     if replay.status == 'undecided':
         return 'undecided'
     return 'valid' if replay.status == 'verified' and replay == receipt else 'invalid'
-
-
-def __getattr__(name):
-    # Compatibility only. Transport verification has no session dependency.
-    if name in ('ContextMigrationResult', 'migrate_session'):
-        from . import search_session
-        return getattr(search_session, name)
-    raise AttributeError(name)

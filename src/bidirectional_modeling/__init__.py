@@ -279,37 +279,3 @@ __all__ += [
     'verify_macro_sufficiency', 'CandidateExclusionCertificate', 'EvidenceScreeningResult',
     'verify_candidate_exclusion',
 ]
-# One compatibility cycle: explicit legacy imports still work, but optional
-# domains and benchmarks are not imported by the core or advertised in __all__.
-_COMPAT_EXPORTS = {
-    'BooleanExpression': '.extensions.boolean',
-    'BooleanLanguage': '.extensions.boolean',
-    'BooleanCatalogue': '.extensions.boolean',
-    'enumerate_boolean_language': '.extensions.boolean',
-    'BooleanSubstituteReport': '.extensions.boolean',
-    'find_boolean_substitute': '.extensions.boolean',
-    'reconstruct_boolean': '.extensions.boolean',
-    'verify_boolean_substitute': '.extensions.boolean',
-    'LocalDescription': '.extensions.gluing',
-    'GluingProblem': '.extensions.gluing',
-    'GluingReport': '.extensions.gluing',
-    'solve_gluing': '.extensions.gluing',
-    'verify_gluing_report': '.extensions.gluing',
-    'benchmark_search': '.search_benchmark',
-    'benchmark_search_updates': '.search_benchmark',
-    'SearchBenchmarkStep': '.search_benchmark',
-    'ContextNetwork': '.context_network',
-}
-
-
-def __getattr__(name):
-    module = _COMPAT_EXPORTS.get(name)
-    if module is None:
-        raise AttributeError(name)
-    from importlib import import_module
-    from warnings import warn
-    warn('%s is a compatibility export; import it from %s%s' % (name, __name__, module),
-         DeprecationWarning, stacklevel=2)
-    value = getattr(import_module(module, __name__), name)
-    globals()[name] = value
-    return value

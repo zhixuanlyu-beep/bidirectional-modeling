@@ -2,11 +2,8 @@ import unittest
 from dataclasses import replace
 from itertools import product
 
-from bidirectional_modeling import (
-    BooleanExpression, BooleanLanguage, enumerate_boolean_language, find_boolean_substitute,
-    reconstruct_boolean, verify_boolean_substitute, ReconstructionRule, SearchHypothesis, DescriptionLength,
-    SearchProtocol, SearchExperiment, SearchWorkBudget, ModelSearchCase, Context, ScenarioKey,
-)
+from bidirectional_modeling.extensions.boolean import (BooleanExpression, BooleanLanguage, enumerate_boolean_language, find_boolean_substitute, reconstruct_boolean, verify_boolean_substitute)
+from bidirectional_modeling import (ReconstructionRule, SearchHypothesis, DescriptionLength, SearchProtocol, SearchExperiment, SearchWorkBudget, ModelSearchCase, Context, ScenarioKey)
 
 X = BooleanExpression(('var', 'x'))
 Z = BooleanExpression(('var', 'z'))

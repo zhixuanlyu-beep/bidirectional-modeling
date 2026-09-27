@@ -85,14 +85,10 @@ class SimplificationTests(unittest.TestCase):
         constrained = replace(problem, global_assignments=(('0',)*20,))
         self.assertEqual(verify_gluing_report(constrained, replace(receipt, problem_fingerprint=constrained.fingerprint)), 'invalid')
 
-    def test_irreducibility_legacy_api_delegates_and_preserves_optional_results(self):
+    def test_lower_substitute_has_one_public_entry(self):
         search, _ = conflict_search_scenario()
-        with patch.object(ExperimentHypothesisSearch, 'query', wraps=None) as query:
-            query.return_value = type('Result', (), dict(status=QueryStatus.ABSENT))()
-            self.assertTrue(search.irreducible_against('xz', ('x', 'z')))
-            self.assertIsInstance(query.call_args.args[0], LowerSubstituteQuery)
-        self.assertFalse(search.irreducible_against('x', ('x', 'x')))
-        self.assertIsNone(search.irreducible_against('x', ()))
+        self.assertFalse(hasattr(search, 'irreducible_against'))
+        self.assertEqual(search.query(LowerSubstituteQuery('xz', ('x', 'z'))).status, QueryStatus.ABSENT)
 
     def test_core_import_does_not_load_optional_domains_or_benchmarks(self):
         code = """import sys, json
@@ -104,14 +100,13 @@ print(json.dumps({'optional': [k for k in sys.modules if k.startswith('bidirecti
         self.assertNotIn('BooleanExpression', result['exports'])
         self.assertNotIn('ContextNetwork', result['exports'])
         import bidirectional_modeling as package
-        with self.assertWarns(DeprecationWarning):
-            # Other test imports may have already resolved this compatibility name.
-            package.__dict__.pop('BooleanExpression', None)
-            self.assertIs(package.BooleanExpression, BooleanExpression)
-        from bidirectional_modeling.boolean_reconstruction import BooleanExpression as old
-        self.assertIs(old, BooleanExpression)
-        with self.assertRaises(AttributeError):
-            package.not_a_public_api
+        for name in ('BooleanExpression', 'ContextNetwork', 'benchmark_search'):
+            self.assertFalse(hasattr(package, name))
+        import importlib.util
+        self.assertIsNone(importlib.util.find_spec('bidirectional_modeling.boolean_reconstruction'))
+        self.assertIsNone(importlib.util.find_spec('bidirectional_modeling.gluing'))
+        import bidirectional_modeling.certificate_transport as transport
+        self.assertFalse(hasattr(transport, 'migrate_session'))
 
     def test_shared_explorer_preserves_limits_partiality_and_callback_errors(self):
         def transition(state, action, context):

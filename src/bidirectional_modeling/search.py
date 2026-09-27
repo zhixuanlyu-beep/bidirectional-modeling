@@ -495,22 +495,6 @@ class ExperimentHypothesisSearch:
                 return False
         return True
 
-    def irreducible_against(self, hypothesis: str, lower_names, *, budget=None) -> Optional[bool]:
-        """Whether no representative in the declared finite lower class substitutes it.
-
-        The adapter defines the allowed lower-order language, not variable count.
-        None means an empty reference class or unknown predictions. True is only
-        relative to this explicit class, never all imaginable lower-order models.
-        """
-        from .search_queries import LowerSubstituteQuery, QueryStatus
-        budget = budget if budget is not None else SearchWorkBudget()
-        result = self.query(LowerSubstituteQuery(hypothesis, tuple(dict.fromkeys(lower_names))), budget=budget)
-        if result.status is QueryStatus.UNKNOWN:
-            if result.reason in ('work_budget_exhausted', 'cancelled'):
-                raise SearchBudgetExceeded(result.reason, result.work)
-            return None
-        return result.status is QueryStatus.ABSENT
-
     def search(self, evidence=(), certificates=(), *, max_replays=None,
                budget=None, learn_conflicts=True) -> HypothesisSearchReport:
         budget = budget if budget is not None else SearchWorkBudget()

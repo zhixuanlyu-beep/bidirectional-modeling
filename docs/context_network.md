@@ -64,7 +64,7 @@ if receipt.status == 'verified':
 
 `source_session.migrate_context(target_search, transition, target_evidence, evidence_links)` 创建新会话，保持源会话不变。未决时不发布新会话；已验证证书进入新会话，不适用的证书留在迁移记录中。新会话继续使用 schema 2，保存迁移来源事件；恢复时重验目标冲突证书。事件历史不是签名，独立重验跨情境迁移仍需提供原协议、转换和源证据。
 
-会话迁移由 `search_session` 负责，一次迁移内只准备一次转换关系并供各证书使用；独立复核仍重新验证转换。旧 `certificate_transport.migrate_session` 导入继续兼容。
+会话迁移由 `search_session` 负责，一次迁移内只准备一次转换关系并供各证书使用；独立复核仍重新验证转换。函数式入口从 `search_session` 导入；`certificate_transport` 不再提供会话接口别名。
 
 数据来源标签与 evidence_links 都是调用方声明，不提供实验真实性或身份认证。转换也不会替代对实际校准条件的外部确认。
 
@@ -143,9 +143,9 @@ for certificate in screen.certificates:
 
 复核者可以只提供保留的活跃原始观测；这些观测的来源真实性仍由实验方负责。没有保留证据，不能仅凭历史数据摘要或哈希恢复证明。
 
-## 兼容性和运行边界
+## API 和运行边界
 
-0.19.0 为新增 API，不改变 `SearchProtocol`、现有查询状态与完整预测缓存的语义，不降低旧证书的指纹约束。核心仍没有第三方运行依赖，支持 Python 3.9+。
+0.19.0 移除旧兼容入口（详见 [变更记录](../CHANGELOG.md)），不改变 `SearchProtocol`、现有查询状态与完整预测缓存的语义，不降低旧证书的指纹约束。核心仍没有第三方运行依赖，支持 Python 3.9+。
 
 新有限查询接受共享 `SearchWorkBudget`；该预算统计语义工作，不覆盖全部构造、哈希、排序、Python 指令或内存分配。布尔枚举和整体赋值穷举可能指数增长。部分预测另外使用模拟预算。
 

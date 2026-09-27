@@ -1,8 +1,8 @@
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (LocalDescription, GluingProblem, solve_gluing,
-                                    verify_gluing_report, SearchWorkBudget)
+from bidirectional_modeling.extensions.gluing import (LocalDescription, GluingProblem, solve_gluing, verify_gluing_report)
+from bidirectional_modeling import (SearchWorkBudget)
 
 
 def triangle():

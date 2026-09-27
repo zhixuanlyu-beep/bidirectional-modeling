@@ -36,7 +36,7 @@ PYTHONPATH=src python -m bidirectional_modeling.cli search-demo --json
 
 每个商类按描述复杂度排列，但保留全部结构代表。模型当前等价不保证重构后等价；调用方必须保留它们的生成路径。当前版本接受领域适配者提供的有限候选目录，不会穷举全局零阶结构，也不会自动发明领域概念或重构算子。
 
-`irreducible_against(name, lower_names)` 检查目标候选是否不能被给定低阶目录中的任何一个候选在完整实验域上替代。空目录或未决预测返回 `None`。低阶语言及允许的组合、辅助变量和资源约束由调用方定义；两个变量不自动意味着二阶，排除给定目录也不等于排除所有可能的低阶理论。
+`query(LowerSubstituteQuery(name, lower_names))` 检查给定低阶目录中是否存在完整实验域上的替代。找到替代返回 `FOUND`，排除整个目录返回 `ABSENT`；空目录或未决预测返回 `UNKNOWN`。低阶语言及允许的组合、辅助变量和资源约束由调用方定义；两个变量不自动意味着二阶，排除给定目录也不等于排除所有可能的低阶理论。
 
 ## 实验协议与有限逻辑语义
 
@@ -117,7 +117,7 @@ S\subseteq D,\qquad \Phi(S)=\Phi(D)\ne\varnothing
 ## 当前入口
 
 相容性、宏观异义和低阶替代统一使用 [查询接口](search_queries.md)；
-`irreducible_against` 是 `LowerSubstituteQuery` 的兼容包装，保留旧返回值和预算异常约定。
+低阶替代只有 `LowerSubstituteQuery` 入口，预算中断通过查询结果的 `UNKNOWN` 和原因表达。
 可执行候选使用 [惰性预测](search_lazy.md) 与 [部分预测](search_partial.md)。
 跨协议转换、会话迁移和只读保留证据的宏观充分性检查见 [情境转换](context_network.md)。
 历史接口演进与旧版本示例已移入 [变更记录](../CHANGELOG.md)。

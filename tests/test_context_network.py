@@ -2,12 +2,8 @@ import unittest
 from dataclasses import replace
 from itertools import product
 
-from bidirectional_modeling import (
-    ModelingContext, ContextChange, ContextTransition, ContextNetwork, validate_context_transition,
-    SearchExperiment, SearchProtocol, ResponseConstraint, ExperimentHypothesisSearch,
-    SearchObservation, SearchWorkBudget, transport_conflict, verify_transported_conflict,
-    SearchSession,
-)
+from bidirectional_modeling import (ModelingContext, ContextChange, ContextTransition, validate_context_transition, SearchExperiment, SearchProtocol, ResponseConstraint, ExperimentHypothesisSearch, SearchObservation, SearchWorkBudget, transport_conflict, verify_transported_conflict, SearchSession)
+from bidirectional_modeling.context_network import (ContextNetwork)
 
 
 def context(name, protocol):

@@ -18,7 +18,7 @@
 | 更换实验协议 | `ContextTransition`、`SearchSession.migrate_context` | 转换验证、冲突重证及新会话 |
 | 减少证据复核 | `certify_macro_sufficiency` | 可仅读取保留观测的充分性证书 |
 
-相容性、宏观异义和低阶替代共享统一查询接口；旧 `irreducible_against` 保留为兼容包装。查询区分 `FOUND / ABSENT / UNKNOWN`，预算耗尽不能作为不存在的证明。
+相容性、宏观异义和低阶替代共享统一查询接口，低阶替代直接使用 `LowerSubstituteQuery`。查询区分 `FOUND / ABSENT / UNKNOWN`，预算耗尽不能作为不存在的证明。
 
 描述复杂度决定搜索顺序，矛盾继承决定可剪除的候选。共同材料、相似名称或父子关系本身都不能传播反例。
 
@@ -54,7 +54,7 @@ assert len(basis.retained_evidence) == 2
 
 完整报告用于检查整个目录；简单存在性问题优先使用 `query`，可执行候选使用惰性查询。只需证明一个宏观答案时，可选择充分性证书；最小基数搜索单独请求并承担其成本。
 
-## 可选领域模块与兼容性
+## 可选领域模块
 
 协议转换、证书迁移、部分排除和宏观充分性属于本轮核心范围。布尔重构与有限关系拼接随包提供，按需显式导入：
 
@@ -65,7 +65,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 
 通用包导入和查询链不加载这两个领域模块。布尔搜索找到替代即停止；布尔与拼接的存在性证书直接验证见证。不存在及极小性主张仍需相应的穷尽检查。
 
-旧 `boolean_reconstruction`、`gluing` 模块路径继续兼容。原顶层领域符号、基准函数和 `ContextNetwork` 保留延迟导入并发出 `DeprecationWarning`，不再列入 `__all__`；0.19 系列内不移除这些显式导入。网络容器通过 `bidirectional_modeling.context_network` 使用；基准通过 `search_benchmark` 模块或 CLI 使用。
+领域接口仅从上述扩展模块导入；网络容器从 `bidirectional_modeling.context_network` 导入；基准从 `bidirectional_modeling.search_benchmark` 导入或通过 CLI 使用。已移除旧领域模块路径、顶层领域/基准导出和 `irreducible_against`，迁移方式见 [变更记录](CHANGELOG.md)。
 
 ## 文档
 

@@ -2,11 +2,19 @@
 
 版本记录描述各版本引入时的行为；当前使用方式以 README 和专题文档为准。
 
-## 0.19.0（开发中）
+## 0.19.0
 
 `0.19.0` 将固定协议中的搜索扩展到可验证的情境变化：新增情境网络、跨协议冲突重证与会话迁移、有限局部拼接、部分预测个体排除、有界布尔 AST 重构及低阶语言覆盖，以及可只读取保留证据复核的宏观充分性证书。运行 `bidirectional-modeling context-demo --json` 查看六项贯通验收，接口、证明范围和兼容性见 [情境网络与结构重构](docs/context_network.md)。
 
-本轮精简：布尔替代流式搜索与见证直接复核；筛查按倍增前缀重放；迁移内复用转换关系；旧低阶判断委托统一查询；布尔与拼接迁入可选 extensions；闭合与残差共享审计状态探索。旧显式导入保留兼容期，顶层领域与基准符号转为延迟兼容导出。
+本轮精简：布尔替代流式搜索与见证直接复核；筛查按倍增前缀重放；迁移内复用转换关系；低阶判断统一使用 LowerSubstituteQuery；布尔与拼接迁入可选 extensions；闭合与残差共享审计状态探索。移除本轮兼容层，领域与基准接口仅从各自模块导入。
+
+### 不兼容 API 清理
+
+- 删除 `boolean_reconstruction` 和顶层 `gluing` 模块；分别改用 `extensions.boolean`、`extensions.gluing`。
+- 删除顶层布尔/拼接符号、`ContextNetwork` 和基准符号别名；分别从扩展、`context_network`、`search_benchmark` 导入。
+- 删除 `certificate_transport` 的会话迁移别名；使用 `search_session.migrate_session` 或 `SearchSession.migrate_context`。
+- 删除 `irreducible_against`；使用 `query(LowerSubstituteQuery(...))`，根据 FOUND / ABSENT / UNKNOWN 判断。重复低阶名称遵循查询校验规则，预算中断返回 UNKNOWN。
+- search-demo JSON 将 `irreducible_against_x_and_z` 布尔字段替换为 `lower_substitute_status` 查询状态字段。
 
 ## 0.18.1
 
