@@ -79,7 +79,7 @@ class SatisfactionProvenanceTests(unittest.TestCase):
         ))
         self.assertFalse(certificate.complete)
         self.assertFalse(certificate.satisfied)
-        self.assertEqual(certificate.confidence.coverage, 0.0)
+        self.assertEqual(certificate.verification.coverage, 0.0)
         self.assertTrue(
             any(
                 "trace batch context" in boundary
@@ -346,3 +346,4 @@ class ResidualProvenanceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

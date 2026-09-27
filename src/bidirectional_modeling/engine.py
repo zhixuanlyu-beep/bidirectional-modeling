@@ -200,9 +200,10 @@ class BidirectionalModelingEngine:
         evidence: Sequence[Evidence] = (),
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
+        *, observations=(),
     ) -> InterpretationResult:
         return self.interpreter.interpret(
-            model, context, hypotheses, evidence, experiments, budget
+            model, context, hypotheses, evidence, experiments, budget, observations=observations
         )
 
     def check_closure(
@@ -578,3 +579,4 @@ class BidirectionalModelingEngine:
             simulations_used,
             truncated,
         )
+

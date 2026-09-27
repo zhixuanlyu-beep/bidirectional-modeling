@@ -2,6 +2,21 @@
 
 版本记录描述各版本引入时的行为；当前使用方式以 README 和专题文档为准。
 
+## 0.20.0
+
+默认解释改用允许结果集合和观测相容性过滤。未知声明不补概率、不推导均匀分布；实验显式声明结果域，并按最坏结果下可排除的响应类数与成本调度。同声明候选按响应类计数，保留结构代表。旧概率没有自动转换为集合。
+
+不兼容 API 调整：
+- PurposeHypothesis 删除 prior / predictions，改用 allowed_outcomes；Experiment 必须提供 outcomes。
+- 新增 InterpretationObservation；Interpreter/engine.interpret 接受 observations，报告 excluded 及其依赖观测。
+- 删除 InterpretationScoringPolicy、normalized_entropy、ranking_score、confidence 别名和 verification_score。
+- ConfidenceBreakdown 改为 VerificationMeasures，证书字段改为 verification，只含 coverage / robustness；探测验证逐维报告。
+- 删除模型 prior_reliability，默认帕累托仅比较显式 ModelMetrics。模型声明指纹相应变化，旧可执行模型适配回执需重建。
+- CLI JSON 用 compatible_hypotheses、ordering_policy、allowed_outcomes 和响应类区分计数替代概率/评分字段。
+- 意图证据原样列出，不合成为置信度或按强度解除解释边界；空/截断候选空间保持不可识别。
+
+详细语义与迁移示例见 [集合解释](docs/set_interpretation.md)。有限确定性证明、显式描述长度和已有搜索接口保持原范围；没有把集合声明当作真实世界完备性证明。
+
 ## 0.19.1
 
 - 布尔搜索与复核提前验证所有声明变量的输入类型，非法未读取变量不再因枚举顺序被接受。

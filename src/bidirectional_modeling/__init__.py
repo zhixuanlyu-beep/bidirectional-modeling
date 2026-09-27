@@ -31,7 +31,7 @@ from .core import (
     CheckResult,
     ClosureReport,
     Concept,
-    ConfidenceBreakdown,
+    VerificationMeasures,
     Context,
     Counterexample,
     CustomRequirement,
@@ -49,6 +49,7 @@ from .core import (
     ModelMetrics,
     NonDeterministicModelError,
     PurposeHypothesis,
+    InterpretationObservation,
     PurposeLevel,
     ProbeOutcome,
     RealizationResult,
@@ -73,7 +74,6 @@ from .evaluation import SatisfactionEvaluator, TraceBatch
 from .interpretation import (
     CatalogHypothesisGenerator,
     HypothesisGenerator,
-    InterpretationScoringPolicy,
     Interpreter,
     ObservedEffectGenerator,
 )
@@ -180,7 +180,7 @@ __all__ = [
     "CompositionSelectionReport",
     "CompositionTest",
     "CompositionTestResult",
-    "ConfidenceBreakdown",
+    "VerificationMeasures",
     "Context",
     "Correspondence",
     "CorrespondenceCaseResult",
@@ -214,6 +214,7 @@ __all__ = [
     "ObservedEffectGenerator",
     "ParametricCandidateGenerator",
     "PurposeHypothesis",
+    "InterpretationObservation",
     "PurposeLevel",
     "ProbeOutcome",
     "RealizationResult",
@@ -241,7 +242,6 @@ __all__ = [
     "Trace",
     "TraceBatch",
     "UndefinedTransition",
-    "InterpretationScoringPolicy",
     "behaviorally_equivalent",
     "correspondence_fingerprint",
     "context_fingerprint",
@@ -251,7 +251,7 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.19.1"
+__version__ = "0.20.0"
 
 from .context_network import (
     ModelingContext, ContextChange, ContextTransition, ContextTransitionReport,

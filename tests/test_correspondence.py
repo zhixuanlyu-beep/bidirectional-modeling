@@ -21,7 +21,6 @@ class DelegatingThirdPartyModel:
         self.metrics = delegate.metrics
         self.assumptions = delegate.assumptions
         self.failure_boundaries = delegate.failure_boundaries
-        self.prior_reliability = delegate.prior_reliability
         self.capabilities = delegate.capabilities
 
     def simulate(self, context, horizon):
@@ -256,3 +255,4 @@ class CorrespondenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

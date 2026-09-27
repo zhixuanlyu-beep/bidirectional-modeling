@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from statistics import mean
+from types import MappingProxyType
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
 
 from .structural import (
@@ -616,7 +617,6 @@ class ExecutableModel(Protocol):
     metrics: ModelMetrics
     assumptions: Tuple[str, ...]
     failure_boundaries: Tuple[str, ...]
-    prior_reliability: float
     capabilities: Tuple[str, ...]
 
     def simulate(self, context: Context, horizon: int) -> Iterable[Trace]:
@@ -639,7 +639,6 @@ class FiniteStateModel:
     metrics: ModelMetrics
     assumptions: Tuple[str, ...] = ()
     failure_boundaries: Tuple[str, ...] = ()
-    prior_reliability: float = 0.8
     capabilities: Tuple[str, ...] = ()
     applicable: Optional[Applicability] = None
 
@@ -663,8 +662,6 @@ class FiniteStateModel:
             raise ValueError("unknown initial states: %s" % sorted(unknown))
         if len(self.initial_states) != len(set(self.initial_states)):
             raise ValueError("initial state names must be unique")
-        if not 0.0 <= self.prior_reliability <= 1.0:
-            raise ValueError("prior reliability must be in [0, 1]")
         if not callable(self.transition):
             raise TypeError("transition must be callable")
         if not callable(self.readout):
@@ -839,26 +836,15 @@ class FiniteStateModel:
 
 
 @dataclass(frozen=True)
-class ConfidenceBreakdown:
+class VerificationMeasures:
+    """Separate finite-domain measures, never a probability of truth."""
     coverage: float
     robustness: float
-    assumption_reliability: float
 
-    def __post_init__(self) -> None:
-        for value in (self.coverage, self.robustness, self.assumption_reliability):
-            if not 0.0 <= value <= 1.0:
-                raise ValueError("confidence components must be in [0, 1]")
-
-    @property
-    def verification_score(self) -> float:
-        product = self.coverage * self.robustness * self.assumption_reliability
-        return product ** (1.0 / 3.0) if product else 0.0
-
-    @property
-    def value(self) -> float:
-        """Backward-compatible alias; this is a score, not a calibrated probability."""
-
-        return self.verification_score
+    def __post_init__(self):
+        for value in (self.coverage, self.robustness):
+            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError('verification measures must be finite and in [0, 1]')
 
 
 @dataclass(frozen=True)
@@ -868,7 +854,7 @@ class SatisfactionCertificate:
     satisfied: bool
     checks: Tuple[CheckResult, ...]
     verified_scenarios: int
-    confidence: ConfidenceBreakdown
+    verification: VerificationMeasures
     assumptions: Tuple[str, ...]
     failure_boundaries: Tuple[str, ...]
     horizon: int
@@ -925,10 +911,6 @@ class SatisfactionCertificate:
             raise ValueError(
                 "satisfaction certificate fields do not match its protocol fingerprint"
             )
-
-    @property
-    def verification_score(self) -> float:
-        return self.confidence.verification_score
 
     def binds_specification(self, spec: MacroSpec) -> bool:
         from .provenance import macro_spec_fingerprint
@@ -1003,15 +985,12 @@ class CandidateEvaluation:
     probe_certificates: Tuple[SatisfactionCertificate, ...] = ()
 
     @property
-    def verification_score(self) -> float:
+    def verification(self) -> VerificationMeasures:
         certificates = (self.certificate,) + self.probe_certificates
-        return min(item.verification_score for item in certificates)
-
-    @property
-    def confidence(self) -> float:
-        """Backward-compatible alias for the aggregate verification score."""
-
-        return self.verification_score
+        return VerificationMeasures(
+            min(item.verification.coverage for item in certificates),
+            min(item.verification.robustness for item in certificates),
+        )
 
 
 @dataclass(frozen=True)
@@ -1035,67 +1014,84 @@ class RealizationResult:
             )
 
 
+def _labels(values, what):
+    if isinstance(values, str):
+        raise ValueError(what + ' must be a collection of labels')
+    values = tuple(values)
+    if (not values or any(type(v) is not str or not v.strip() for v in values)
+            or len(set(values)) != len(values)):
+        raise ValueError(what + ' requires distinct nonempty string labels')
+    return values
+
+
 @dataclass(frozen=True)
 class PurposeHypothesis:
     name: str
     level: PurposeLevel
     spec: MacroSpec
-    prior: float = 0.5
     explanation: str = ""
-    predictions: Mapping[str, float] = field(default_factory=dict)
+    # Explicit commitments, not frequencies estimated from observed samples.
+    allowed_outcomes: Mapping[str, Tuple[str, ...]] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
-        if not 0.0 <= self.prior <= 1.0:
-            raise ValueError("hypothesis prior must be in [0, 1]")
-        for probability in self.predictions.values():
-            if not 0.0 <= probability <= 1.0:
-                raise ValueError("prediction probabilities must be in [0, 1]")
+    def __post_init__(self):
+        _labels((self.name,), 'hypothesis')
+        declarations = {}
+        for name, outcomes in self.allowed_outcomes.items():
+            _labels((name,), 'experiment')
+            declarations[name] = _labels(outcomes, 'allowed outcomes')
+        object.__setattr__(self, 'allowed_outcomes', MappingProxyType(declarations))
 
 
 @dataclass(frozen=True)
 class Experiment:
     name: str
     question: str
+    outcomes: Tuple[str, ...]
     cost: float = 0.0
 
-    def __post_init__(self) -> None:
+    def __post_init__(self):
+        _labels((self.name,), 'experiment')
+        object.__setattr__(self, 'outcomes', _labels(self.outcomes, 'experiment outcomes'))
         cost = float(self.cost)
         if not math.isfinite(cost) or cost < 0:
-            raise ValueError("experiment cost must be finite and non-negative")
-        object.__setattr__(self, "cost", cost)
+            raise ValueError('experiment cost must be finite and non-negative')
+        object.__setattr__(self, 'cost', cost)
+
+
+@dataclass(frozen=True)
+class InterpretationObservation:
+    experiment: str
+    outcome: str
+    source: str
+
+    def __post_init__(self):
+        for value in (self.experiment, self.outcome, self.source):
+            _labels((value,), 'observation')
 
 
 @dataclass(frozen=True)
 class DiscriminatingQuery:
     experiment: Experiment
     candidate_names: Tuple[str, ...]
-    predictions: Mapping[str, float]
-    expected_information_gain: float
+    allowed_outcomes: Mapping[str, Tuple[str, ...]]
+    guaranteed_class_eliminations: int
+    separated_class_pairs: int
+    # Diagnostic heuristic, not a probability or proof of truth.
+    selection_score: float
 
 
 @dataclass(frozen=True)
 class InterpretationCandidate:
     hypothesis: PurposeHypothesis
     certificate: SatisfactionCertificate
-    fit: float
-    simplicity: float
-    robustness: float
-    context_support: float
-    ranking_score: float
-    evidence: Tuple[Evidence, ...]
+    requirement_count: int
+    direct_intent_evidence: Tuple[Evidence, ...] = ()
+    evidence: Tuple[Evidence, ...] = ()
     caveats: Tuple[str, ...] = ()
 
-    def __post_init__(self) -> None:
+    def __post_init__(self):
         if not self.certificate.binds_specification(self.hypothesis.spec):
-            raise ValueError(
-                "interpretation certificate must bind its hypothesis specification"
-            )
-
-    @property
-    def confidence(self) -> float:
-        """Backward-compatible alias for the uncalibrated ranking score."""
-
-        return self.ranking_score
+            raise ValueError('interpretation certificate must bind the hypothesis specification')
 
 
 @dataclass(frozen=True)
@@ -1105,7 +1101,9 @@ class InterpretationResult:
     equivalent_explanations: Tuple[Tuple[str, ...], ...]
     discriminating_query: Optional[DiscriminatingQuery]
     non_identifiable: bool
-    score_semantics: str = "uncalibrated ranking score; not a probability"
+    ordering_policy: str = "name; no belief ranking"
+    excluded: Tuple[Tuple[str, InterpretationObservation], ...] = ()
+    observations: Tuple[InterpretationObservation, ...] = ()
     simulations_used: int = 0
     truncated: bool = False
 
@@ -1131,13 +1129,3 @@ class Concept:
     related_concepts: Tuple[str, ...] = ()
     candidate_definitions: Tuple[str, ...] = ()
     version: int = 1
-
-
-def normalized_entropy(probabilities: Iterable[float]) -> float:
-    values = [max(0.0, value) for value in probabilities]
-    total = sum(values)
-    if total <= 0 or len(values) <= 1:
-        return 0.0
-    normalized = [value / total for value in values if value > 0]
-    entropy = -sum(value * math.log(value, 2) for value in normalized)
-    return entropy / math.log(len(values), 2)

@@ -386,41 +386,42 @@ def organization_interpretation_scenario():
             horizon=1,
         )
 
+    # Illustrative hard commitments supplied by this scenario, not estimates
+    # or thresholded conversions of the former probability examples.
     hypotheses = (
         PurposeHypothesis(
             "prevent fraud",
             PurposeLevel.FUNCTION,
             purpose_spec("prevent fraud", "fraud_blocked", "eq", 1),
-            prior=0.6,
             explanation="approval serves as a risk-control function",
-            predictions={"delegate-low-risk": 0.85, "remove-audit-log": 0.15},
+            allowed_outcomes={"delegate-low-risk": ("accept",), "remove-audit-log": ("reject",)},
         ),
         PurposeHypothesis(
             "provide auditability",
             PurposeLevel.FUNCTION,
             purpose_spec("provide auditability", "audit_log", "eq", 1),
-            prior=0.5,
             explanation="approval exists to leave a reviewable trace",
-            predictions={"delegate-low-risk": 0.75, "remove-audit-log": 0.05},
+            allowed_outcomes={"delegate-low-risk": ("accept",), "remove-audit-log": ("reject",)},
         ),
         PurposeHypothesis(
             "preserve central control",
             PurposeLevel.INTENTION,
             purpose_spec("preserve central control", "autonomy", "eq", 0),
-            prior=0.4,
             explanation="a designer may intend to retain decision authority",
-            predictions={"delegate-low-risk": 0.10, "remove-audit-log": 0.70},
+            allowed_outcomes={"delegate-low-risk": ("reject",), "remove-audit-log": ("accept",)},
         ),
     )
     experiments = (
         Experiment(
             "delegate-low-risk",
             "Would the process owner accept delegation for low-risk requests?",
+            outcomes=("accept", "reject"),
             cost=0.1,
         ),
         Experiment(
             "remove-audit-log",
             "Would the process remain acceptable if approval stayed central but produced no audit log?",
+            outcomes=("accept", "reject"),
             cost=0.2,
         ),
     )
@@ -576,3 +577,4 @@ def all_scenarios() -> Dict[str, object]:
         "correspondence": scale_correspondence_scenario(),
         "correspondence_suite": scale_correspondence_suite(),
     }
+
