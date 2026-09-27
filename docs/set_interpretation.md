@@ -55,7 +55,7 @@ result = engine.interpret(
 
 ## 分开展示验证与证据
 
-候选按名字稳定展示，不按信念程度排序。证书提供 `verification.coverage` 和 `verification.robustness`；探测证书的逐维最小值可通过 `CandidateEvaluation.verification` 获取。两者不再合成一个数字。
+候选按名字稳定展示，不按信念程度排序。证书提供 `verification.coverage` 场景覆盖率；探测证书的最小覆盖率可通过 `CandidateEvaluation.verification` 获取。具体数值要求的 `CheckResult.margin` 和 `tolerance` 保留原单位，不跨要求合成为稳健度或可信度评分。
 
 `Realizer` 的默认帕累托比较仅使用显式 `ModelMetrics`，不使用声明可靠度或验证分数。指标语义仍由任务方负责；例如 risk 不应隐含为未经声明的概率。
 
@@ -92,3 +92,6 @@ result = engine.interpret(
 `PurposeHypothesis.to_dict()`、`DiscriminatingQuery.to_dict()`、`InterpretationResult.to_dict()` 导出独立普通数据，可交给 `json.dumps`。解释导出包含状态、观测、排除/未决诊断、候选规范与证书绑定指纹，不包含模型、规范回调或完整可复核证明对象，因此没有反序列化恢复执行接口。
 
 不可变保证针对允许集合，未把整个模型与嵌套规范改成深度冻结对象。导出前会检查候选规范是否仍与证书绑定；规范修改后必须重新验证，不能混用旧证书和新规范。
+
+
+宏观往返只报告 `compatibility_passed`；`generation_source` 记录生成路径，`independence_declared` 仅转述调用方声明，二者都不是独立恢复证明。已删除宏观报告的 `passed`。同批轨迹生成并验证效果只是有限域检查，不是留出实验。

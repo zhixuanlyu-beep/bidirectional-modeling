@@ -132,8 +132,8 @@ class SetInterpretationTests(unittest.TestCase):
         right = replace(model, name='right')
         left.prior_reliability = 0.01
         right.prior_reliability = 0.99
-        a = CandidateEvaluation(left, replace(certificate, verification=VerificationMeasures(1, 0.2)))
-        b = CandidateEvaluation(right, replace(certificate, verification=VerificationMeasures(1, 0.9)))
+        a = CandidateEvaluation(left, replace(certificate, verification=VerificationMeasures(0.2)))
+        b = CandidateEvaluation(right, replace(certificate, verification=VerificationMeasures(0.9)))
         frontier, dominated = pareto_partition((b, a))
         self.assertEqual(tuple(c.model.name for c in frontier), ('left', 'right'))
         self.assertEqual(dominated, ())

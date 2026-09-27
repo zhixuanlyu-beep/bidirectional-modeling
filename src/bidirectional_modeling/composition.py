@@ -3,8 +3,9 @@
 The selector compares candidate transition/composition rules against shared,
 caller-owned operational observations.  A rule is eligible only when it fits
 every declared test and its reachable residual quotient is complete, stable,
-congruent, and reproducible by the extracted finite context basis.  Eligible
-rules are ranked by an explicit two-part description-length proxy.
+congruent, and reproducible by the extracted finite context basis.  The default
+returns all certified rules without preference. The optional shortest_description
+policy ranks them by an explicit two-part description-length proxy.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from .core import (
     UndefinedTransition,
 )
 from .residual import ResidualQuotientAnalyzer, ResidualQuotientReport
+from .structural import freeze_value
 
 
 @dataclass(frozen=True)
@@ -34,7 +36,7 @@ class CompositionRule:
 
     name: str
     transition: Transition
-    description_length: float
+    description_length: Optional[float] = None
     applicable: Optional[Applicability] = None
 
     def __post_init__(self) -> None:
@@ -44,6 +46,8 @@ class CompositionRule:
             raise TypeError("composition rule transition must be callable")
         if self.applicable is not None and not callable(self.applicable):
             raise TypeError("composition rule applicable hook must be callable")
+        if self.description_length is None:
+            return
         length = float(self.description_length)
         if not math.isfinite(length) or length < 0:
             raise ValueError(
@@ -146,6 +150,7 @@ class CompositionTestResult:
     actual_signature: Tuple[Any, ...]
     failure_step: Optional[int] = None
     detail: str = ""
+    evaluation_error: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -157,10 +162,9 @@ class CompositionCaseResult:
     tests: Tuple[CompositionTestResult, ...]
     residual_report: Optional[ResidualQuotientReport]
     counterexamples: Tuple[Counterexample, ...]
-    state_description_length: float
-    transition_description_length: float
-    context_description_length: float
-    exception_description_length: float
+    state_description_length: Optional[float]
+    transition_description_length: Optional[float]
+    context_description_length: Optional[float]
     analysis_error: Optional[str] = None
 
     @property
@@ -182,18 +186,15 @@ class CompositionCaseResult:
         return self.residual_report.quotient.class_count
 
     @property
-    def structural_description_length(self) -> float:
-        return (
-            self.state_description_length
-            + self.transition_description_length
-            + self.context_description_length
-            + self.exception_description_length
-        )
+    def structural_description_length(self) -> Optional[float]:
+        values = (self.state_description_length, self.transition_description_length,
+                  self.context_description_length)
+        return None if any(value is None for value in values) else sum(values)
 
 
 @dataclass(frozen=True)
 class CompositionRuleEvaluation:
-    """Cross-experiment certificate and MDL score for one candidate rule."""
+    """Cross-experiment verification and optional encoding cost."""
 
     rule: CompositionRule
     cases: Tuple[CompositionCaseResult, ...]
@@ -203,10 +204,11 @@ class CompositionRuleEvaluation:
         return bool(self.cases) and all(case.certified for case in self.cases)
 
     @property
-    def total_description_length(self) -> float:
-        return self.rule.description_length + sum(
-            case.structural_description_length for case in self.cases
-        )
+    def total_description_length(self) -> Optional[float]:
+        lengths = tuple(case.structural_description_length for case in self.cases)
+        if self.rule.description_length is None or any(length is None for length in lengths):
+            return None
+        return self.rule.description_length + sum(lengths)
 
     @property
     def counterexamples(self) -> Tuple[Counterexample, ...]:
@@ -219,15 +221,20 @@ class CompositionRuleEvaluation:
 
 @dataclass(frozen=True)
 class CompositionSelectionReport:
-    """Ranked certified rules plus fail-closed rejected candidates."""
+    """Certified, refuted and undecided rules, with optional preference."""
 
     experiment_names: Tuple[str, ...]
     evaluations: Tuple[CompositionRuleEvaluation, ...]
     ranked: Tuple[CompositionRuleEvaluation, ...]
     rejected: Tuple[CompositionRuleEvaluation, ...]
     selected: Tuple[CompositionRuleEvaluation, ...]
-    exception_penalty: float
+    undecided: Tuple[CompositionRuleEvaluation, ...] = ()
+    selection_policy: Optional[str] = None
     boundaries: Tuple[str, ...] = ()
+
+    @property
+    def certified(self) -> Tuple[CompositionRuleEvaluation, ...]:
+        return tuple(item for item in self.evaluations if item.certified)
 
     @property
     def unique_selection(self) -> bool:
@@ -241,7 +248,7 @@ class CompositionSelectionReport:
 
 
 class CompositionRuleSelector:
-    """Reject inconsistent rules and rank the remaining minimal quotients."""
+    """Verify finite rules and optionally select among certified quotients."""
 
     def __init__(
         self, residual_analyzer: Optional[ResidualQuotientAnalyzer] = None
@@ -291,7 +298,7 @@ class CompositionRuleSelector:
             and actual_defined == test.expected_defined
             and (
                 not test.expected_defined
-                or actual_signature == expected_signature
+                or freeze_value(actual_signature) == freeze_value(expected_signature)
             )
         )
         if passed:
@@ -299,25 +306,7 @@ class CompositionRuleSelector:
             counterexample = None
         elif error_detail is not None:
             detail = "composition rule raised an uncertified error: %s" % error_detail
-            kind = "composition-rule-error"
-            summary = "candidate rule failed during an operational test"
-            counterexample = Counterexample(
-                kind=kind,
-                summary=summary,
-                witness={
-                    "rule": rule.name,
-                    "experiment": experiment.name,
-                    "test": test.name,
-                    "initial_state": test.initial_state,
-                    "actions": test.actions,
-                    "failure_step": failure_step,
-                    "error": error_detail,
-                },
-                violated=("operational test %s" % test.name,),
-                suggested_refinements=(
-                    "repair the transition implementation before comparing the rule",
-                ),
-            )
+            counterexample = None
         elif actual_defined != test.expected_defined:
             detail = "candidate and experiment disagree on action support"
             kind = "composition-support-mismatch"
@@ -372,6 +361,7 @@ class CompositionRuleSelector:
             actual_signature=actual_signature,
             failure_step=failure_step,
             detail=detail,
+            evaluation_error=error_detail,
         )
         return result, counterexample
 
@@ -380,58 +370,10 @@ class CompositionRuleSelector:
         rule: CompositionRule,
         experiment: CompositionExperiment,
         report: Optional[ResidualQuotientReport],
-        analysis_error: Optional[str],
     ) -> Tuple[Counterexample, ...]:
         if report is None:
-            return (
-                Counterexample(
-                    kind="composition-analysis-error",
-                    summary="the candidate residual quotient could not be analyzed",
-                    witness={
-                        "rule": rule.name,
-                        "experiment": experiment.name,
-                        "error": analysis_error,
-                    },
-                    violated=("complete residual quotient analysis",),
-                    suggested_refinements=(
-                        "repair the candidate state representation or readout",
-                    ),
-                ),
-            )
-
+            return ()
         counterexamples = []
-        if not report.complete:
-            counterexamples.append(
-                Counterexample(
-                    kind="composition-analysis-incomplete",
-                    summary="the candidate reachable transition domain is incomplete",
-                    witness={
-                        "rule": rule.name,
-                        "experiment": experiment.name,
-                        "boundaries": report.boundaries,
-                    },
-                    violated=("complete residual quotient analysis",),
-                    suggested_refinements=(
-                        "increase the enumeration bounds or repair unknown transitions",
-                    ),
-                )
-            )
-        if not report.stable:
-            counterexamples.append(
-                Counterexample(
-                    kind="composition-residual-unstable",
-                    summary="context refinement stopped before the residual partition stabilized",
-                    witness={
-                        "rule": rule.name,
-                        "experiment": experiment.name,
-                        "filtration_depth": len(report.filtration) - 1,
-                    },
-                    violated=("stable residual quotient",),
-                    suggested_refinements=(
-                        "increase max_context_depth before selecting the rule",
-                    ),
-                )
-            )
         for transition in report.quotient.transitions:
             if transition.complete and not transition.well_defined:
                 residual_class = report.quotient.classes[
@@ -452,86 +394,23 @@ class CompositionRuleSelector:
                         },
                         violated=("composition congruence",),
                         suggested_refinements=(
-                            "refine the semantic state or reject the composition rule",
+                            "refine the semantic state before judging this partition",
                         ),
                     )
                 )
-        if not report.context_basis_reproduces_partition:
-            counterexamples.append(
-                Counterexample(
-                    kind="composition-context-basis-incomplete",
-                    summary="the extracted test basis does not reproduce the selected partition",
-                    witness={
-                        "rule": rule.name,
-                        "experiment": experiment.name,
-                        "context_basis": report.context_basis,
-                        "boundaries": report.boundaries,
-                    },
-                    violated=("finite residual context basis",),
-                    suggested_refinements=(
-                        "increase max_context_tests before selecting the rule",
-                    ),
-                )
-            )
         return tuple(counterexamples)
 
     @staticmethod
-    def _description_lengths(
-        report: Optional[ResidualQuotientReport],
-        test_results: Sequence[CompositionTestResult],
-        exception_penalty: float,
-        analysis_error: Optional[str],
-    ) -> Tuple[float, float, float, float]:
-        failed_tests = sum(not result.passed for result in test_results)
+    def _description_lengths(report):
         if report is None:
-            return (
-                0.0,
-                0.0,
-                0.0,
-                exception_penalty * (failed_tests + int(analysis_error is not None)),
-            )
-
+            return 0.0, 0.0, 0.0
         class_count = report.quotient.class_count
         action_count = len(report.quotient.actions)
-        state_width = max(1, int(math.ceil(math.log2(class_count + 1))))
-        action_width = max(1, int(math.ceil(math.log2(action_count + 1))))
-        state_length = float(class_count * state_width)
-        # Each class/action cell encodes one support bit and, when defined, a
-        # target class.  This fixed-width upper bound is deliberately simple
-        # and comparable across rules in the same experiment.
-        transition_length = float(
-            class_count * action_count * (1 + state_width)
-        )
-        context_length = float(
-            sum(
-                1 + len(word) * action_width
-                for word in report.context_basis
-            )
-        )
-        unknown_edges = sum(
-            not transition.complete
-            for transition in report.quotient.transitions
-        )
-        conflicting_edges = sum(
-            transition.complete and not transition.well_defined
-            for transition in report.quotient.transitions
-        )
-        certification_gaps = (
-            int(not report.stable)
-            + int(not report.context_basis_reproduces_partition)
-        )
-        exception_length = exception_penalty * (
-            failed_tests
-            + unknown_edges
-            + conflicting_edges
-            + certification_gaps
-        )
-        return (
-            state_length,
-            transition_length,
-            context_length,
-            float(exception_length),
-        )
+        state_width = max(1, class_count.bit_length())
+        action_width = max(1, action_count.bit_length())
+        return (float(class_count * state_width),
+                float(class_count * action_count * (1 + state_width)),
+                float(sum(1 + len(word) * action_width for word in report.context_basis)))
 
     def select(
         self,
@@ -541,9 +420,9 @@ class CompositionRuleSelector:
         max_states: int = 1_000,
         max_context_depth: Optional[int] = None,
         max_context_tests: int = 256,
-        exception_penalty: float = 64.0,
+        *, selection_policy: Optional[str] = None,
     ) -> CompositionSelectionReport:
-        """Evaluate a finite candidate set and return the shortest certificate."""
+        """Verify all rules; apply a preference only when explicitly requested."""
 
         rules = tuple(rules)
         experiments = tuple(experiments)
@@ -565,9 +444,10 @@ class CompositionRuleSelector:
         experiment_names = tuple(experiment.name for experiment in experiments)
         if len(experiment_names) != len(set(experiment_names)):
             raise ValueError("composition experiment names must be unique")
-        exception_penalty = float(exception_penalty)
-        if not math.isfinite(exception_penalty) or exception_penalty <= 0:
-            raise ValueError("exception_penalty must be finite and positive")
+        if selection_policy == "shortest_description" and any(rule.description_length is None for rule in rules):
+            raise ValueError("shortest_description requires a declared rule encoding length")
+        if selection_policy not in (None, "shortest_description"):
+            raise ValueError("unknown composition selection policy")
 
         evaluations = []
         for rule in rules:
@@ -582,7 +462,7 @@ class CompositionRuleSelector:
                     readout=experiment.readout,
                     metrics=ModelMetrics(
                         cost=0.0,
-                        complexity=rule.description_length,
+                        complexity=0.0,  # Verification does not depend on a selection metric.
                         risk=0.0,
                     ),
                     applicable=rule.applicable,
@@ -616,15 +496,10 @@ class CompositionRuleSelector:
                         rule,
                         experiment,
                         residual_report,
-                        analysis_error,
                     )
                 )
-                lengths = self._description_lengths(
-                    residual_report,
-                    test_results,
-                    exception_penalty,
-                    analysis_error,
-                )
+                lengths = (self._description_lengths(residual_report)
+                           if selection_policy == "shortest_description" else (None, None, None))
                 cases.append(
                     CompositionCaseResult(
                         experiment_name=experiment.name,
@@ -635,7 +510,6 @@ class CompositionRuleSelector:
                         state_description_length=lengths[0],
                         transition_description_length=lengths[1],
                         context_description_length=lengths[2],
-                        exception_description_length=lengths[3],
                         analysis_error=analysis_error,
                     )
                 )
@@ -643,30 +517,19 @@ class CompositionRuleSelector:
                 CompositionRuleEvaluation(rule=rule, cases=tuple(cases))
             )
 
-        ranked = tuple(
-            sorted(
-                (item for item in evaluations if item.certified),
-                key=lambda item: (
-                    item.total_description_length,
-                    item.rule.name,
-                ),
-            )
-        )
-        rejected = tuple(item for item in evaluations if not item.certified)
-        if ranked:
+        certified = tuple(item for item in evaluations if item.certified)
+        rejected = tuple(item for item in evaluations if any(
+            not test.passed and test.evaluation_error is None
+            for case in item.cases for test in case.tests))
+        rejected_names = {item.rule.name for item in rejected}
+        undecided = tuple(item for item in evaluations
+                          if not item.certified and item.rule.name not in rejected_names)
+        ranked = tuple(sorted(certified, key=lambda item: (
+            item.total_description_length if selection_policy else 0, item.rule.name)))
+        selected = ()
+        if selection_policy == "shortest_description" and ranked:
             best_length = ranked[0].total_description_length
-            selected = tuple(
-                item
-                for item in ranked
-                if math.isclose(
-                    item.total_description_length,
-                    best_length,
-                    rel_tol=1e-12,
-                    abs_tol=1e-9,
-                )
-            )
-        else:
-            selected = ()
+            selected = tuple(item for item in ranked if item.total_description_length == best_length)
 
         boundaries = [
             "rule description lengths are caller-supplied and require one fixed codec",
@@ -675,7 +538,7 @@ class CompositionRuleSelector:
         ]
         if not ranked:
             boundaries.append("no candidate rule received a complete certificate")
-        elif len(selected) > 1:
+        elif selection_policy and len(selected) > 1:
             boundaries.append(
                 "multiple candidate rules have the same shortest description length"
             )
@@ -685,6 +548,8 @@ class CompositionRuleSelector:
             ranked=ranked,
             rejected=rejected,
             selected=selected,
-            exception_penalty=float(exception_penalty),
+            undecided=undecided,
+            selection_policy=selection_policy,
             boundaries=tuple(boundaries),
         )
+

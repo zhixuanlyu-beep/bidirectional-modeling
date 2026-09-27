@@ -41,6 +41,7 @@ def build_demo_report() -> Dict[str, Any]:
     composition = engine.select_composition_rules(
         composition_rules,
         composition_experiments,
+        selection_policy="shortest_description",
     )
 
     science_spec, science_context, science_model = science_closure_scenario()
@@ -79,7 +80,6 @@ def build_demo_report() -> Dict[str, Any]:
                 {
                     "model": item.model.name,
                     "coverage": item.verification.coverage,
-                    "robustness": item.verification.robustness,
                     "complete": item.certificate.complete,
                     "coverage_authority": item.certificate.coverage_authority,
                     "horizon": item.certificate.horizon,
@@ -96,7 +96,8 @@ def build_demo_report() -> Dict[str, Any]:
                         "risk": item.model.metrics.risk,
                     },
                     "checks": [
-                        {"name": check.name, "passed": check.passed}
+                        {"name": check.name, "passed": check.passed, "margin": check.margin,
+                         "tolerance": check.tolerance}
                         for check in item.certificate.checks
                     ],
                 }
@@ -112,6 +113,10 @@ def build_demo_report() -> Dict[str, Any]:
                 }
                 for item in realized.rejected
             ],
+            "undecided": [
+                {"model": item.model.name, "diagnostics": [d.reason for d in item.diagnostics]}
+                for item in realized.undecided
+            ],
             "dominated": [item.model.name for item in realized.dominated],
             "simulations_used": realized.simulations_used,
         },
@@ -122,7 +127,6 @@ def build_demo_report() -> Dict[str, Any]:
                     "name": item.hypothesis.name,
                     "level": item.hypothesis.level.value,
                     "coverage": item.certificate.verification.coverage,
-                    "robustness": item.certificate.verification.robustness,
                     "requirement_count": item.requirement_count,
                     "spec_fingerprint": item.certificate.spec_fingerprint,
                     "model_fingerprint": item.certificate.model_fingerprint,
@@ -211,6 +215,9 @@ def build_demo_report() -> Dict[str, Any]:
             "boundaries": list(residual.boundaries),
         },
         "composition_rules": {
+            "selection_policy": composition.selection_policy,
+            "certified": [item.rule.name for item in composition.certified],
+            "undecided": [item.rule.name for item in composition.undecided],
             "unique_selection": composition.unique_selection,
             "selected": list(composition.selected_rule_names),
             "ranked": [
@@ -239,7 +246,6 @@ def build_demo_report() -> Dict[str, Any]:
                                 "states": case.state_description_length,
                                 "transitions": case.transition_description_length,
                                 "contexts": case.context_description_length,
-                                "exceptions": case.exception_description_length,
                             },
                         }
                         for case in item.cases
@@ -350,8 +356,8 @@ def _print_human(report: Dict[str, Any]) -> None:
     print("宏观目的 → 微观结构：%s" % realized["goal"])
     for candidate in realized["pareto_candidates"]:
         print(
-            "  ✓ %s  coverage=%.4f robustness=%.4f  metrics=%s"
-            % (candidate["model"], candidate["coverage"], candidate["robustness"], candidate["metrics"])
+            "  ✓ %s  coverage=%.4f  metrics=%s"
+            % (candidate["model"], candidate["coverage"], candidate["metrics"])
         )
     for rejected in realized["rejected"]:
         why = rejected["counterexamples"] or rejected["failed_checks"]

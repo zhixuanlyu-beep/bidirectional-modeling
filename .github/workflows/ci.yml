@@ -94,6 +94,7 @@ jobs:
               "bidirectional_modeling/extensions/__init__.py",
               "bidirectional_modeling/extensions/boolean.py",
               "bidirectional_modeling/extensions/gluing.py",
+              "bidirectional_modeling/extensions/concepts.py",
           }
           missing = required - names
           if missing:
@@ -102,7 +103,7 @@ jobs:
       - name: Install built wheel and smoke-test it
         run: |
           python -m pip install dist/*.whl
-          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.20.1'"
+          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.21.0'"
           bidirectional-modeling demo --json > /dev/null
           bidirectional-modeling search-demo --json > /dev/null
           bidirectional-modeling context-demo --json > /dev/null

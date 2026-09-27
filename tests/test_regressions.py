@@ -1,10 +1,10 @@
+from bidirectional_modeling.extensions.concepts import ConceptLibrary
 import unittest
 
 from bidirectional_modeling import (
     Aggregation,
     BidirectionalModelingEngine,
     Concept,
-    ConceptLibrary,
     Context,
     EquivalenceSpec,
     Evidence,
@@ -123,7 +123,7 @@ class RegressionTests(unittest.TestCase):
         self.assertFalse(result.candidates)
         self.assertEqual(model.produced, 1)
         self.assertEqual(result.simulations_used, 1)
-        certificate = result.rejected[0].certificate
+        certificate = result.undecided[0].certificate
         self.assertFalse(certificate.complete)
         self.assertTrue(certificate.requirements_passed)
         self.assertFalse(certificate.satisfied)
@@ -138,7 +138,7 @@ class RegressionTests(unittest.TestCase):
             ResourceBudget(max_simulations=1),
         )
 
-        certificate = result.rejected[0].certificate
+        certificate = result.undecided[0].certificate
         self.assertFalse(certificate.complete)
         self.assertFalse(certificate.satisfied)
         self.assertEqual(model.produced, 1)
@@ -279,10 +279,10 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(len(evaluation.probe_certificates), 1)
         self.assertTrue(evaluation.probe_certificates[0].complete)
         self.assertEqual(
-            evaluation.verification.robustness,
+            evaluation.verification.coverage,
             min(
-                evaluation.certificate.verification.robustness,
-                evaluation.probe_certificates[0].verification.robustness,
+                evaluation.certificate.verification.coverage,
+                evaluation.probe_certificates[0].verification.coverage,
             ),
         )
 
@@ -375,7 +375,7 @@ class RegressionTests(unittest.TestCase):
             budget=ResourceBudget(max_simulations=1),
         )
 
-        self.assertFalse(report.passed)
+        self.assertFalse(report.compatibility_passed)
         self.assertTrue(report.truncated)
         self.assertEqual(report.simulations_used, 1)
         self.assertEqual(model.calls, 1)
@@ -406,8 +406,8 @@ class RegressionTests(unittest.TestCase):
         )
 
         self.assertTrue(report.compatibility_passed)
-        self.assertFalse(report.independent_recovery)
-        self.assertFalse(report.passed)
+        self.assertFalse(report.independence_declared)
+        self.assertFalse(hasattr(report, "passed"))
 
     def test_micro_round_trip_accounts_for_behavior_comparison(self):
         hypothesis = PurposeHypothesis(
@@ -526,7 +526,7 @@ class RegressionTests(unittest.TestCase):
         report = BidirectionalModelingEngine().macro_round_trip(
             original, Context(), (model,), (hypothesis,)
         )
-        self.assertFalse(report.passed)
+        self.assertFalse(report.compatibility_passed)
         self.assertEqual(report.semantic_preservation, (False,))
 
     def test_macro_semantic_signature_is_order_insensitive(self):
@@ -664,7 +664,7 @@ class RegressionTests(unittest.TestCase):
         self.assertIn("velocity", result.final_spec.observables)
         self.assertEqual(engine.concepts.get("position state").version, 2)
         self.assertFalse(result.steps[-1].closure_report.complete)
-        self.assertEqual(result.stopped_reason, "closure-analysis-budget-exhausted")
+        self.assertEqual(result.stopped_reason, "closure-analysis-undecided")
 
     def test_closure_searches_reachable_states(self):
         spec = MacroSpec(
@@ -811,11 +811,11 @@ class RegressionTests(unittest.TestCase):
 
         self.assertEqual(result.searched_candidates, 2)
         self.assertEqual(tuple(item.model.name for item in result.candidates), ("good",))
-        self.assertEqual(tuple(item.model.name for item in result.rejected), ("crashing",))
+        self.assertEqual(tuple(item.model.name for item in result.undecided), ("crashing",))
         self.assertTrue(
             any(
                 "simulation failed" in boundary
-                for boundary in result.rejected[0].certificate.failure_boundaries
+                for boundary in result.undecided[0].certificate.failure_boundaries
             )
         )
 
@@ -828,7 +828,7 @@ class RegressionTests(unittest.TestCase):
             x_spec(), Context(), (model,)
         )
 
-        certificate = result.rejected[0].certificate
+        certificate = result.undecided[0].certificate
         self.assertFalse(certificate.satisfied)
         self.assertFalse(certificate.complete)
         self.assertEqual(certificate.checks[0].name, "candidate verification")
@@ -877,7 +877,7 @@ class RegressionTests(unittest.TestCase):
 
         self.assertFalse(certificate.satisfied)
         self.assertEqual(certificate.model_name, "InvalidMetadataModel")
-        self.assertEqual(certificate.verification.robustness, 0.0)
+        self.assertFalse(certificate.complete)
         self.assertEqual(len(certificate.checks), 2)
         self.assertTrue(all(not item.passed for item in certificate.checks))
         self.assertTrue(any("metadata" in item for item in certificate.failure_boundaries))
@@ -897,8 +897,8 @@ class RegressionTests(unittest.TestCase):
         )
 
         self.assertFalse(result.candidates)
-        self.assertEqual(result.rejected[0].counterexamples[0].kind, "probe-error")
-        self.assertTrue(result.rejected[0].counterexamples[0].blocking)
+        self.assertEqual(result.undecided[0].diagnostics[0].phase, "probe-execution")
+        self.assertFalse(result.rejected)
         self.assertTrue(result.truncated)
 
     def test_set_selection_does_not_depend_on_evidence_strength(self):

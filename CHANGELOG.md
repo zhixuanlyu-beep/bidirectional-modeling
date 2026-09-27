@@ -2,7 +2,19 @@
 
 版本记录描述各版本引入时的行为；当前使用方式以 README 和专题文档为准。
 
-## 0.20.1
+## 0.21.0
+
+本版合并 PR #14 的解释状态修复及后续语义审查修复；不保留被删除接口的兼容层。
+
+- 数值条件以精确整数/有理比较决定真假；浮点数按其实际二进制值参与，显式 tolerance 才放宽判断。大整数不再因转为浮点数被误判相等。
+- EquivalenceSpec 与残差商、闭合、对应共用严格结构身份；未分桶的 True、1、1.0 区分类型，声明数值分辨率后才按桶归类。
+- RealizationResult 新增 undecided，探针未完成不能进入候选；VerificationIssue 与 Counterexample 分开。闭合错误只进入 diagnostics；组合规则按操作反例拒绝，其余未认证情况保留未决。
+- 删除 CheckResult/VerificationMeasures 的 robustness；条件返回原单位 margin 与 tolerance，证书仅报告场景覆盖，不聚合不同要求的余量。
+- 删除 MacroRoundTripReport.passed 和 independent_recovery；分别报告 compatibility_passed、generation_source、independence_declared。生成器声明无法构成独立恢复证明。
+- 组合验证默认保留全部 certified 规则，不要求编码长度、不执行描述长度选择；selection_policy="shortest_description" 显式启用选择。移除 exception_penalty 和异常描述长度。
+- ConceptLibrary 移至 extensions.concepts，通用调用不加载；显式使用时保存判断来源与版本历史，诊断不能写入反例。删除顶层与 refinement 模块的旧导入。
+
+PR #14 的配套改动：
 
 - 检查器异常记录为 evaluation_error 和未决诊断，不再作为反证排除候选；未决或预算截断不能产生唯一性结论或全目录实验建议。
 - InterpretationResult 的 identification_status 统一派生五种状态；non_identifiable 改为只读派生属性，删除对应构造参数，不提供兼容入口。rejected 与 undecided 分别记录验证失败和未完成验证。

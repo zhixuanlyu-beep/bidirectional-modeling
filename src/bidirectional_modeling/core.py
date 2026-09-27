@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from statistics import mean
+from fractions import Fraction
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
 
 from .structural import (
@@ -244,15 +245,14 @@ class CheckResult:
     passed: bool
     observed: Any
     expected: str
-    robustness: float
+    margin: Optional[float] = None
     detail: str = ""
     evaluation_error: Optional[str] = None
+    tolerance: float = 0.0
 
     def __post_init__(self) -> None:
         if self.evaluation_error is not None and self.passed:
             raise ValueError("an unresolved check cannot pass")
-        if not 0.0 <= self.robustness <= 1.0:
-            raise ValueError("robustness must be in [0, 1]")
 
 
 class Requirement(Protocol):
@@ -268,40 +268,43 @@ class Requirement(Protocol):
         ...
 
 
-def _compare(observed: Any, operator: str, expected: Any, tolerance: float) -> Tuple[bool, float]:
-    if operator == "eq":
-        if isinstance(observed, (int, float)) and isinstance(expected, (int, float)):
-            difference = abs(float(observed) - float(expected))
-            passed = difference <= tolerance
-            if tolerance > 0:
-                robustness = max(0.0, 1.0 - difference / tolerance)
-            else:
-                robustness = 1.0 if passed else 0.0
-            return passed, robustness
-        passed = observed == expected
-        return passed, 1.0 if passed else 0.0
-    if operator == "ne":
-        passed = observed != expected
-        return passed, 1.0 if passed else 0.0
-    if operator in {"le", "lt", "ge", "gt"}:
-        left, right = float(observed), float(expected)
-        if operator == "le":
-            passed, margin = left <= right + tolerance, right + tolerance - left
-        elif operator == "lt":
-            passed, margin = left < right + tolerance, right + tolerance - left
-        elif operator == "ge":
-            passed, margin = left + tolerance >= right, left + tolerance - right
+def _compare(observed: Any, operator: str, expected: Any, tolerance: float):
+    """Exact decisions on finite numeric values; margin is in the input unit.
+
+    Floats denote their represented binary value. No numeric value is rounded
+    to float for deciding truth. Non-numeric equality uses structural identity.
+    """
+    numeric = type(observed) in (int, float) and type(expected) in (int, float)
+    if numeric:
+        if any(type(v) is float and not math.isfinite(v) for v in (observed, expected)):
+            raise ValueError("numeric comparisons require finite values")
+        left, right, error = Fraction(observed), Fraction(expected), Fraction(tolerance)
+        if operator == "eq":
+            margin = error - abs(left - right)
+            passed = margin >= 0
+        elif operator == "ne":
+            return left != right, None
+        elif operator in {"le", "lt", "ge", "gt"}:
+            margin = right + error - left if operator in {"le", "lt"} else left + error - right
+            passed = margin > 0 if operator in {"lt", "gt"} else margin >= 0
         else:
-            passed, margin = left + tolerance > right, left + tolerance - right
-        scale = max(abs(right), tolerance, 1.0)
-        # Passing exactly at the boundary is valid but fragile (0.5), while a
-        # comfortable margin approaches 1.0.  Failed checks remain zero.
-        score = 0.5 + 0.5 * max(0.0, margin) / scale
-        return passed, min(1.0, score) if passed else 0.0
+            margin = None
+        if operator in {"eq", "le", "lt", "ge", "gt"}:
+            # Export a plain numeric diagnostic; it never determines validity.
+            if margin.denominator == 1:
+                diagnostic = margin.numerator
+            else:
+                try:
+                    diagnostic = float(margin)
+                except OverflowError:
+                    diagnostic = None  # Diagnostic range never changes the exact decision.
+            return passed, diagnostic
+    if operator in {"eq", "ne"}:
+        equal = freeze_value(observed) == freeze_value(expected)
+        return (equal if operator == "eq" else not equal), None
     if operator == "in":
-        passed = observed in expected
-        return passed, 1.0 if passed else 0.0
-    raise ValueError("unsupported operator %r" % operator)
+        return any(freeze_value(observed) == freeze_value(item) for item in expected), None
+    raise ValueError("unsupported comparison %r for the supplied values" % operator)
 
 
 @dataclass(frozen=True)
@@ -353,20 +356,21 @@ class FieldRequirement:
         context: Context,
     ) -> CheckResult:
         outcomes = []
-        robustness = []
+        margins = []
         failures = []
         for trace in traces:
             values = trace.values(self.field_name)
             if self.aggregation == Aggregation.EACH:
                 checks = [_compare(value, self.operator, self.expected, self.tolerance) for value in values]
                 passed = all(item[0] for item in checks)
-                score = min(item[1] for item in checks)
+                margin = min((item[1] for item in checks if item[1] is not None), default=None)
                 observed = tuple(values)
             else:
                 observed = self._aggregate(values)
-                passed, score = _compare(observed, self.operator, self.expected, self.tolerance)
+                passed, margin = _compare(observed, self.operator, self.expected, self.tolerance)
             outcomes.append(observed)
-            robustness.append(score)
+            if margin is not None:
+                margins.append(margin)
             if not passed:
                 failures.append("%s/%s" % (trace.initial_state, trace.intervention))
         passed_all = bool(traces) and not failures
@@ -377,7 +381,8 @@ class FieldRequirement:
             passed=passed_all,
             observed=tuple(outcomes),
             expected="%s %r after %s" % (self.operator, self.expected, self.aggregation.value),
-            robustness=min(robustness) if robustness else 0.0,
+            margin=min(margins) if margins else None,
+            tolerance=self.tolerance,
             detail=detail,
         )
 
@@ -414,14 +419,15 @@ class ModelMetricRequirement:
         context: Context,
     ) -> CheckResult:
         observed = getattr(model.metrics, self.metric)
-        passed, robustness = _compare(observed, self.operator, self.expected, self.tolerance)
+        passed, margin = _compare(observed, self.operator, self.expected, self.tolerance)
         return CheckResult(
             name=self.name,
             category=self.category,
             passed=passed,
             observed=observed,
             expected="%s %s" % (self.operator, self.expected),
-            robustness=robustness,
+            margin=margin,
+            tolerance=self.tolerance,
             detail="model metric %s" % self.metric,
         )
 
@@ -485,19 +491,19 @@ class EquivalenceSpec:
         # Equivalence must be transitive.  Numeric resolutions therefore form
         # deterministic buckets instead of using pairwise |a-b| <= epsilon,
         # which is not an equivalence relation.
-        return self.signature(left) == self.signature(right)
+        return freeze_value(self.signature(left)) == freeze_value(self.signature(right))
 
     def signature(self, snapshot: Snapshot) -> Tuple[Any, ...]:
         result = []
         for field_name in self.fields:
             value = snapshot[field_name]
             tolerance = self.tolerances.get(field_name, 0.0)
-            if tolerance and isinstance(value, (int, float)):
-                if not math.isfinite(float(value)):
+            if tolerance and type(value) in (int, float):
+                if type(value) is float and not math.isfinite(value):
                     raise ValueError(
                         "equivalence field %r must be finite" % field_name
                     )
-                value = math.floor(float(value) / tolerance + 0.5)
+                value = math.floor(Fraction(value) / Fraction(tolerance) + Fraction(1, 2))
             elif isinstance(value, float) and not math.isfinite(value):
                 raise ValueError("equivalence field %r must be finite" % field_name)
             result.append(value)
@@ -841,10 +847,9 @@ class FiniteStateModel:
 class VerificationMeasures:
     """Separate finite-domain measures, never a probability of truth."""
     coverage: float
-    robustness: float
 
     def __post_init__(self):
-        for value in (self.coverage, self.robustness):
+        for value in (self.coverage,):
             if not math.isfinite(value) or not 0.0 <= value <= 1.0:
                 raise ValueError('verification measures must be finite and in [0, 1]')
 
@@ -962,6 +967,14 @@ class SatisfactionCertificate:
 
 
 @dataclass(frozen=True)
+class VerificationIssue:
+    """An execution/coverage diagnostic, never a contradiction witness."""
+    phase: str
+    reason: str
+    witness: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class Counterexample:
     kind: str
     summary: str
@@ -975,6 +988,7 @@ class Counterexample:
 class ProbeOutcome:
     counterexample: Optional[Counterexample]
     certificate: Optional[SatisfactionCertificate] = None
+    diagnostics: Tuple[VerificationIssue, ...] = ()
 
     @property
     def simulations_used(self) -> int:
@@ -987,13 +1001,13 @@ class CandidateEvaluation:
     certificate: SatisfactionCertificate
     counterexamples: Tuple[Counterexample, ...] = ()
     probe_certificates: Tuple[SatisfactionCertificate, ...] = ()
+    diagnostics: Tuple[VerificationIssue, ...] = ()
 
     @property
     def verification(self) -> VerificationMeasures:
         certificates = (self.certificate,) + self.probe_certificates
         return VerificationMeasures(
             min(item.verification.coverage for item in certificates),
-            min(item.verification.robustness for item in certificates),
         )
 
 
@@ -1006,6 +1020,7 @@ class RealizationResult:
     searched_candidates: int
     truncated: bool
     simulations_used: int = 0
+    undecided: Tuple[CandidateEvaluation, ...] = ()
 
     def __post_init__(self) -> None:
         accepted = self.candidates + self.dominated
@@ -1215,6 +1230,7 @@ class ClosureReport:
     suggested_features: Tuple[str, ...] = ()
     complete: bool = True
     explored_states: int = 0
+    diagnostics: Tuple[VerificationIssue, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -74,10 +74,8 @@ class SemanticSubstrateRegressionTests(unittest.TestCase):
 
         self.assertFalse(report.closed)
         self.assertFalse(report.complete)
-        self.assertIn(
-            "closure-analysis-error",
-            {item.kind for item in report.counterexamples},
-        )
+        self.assertTrue(report.diagnostics)
+        self.assertFalse(report.counterexamples)
 
     def test_opaque_macro_values_cannot_collide_through_repr(self):
         class Opaque:
@@ -317,7 +315,7 @@ class SemanticSubstrateRegressionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Experiment("x", "x", ("yes", "no"), cost=math.inf)
         with self.assertRaises(ValueError):
-            VerificationMeasures(coverage=math.nan, robustness=1.0)
+            VerificationMeasures(coverage=math.nan)
         with self.assertRaises(TypeError):
             ResourceBudget(max_candidates=1.5)
 

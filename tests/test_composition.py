@@ -21,6 +21,7 @@ class CompositionRuleSelectionTests(unittest.TestCase):
         self.engine = BidirectionalModelingEngine()
 
     def select(self, rules=None, experiments=None, **kwargs):
+        kwargs.setdefault("selection_policy", "shortest_description")
         return self.engine.select_composition_rules(
             rules or self.rules,
             experiments or self.experiments,
@@ -55,7 +56,6 @@ class CompositionRuleSelectionTests(unittest.TestCase):
         self.assertEqual(parity.cases[0].state_description_length, 4.0)
         self.assertEqual(parity.cases[0].transition_description_length, 18.0)
         self.assertEqual(parity.cases[0].context_description_length, 1.0)
-        self.assertEqual(parity.cases[0].exception_description_length, 0.0)
         self.assertEqual(parity.total_description_length, 31.0)
 
         constant_kinds = {
@@ -110,15 +110,9 @@ class CompositionRuleSelectionTests(unittest.TestCase):
         self.assertFalse(report.unique_selection)
         self.assertFalse(report.selected)
         self.assertFalse(report.ranked)
-        evaluation = report.rejected[0]
+        evaluation = report.undecided[0]
         self.assertFalse(evaluation.cases[0].residual_report.complete)
-        self.assertIn(
-            "composition-analysis-incomplete",
-            {item.kind for item in evaluation.counterexamples},
-        )
-        self.assertGreater(
-            evaluation.cases[0].exception_description_length, 0.0
-        )
+        self.assertFalse(report.rejected)
         self.assertIn(
             "no candidate rule received a complete certificate",
             report.boundaries,
@@ -130,27 +124,23 @@ class CompositionRuleSelectionTests(unittest.TestCase):
             max_context_tests=1,
         )
 
-        evaluation = report.rejected[0]
+        evaluation = report.undecided[0]
         residual = evaluation.cases[0].residual_report
         self.assertTrue(residual.minimal)
         self.assertFalse(residual.context_basis_reproduces_partition)
-        self.assertIn(
-            "composition-context-basis-incomplete",
-            {item.kind for item in evaluation.counterexamples},
-        )
+        self.assertFalse(report.rejected)
 
     def test_context_depth_bound_exposes_non_congruence(self):
         report = self.select(
             rules=(self.rules[1],),
             max_context_depth=0,
         )
-        case = report.rejected[0].cases[0]
+        case = report.undecided[0].cases[0]
         kinds = {item.kind for item in case.counterexamples}
 
         self.assertTrue(case.residual_report.complete)
         self.assertFalse(case.residual_report.stable)
         self.assertFalse(case.residual_report.congruent)
-        self.assertIn("composition-residual-unstable", kinds)
         self.assertIn("composition-non-congruence", kinds)
 
     def test_transition_errors_are_not_treated_as_bottom(self):
@@ -161,11 +151,11 @@ class CompositionRuleSelectionTests(unittest.TestCase):
 
         rule = CompositionRule("broken", broken, 1.0)
         report = self.select(rules=(rule,))
-        evaluation = report.rejected[0]
+        evaluation = report.undecided[0]
         kinds = {item.kind for item in evaluation.counterexamples}
 
-        self.assertIn("composition-rule-error", kinds)
-        self.assertIn("composition-analysis-incomplete", kinds)
+        self.assertFalse(kinds)
+        self.assertFalse(report.rejected)
         failed = [item for item in evaluation.cases[0].tests if not item.passed]
         self.assertTrue(failed)
         self.assertIsNone(failed[0].actual_defined)
@@ -185,16 +175,13 @@ class CompositionRuleSelectionTests(unittest.TestCase):
         report = self.select(
             rules=(self.rules[0],), experiments=(experiment,)
         )
-        case = report.rejected[0].cases[0]
+        case = report.undecided[0].cases[0]
 
         self.assertIsNone(case.residual_report)
         self.assertIn("TypeError", case.analysis_error)
         self.assertEqual(case.class_count, 0)
         self.assertEqual(case.state_description_length, 0.0)
-        self.assertIn(
-            "composition-analysis-error",
-            {item.kind for item in case.counterexamples},
-        )
+        self.assertFalse(report.rejected)
 
     def test_readout_errors_fail_both_test_and_residual_analysis(self):
         experiment = replace(
@@ -212,15 +199,13 @@ class CompositionRuleSelectionTests(unittest.TestCase):
         report = self.select(
             rules=(self.rules[0],), experiments=(experiment,)
         )
-        case = report.rejected[0].cases[0]
+        case = report.undecided[0].cases[0]
 
         self.assertIsNone(case.tests[0].actual_defined)
         self.assertIn("RuntimeError", case.tests[0].detail)
         self.assertIsNone(case.residual_report)
-        self.assertEqual(
-            {item.kind for item in case.counterexamples},
-            {"composition-rule-error", "composition-analysis-error"},
-        )
+        self.assertFalse(case.counterexamples)
+        self.assertTrue(case.tests[0].evaluation_error)
 
     def test_expected_bottom_is_a_valid_operational_result(self):
         experiment = CompositionExperiment(
@@ -280,7 +265,6 @@ class CompositionRuleSelectionTests(unittest.TestCase):
                 "states": 4.0,
                 "transitions": 18.0,
                 "contexts": 1.0,
-                "exceptions": 0.0,
             },
         )
         self.assertEqual(section["ranked"][0]["rule_description_length"], 8.0)
@@ -304,13 +288,10 @@ class CompositionRuleSelectionTests(unittest.TestCase):
                 (self.rules[0],),
                 (self.experiments[0], replace(self.experiments[0])),
             )
-        for penalty in (0, -1, math.inf, math.nan):
-            with self.subTest(penalty=penalty), self.assertRaises(ValueError):
-                selector.select(
-                    (self.rules[0],),
-                    self.experiments,
-                    exception_penalty=penalty,
-                )
+        with self.assertRaises(ValueError):
+            selector.select(self.rules, self.experiments, selection_policy="unknown")
+        with self.assertRaises(TypeError):
+            selector.select(self.rules, self.experiments, exception_penalty=1)
         invalid_bounds = (
             {"max_states": 0},
             {"max_reachability_depth": -1},
@@ -407,3 +388,4 @@ class CompositionRuleSelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

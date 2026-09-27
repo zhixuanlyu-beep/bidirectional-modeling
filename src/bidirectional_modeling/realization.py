@@ -10,6 +10,7 @@ from .core import (
     CandidateEvaluation,
     Context,
     Counterexample,
+    VerificationIssue,
     ExecutableModel,
     MacroSpec,
     ProbeOutcome,
@@ -127,6 +128,7 @@ class Realizer:
 
         accepted = []
         rejected = []
+        undecided = []
         searched = 0
         truncated = False
         simulations_used = 0
@@ -151,20 +153,18 @@ class Realizer:
             remaining_simulations -= certificate.verified_scenarios
             counterexamples = []
             probe_certificates = []
+            diagnostics = []
+            unresolved = not certificate.complete
             if not certificate.complete:
-                truncated = True
+                diagnostics.append(VerificationIssue("base-verification", "; ".join(
+                    tuple(c.evaluation_error for c in certificate.checks if c.evaluation_error)
+                    + certificate.failure_boundaries) or "verification incomplete"))
             if certificate.satisfied:
                 for probe in self.probes:
                     if remaining_simulations <= 0:
-                        counterexamples.append(
-                            Counterexample(
-                                kind="verification-budget-exhausted",
-                                summary="the candidate could not run all configured red-team probes",
-                                witness={"model": model.name},
-                                violated=("complete adversarial verification",),
-                                suggested_refinements=("increase max_simulations",),
-                            )
-                        )
+                        diagnostics.append(VerificationIssue(
+                            "probe-budget", "configured probes could not all run"))
+                        unresolved = True
                         truncated = True
                         break
                     probe_budget = replace(budget, max_simulations=remaining_simulations)
@@ -173,22 +173,9 @@ class Realizer:
                             model, spec, context, self.evaluator, probe_budget
                         )
                     except Exception as error:
-                        counterexamples.append(
-                            Counterexample(
-                                kind="probe-error",
-                                summary="a configured red-team probe failed and could not certify the candidate",
-                                witness={
-                                    "model": getattr(model, "name", type(model).__name__),
-                                    "probe": type(probe).__name__,
-                                    "error": str(error),
-                                },
-                                violated=("complete adversarial verification",),
-                                suggested_refinements=(
-                                    "repair or remove the failing probe before accepting the candidate",
-                                ),
-                                blocking=True,
-                            )
-                        )
+                        diagnostics.append(VerificationIssue(
+                            "probe-execution", str(error), {"probe": type(probe).__name__}))
+                        unresolved = True
                         # An arbitrary probe may have consumed any portion of the
                         # budget before raising. Fail closed and reserve all of
                         # the remaining allowance instead of risking overspend.
@@ -201,7 +188,17 @@ class Realizer:
                     if outcome.certificate is not None:
                         probe_certificates.append(outcome.certificate)
                         if not outcome.certificate.complete:
-                            truncated = True
+                            unresolved = True
+                            diagnostics.append(VerificationIssue("probe-verification", "probe certificate incomplete"))
+                        elif not outcome.certificate.satisfied and outcome.counterexample is None:
+                            counterexamples.append(Counterexample(
+                                "probe-requirement-failure", "probe certificate contains a failed requirement",
+                                {"model": model.name, "failed_checks": tuple(
+                                    c.name for c in outcome.certificate.checks if not c.passed)},
+                                violated=("configured probe requirements",)))
+                    if outcome.diagnostics:
+                        unresolved = True
+                        diagnostics.extend(outcome.diagnostics)
                     if outcome.counterexample is not None:
                         counterexamples.append(outcome.counterexample)
             evaluation = CandidateEvaluation(
@@ -209,8 +206,11 @@ class Realizer:
                 certificate,
                 tuple(counterexamples),
                 tuple(probe_certificates),
+                tuple(diagnostics),
             )
-            if certificate.satisfied and not any(item.blocking for item in counterexamples):
+            if unresolved:
+                undecided.append(evaluation)
+            elif certificate.satisfied and not any(item.blocking for item in counterexamples):
                 accepted.append(evaluation)
             else:
                 rejected.append(evaluation)
@@ -233,5 +233,6 @@ class Realizer:
             searched_candidates=searched,
             truncated=truncated,
             simulations_used=simulations_used,
+            undecided=tuple(undecided),
         )
 

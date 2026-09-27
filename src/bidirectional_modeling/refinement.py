@@ -1,21 +1,21 @@
-"""Dynamical closure checks and a versioned concept memory."""
+"""Dynamical closure checks with separate witnesses and diagnostics."""
 
 from __future__ import annotations
 
-from dataclasses import replace
 from itertools import combinations
-from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from .core import (
     ClosureReport,
-    Concept,
     Context,
     Counterexample,
+    VerificationIssue,
     FiniteStateModel,
     MacroSpec,
     UndefinedTransition,
 )
 from ._exploration import explore_reachable
+from .structural import freeze_value
 
 
 class ClosureAnalyzer:
@@ -49,22 +49,10 @@ class ClosureAnalyzer:
             if key in error_keys:
                 return
             error_keys.add(key)
-            analysis_errors.append(
-                Counterexample(
-                    kind="closure-analysis-error",
-                    summary="closure analysis could not certify %s" % phase,
-                    witness={
-                        "model": model.name,
-                        "phase": phase,
-                        "error": "%s: %s" % (type(error).__name__, error),
-                        **witness,
-                    },
-                    violated=("complete dynamical closure analysis",),
-                    suggested_refinements=(
-                        "use deterministic structural state values and pure model callbacks",
-                    ),
-                )
-            )
+            analysis_errors.append(VerificationIssue(
+                phase, "%s: %s" % (type(error).__name__, error),
+                {"model": model.name, **witness},
+            ))
 
         exploration = explore_reachable(model, context, max_depth=depth_limit, max_states=max_states)
         complete = exploration.complete
@@ -85,7 +73,7 @@ class ClosureAnalyzer:
             try:
                 observation = model.audited_observe(state, context)
                 # Validate the declared equivalence interface before pairwise use.
-                spec.equivalence.signature(observation)
+                freeze_value(spec.equivalence.signature(observation))
             except Exception as error:
                 complete = False
                 record_error(
@@ -114,6 +102,7 @@ class ClosureAnalyzer:
                     left_next_observed = model.audited_observe(
                         left_next, context
                     )
+                    freeze_value(spec.equivalence.signature(left_next_observed))
                     left_defined = True
                 except UndefinedTransition:
                     left_next_observed = None
@@ -132,6 +121,7 @@ class ClosureAnalyzer:
                     right_next_observed = model.audited_observe(
                         right_next, context
                     )
+                    freeze_value(spec.equivalence.signature(right_next_observed))
                     right_defined = True
                 except UndefinedTransition:
                     right_next_observed = None
@@ -159,7 +149,7 @@ class ClosureAnalyzer:
                     sorted(
                         key
                         for key in set(left).intersection(right)
-                        if left[key] != right[key]
+                        if freeze_value(left[key]) != freeze_value(right[key])
                     )
                 )
                 violations.append(
@@ -202,7 +192,7 @@ class ClosureAnalyzer:
             )
         )
 
-        counterexamples = list(analysis_errors)
+        counterexamples = []
         for violation in violations:
             local_ranked = tuple(
                 feature
@@ -238,94 +228,6 @@ class ClosureAnalyzer:
             suggested_features=ranked_features,
             complete=complete,
             explored_states=len(reachable),
+            diagnostics=tuple(analysis_errors),
         )
-
-
-class ConceptLibrary:
-    """Small in-memory concept store; persistence can be supplied by an adapter."""
-
-    def __init__(self, concepts: Iterable[Concept] = ()) -> None:
-        self._concepts = {concept.name: concept for concept in concepts}
-
-    def add(self, concept: Concept) -> None:
-        if concept.name in self._concepts:
-            raise ValueError("concept %r already exists" % concept.name)
-        self._concepts[concept.name] = concept
-
-    def get(self, name: str) -> Concept:
-        return self._concepts[name]
-
-    def all(self) -> Tuple[Concept, ...]:
-        return tuple(sorted(self._concepts.values(), key=lambda item: item.name))
-
-    def record_judgment(
-        self,
-        name: str,
-        example: str,
-        accepted: bool,
-        boundary: Optional[str] = None,
-    ) -> Concept:
-        concept = self.get(name)
-        positives = concept.positive_examples
-        negatives = concept.negative_examples
-        if accepted and example not in positives:
-            positives += (example,)
-        if accepted and example in negatives:
-            negatives = tuple(item for item in negatives if item != example)
-        if not accepted and example not in negatives:
-            negatives += (example,)
-        if not accepted and example in positives:
-            positives = tuple(item for item in positives if item != example)
-        boundaries = concept.boundaries
-        if boundary and boundary not in boundaries:
-            boundaries += (boundary,)
-        if (
-            positives == concept.positive_examples
-            and negatives == concept.negative_examples
-            and boundaries == concept.boundaries
-        ):
-            return concept
-        updated = replace(
-            concept,
-            positive_examples=positives,
-            negative_examples=negatives,
-            boundaries=boundaries,
-            version=concept.version + 1,
-        )
-        self._concepts[name] = updated
-        return updated
-
-    def refine_from_counterexample(self, name: str, counterexample: Counterexample) -> Concept:
-        concept = self.get(name)
-        boundary = counterexample.summary
-        example = repr(dict(counterexample.witness))
-        positives = tuple(item for item in concept.positive_examples if item != example)
-        negatives = concept.negative_examples
-        if example not in negatives:
-            negatives += (example,)
-        boundaries = concept.boundaries
-        if boundary not in boundaries:
-            boundaries += (boundary,)
-        definitions = concept.candidate_definitions
-        for suggestion in counterexample.suggested_refinements:
-            if suggestion not in definitions:
-                definitions += (suggestion,)
-        changed = (
-            positives != concept.positive_examples
-            or negatives != concept.negative_examples
-            or boundaries != concept.boundaries
-            or definitions != concept.candidate_definitions
-        )
-        if not changed:
-            return concept
-        updated = replace(
-            concept,
-            positive_examples=positives,
-            negative_examples=negatives,
-            boundaries=boundaries,
-            candidate_definitions=definitions,
-            version=concept.version + 1,
-        )
-        self._concepts[name] = updated
-        return updated
 

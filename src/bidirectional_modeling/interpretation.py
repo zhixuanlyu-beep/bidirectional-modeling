@@ -28,7 +28,7 @@ from .structural import freeze_value
 
 
 class HypothesisGenerator(Protocol):
-    independent_recovery: bool
+    independence_declared: bool
 
     def generate(
         self, model: ExecutableModel, context: Context
@@ -42,7 +42,7 @@ HypothesisSource = Union[HypothesisGenerator, Iterable[PurposeHypothesis]]
 class CatalogHypothesisGenerator:
     """Supplies contextual function/intention hypotheses from a domain catalog."""
 
-    independent_recovery = False
+    independence_declared = False
 
     def __init__(self, hypotheses: Iterable[PurposeHypothesis]) -> None:
         self.hypotheses = tuple(hypotheses)
@@ -60,7 +60,7 @@ class ObservedEffectGenerator:
     environmental or actor evidence beyond the structure itself.
     """
 
-    independent_recovery = True
+    independence_declared = False
 
     def __init__(self, horizon: int = 1) -> None:
         if horizon < 1:

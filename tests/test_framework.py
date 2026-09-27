@@ -102,7 +102,7 @@ class FrameworkTests(unittest.TestCase):
     def test_round_trips_require_independent_recovery_and_a_new_realization(self):
         spec, context, models = software_scenario()
         class IndependentRecoveryGenerator:
-            independent_recovery = True
+            independence_declared = True
 
             def generate(self, model, _context):
                 return (
@@ -117,8 +117,9 @@ class FrameworkTests(unittest.TestCase):
         macro_report = self.engine.macro_round_trip(
             spec, context, models, hypotheses
         )
-        self.assertTrue(macro_report.passed)
-        self.assertTrue(macro_report.independent_recovery)
+        self.assertTrue(macro_report.compatibility_passed)
+        self.assertFalse(hasattr(macro_report, "passed"))
+        self.assertTrue(macro_report.independence_declared)
 
         clone = replace(models[0], name="sequential-safe-worker-clone")
         micro_report = self.engine.micro_round_trip(

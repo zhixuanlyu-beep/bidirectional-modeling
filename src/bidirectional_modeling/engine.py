@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, replace
-from typing import Callable, Dict, Iterable, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, Iterable, Optional, Sequence, Tuple
 
 from .correspondence import (
     Correspondence,
@@ -37,7 +37,10 @@ from .core import (
 )
 from .interpretation import HypothesisSource, Interpreter
 from .realization import CandidateSource, Realizer
-from .refinement import ClosureAnalyzer, ConceptLibrary
+if TYPE_CHECKING:
+    from .extensions.concepts import ConceptLibrary
+
+from .refinement import ClosureAnalyzer
 from .residual import ResidualQuotientAnalyzer, ResidualQuotientReport
 
 
@@ -48,19 +51,17 @@ class MacroRoundTripReport:
     semantic_preservation: Tuple[bool, ...]
     simulations_used: int = 0
     truncated: bool = False
-    independent_recovery: bool = False
+    independence_declared: bool = False
+    generation_source: str = "catalogue"
 
     @property
     def compatibility_passed(self) -> bool:
         return (
             not self.truncated
+            and not self.realization.undecided
             and bool(self.semantic_preservation)
             and all(self.semantic_preservation)
         )
-
-    @property
-    def passed(self) -> bool:
-        return self.independent_recovery and self.compatibility_passed
 
 
 @dataclass(frozen=True)
@@ -172,7 +173,7 @@ class BidirectionalModelingEngine:
         self.compositions = composition_selector or CompositionRuleSelector(
             self.residuals
         )
-        self.concepts = concept_library or ConceptLibrary()
+        self._concepts = concept_library
         self.correspondence_validator = correspondence_validator or CorrespondenceValidator(
             self.realizer.evaluator
         )
@@ -183,6 +184,14 @@ class BidirectionalModelingEngine:
         from .search_adapter import ExecutableSearchAdapter
         return ExecutableSearchAdapter(self.realizer.evaluator).prepare(
             protocol, candidates, cases, **options)
+
+    @property
+    def concepts(self):
+        """Opt-in collaboration memory; ordinary validation does not load it."""
+        if self._concepts is None:
+            from .extensions.concepts import ConceptLibrary
+            self._concepts = ConceptLibrary()
+        return self._concepts
 
     def realize(
         self,
@@ -247,9 +256,9 @@ class BidirectionalModelingEngine:
         max_states: int = 1_000,
         max_context_depth: Optional[int] = None,
         max_context_tests: int = 256,
-        exception_penalty: float = 64.0,
+        *, selection_policy: Optional[str] = None,
     ) -> CompositionSelectionReport:
-        """Reject inconsistent composition rules and rank certified quotients."""
+        """Verify composition rules and apply only an explicitly chosen policy."""
 
         return self.compositions.select(
             rules,
@@ -258,7 +267,7 @@ class BidirectionalModelingEngine:
             max_states=max_states,
             max_context_depth=max_context_depth,
             max_context_tests=max_context_tests,
-            exception_penalty=exception_penalty,
+            selection_policy=selection_policy,
         )
 
     def verify_correspondence(
@@ -339,7 +348,7 @@ class BidirectionalModelingEngine:
                     RefinementStep(iteration, current_spec, current_model.name, report, None)
                 )
                 reason = (
-                    "closure-analysis-budget-exhausted"
+                    "closure-analysis-undecided"
                     if not report.complete
                     else "no-separating-feature"
                 )
@@ -400,7 +409,7 @@ class BidirectionalModelingEngine:
         if final_report.closed:
             stopped_reason = "closed"
         elif not final_report.complete:
-            stopped_reason = "closure-analysis-budget-exhausted"
+            stopped_reason = "closure-analysis-undecided"
         else:
             stopped_reason = "max-iterations-reached"
         return RefinementLoopReport(
@@ -423,15 +432,15 @@ class BidirectionalModelingEngine:
         budget: Optional[ResourceBudget] = None,
         *, observations=(),
     ) -> MacroRoundTripReport:
-        """Check semantic recovery, distinguishing inference from injected catalogs."""
+        """Check catalogue-relative recovery compatibility and report generation provenance."""
 
         budget = budget or ResourceBudget()
         experiments, observations = tuple(experiments), tuple(observations)
         realization = self.realize(spec, context, source, budget)
         interpretations = []
         preservation = []
-        independent_recovery = bool(
-            getattr(hypotheses, "independent_recovery", False)
+        independence_declared = bool(
+            getattr(hypotheses, "independence_declared", False)
         )
         hypothesis_source: HypothesisSource
         if hasattr(hypotheses, "generate"):
@@ -480,7 +489,9 @@ class BidirectionalModelingEngine:
             semantic_preservation=tuple(preservation),
             simulations_used=simulations_used,
             truncated=truncated,
-            independent_recovery=independent_recovery,
+            independence_declared=independence_declared,
+            generation_source=("trace-derived" if callable(getattr(hypotheses, "generate_from_traces", None))
+                               else "generator" if hasattr(hypotheses, "generate") else "catalogue"),
         )
 
     def micro_round_trip(

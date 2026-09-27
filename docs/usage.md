@@ -27,16 +27,16 @@
 
 - `FiniteStateModel`：有限状态、转移、行动、读出和透明资源指标。
 - `ResidualQuotientAnalyzer`：枚举有限可达状态，构造按上下文深度单调细化的残差分区；合并所有未来观察行为及动作支撑相同的微观状态，并返回最短区分动作序列、反例引导上下文基和可验证的偏商转移。
-- `CompositionRuleSelector`：先用共享操作测试排除观察、支撑或执行不一致的微观组合规则，再要求残差最小性证书，最后按透明的两段描述长度代理量排序；多实验用例必须全部通过。
+- `CompositionRuleSelector`：用共享操作测试排除观察或支撑不一致的规则，执行错误与未认证残差保留未决；默认返回全部认证规则，显式 selection_policy="shortest_description" 才按描述长度代理量选择；多实验用例必须全部通过。
 - `SatisfactionEvaluator`：惰性消费模拟轨迹，对照调用方或框架持有的场景清单验证身份、去重、轨迹长度和模型归属，不信任候选自报的场景数；批次绑定检查通过时，同一已认证轨迹可被多个相同 horizon 的规格安全复用。
-- `Realizer`：接受设计库或参数化候选生成器，执行验证和红队探测，保留主证书与探测证书，并输出帕累托前沿、被支配候选和被拒候选。
-- `Interpreter`：生成或接收目的假设，按时间范围缓存轨迹、共享模拟预算，分别展示覆盖率、鲁棒性、规范要求数与证据，并提出基于允许结果集合的区分实验。
+- `Realizer`：接受设计库或参数化候选生成器，执行验证和红队探测，保留主证书与探测证书，并输出帕累托前沿、被支配候选、已拒绝候选与未决候选。
+- `Interpreter`：生成或接收目的假设，按时间范围缓存轨迹、共享模拟预算，分别展示场景覆盖率、规范要求数与证据，并提出基于允许结果集合的区分实验。
 - `ClosureAnalyzer`：只从声明的初始状态探索可达状态，构造 `x₁ ~ x₂` 但未来宏观结果分化的见证，并列出可供人工批准的分离特征。
 - `refine_until_closed`：把闭合性反例接回规格细化；每次提升新可观测量后重新验证，直到闭合、预算耗尽或人工拒绝。
-- `ConceptLibrary`：保存定义、正反例、边界、相关概念、候选细化和一致的版本历史。
+- `extensions.concepts.ConceptLibrary`：可选协作记录，保存定义、正反例、边界以及判断来源与版本历史；文字记录不承担证明职责。
 - `CorrespondenceValidator`：在共享模拟预算内分别认证上下层场景域，再检查 `projection(lower_t) ~ upper_t`；投影会在隔离输入上重放，证书同时绑定声明、观测证据、上下文与协议；失败时返回具体场景、时间步和快照见证；`validate_suite` 进一步区分校准兼容性与独立留出复核。
 - `ScaleGraph`：只接纳验证通过的直接对应边。多跳路径只表示每条边分别通过，不会被偷换成端到端对应证明。
-- 双向往返检查：宏观往返只有在 `HypothesisGenerator.independent_recovery=True` 时才可通过，预先注入的假设目录只能证明兼容性；微观往返默认排除原模型本身，要求另一实现按“初始场景 + 干预”复现任务行为。往返的全部阶段共用一份预算。
+- 双向往返检查：宏观往返报告 `compatibility_passed`、`generation_source` 与 `independence_declared`，不再提供宣称独立恢复的 `passed`；微观往返默认排除原模型本身，要求另一实现按“初始场景 + 干预”复现任务行为。往返的全部阶段共用一份预算。
 
 ## 安装与运行
 
@@ -255,7 +255,7 @@ context = Context(
 )
 ```
 
-`independent_recovery=True` 是生成器对实验隔离的显式声明，不是安全边界；严格盲测仍应在生成阶段隐藏原始 `MacroSpec`，并使用留出的状态、干预和时域复核。
+`independence_declared=True` 只记录生成器对实验隔离的声明，不参与兼容性真假判断，也不产生独立恢复证明。`ObservedEffectGenerator` 默认不声明独立性。同批轨迹生成与验证效果只证明该有限域的相容性；独立来源和实验隔离须另行提供证据。
 
 可持久化的自定义 requirement 必须提供稳定语义身份。优先使用 `CustomRequirement(..., semantic_id="domain-rule-v1")`；直接实现 requirement 协议时还必须提供确定性的 `semantic_signature()`。无法建立语义身份的 requirement 仍可执行诊断，但所得满足性证书会失败关闭而不能声明完整。
 
@@ -269,7 +269,7 @@ context = Context(
 - 证明所用的状态、上下文和规范值必须由基本类型、枚举及其普通容器组成；不透明对象或循环容器没有稳定结构身份，因此会被明确拒绝，而不会退回进程相关的 `repr` 或对象地址。
 - SHA-256 字段用于一致性检查，不提供真实性、授权或防恶意伪造保证；需要跨信任边界交换证书时，调用方仍须对完整序列化证书另行签名并管理密钥。
 - 反例引导的 `context_basis` 足以重建当前枚举域中的残差分区，但当前贪心顺序不保证它是所有可能测试集合中基数最小或描述长度最短的一组。
-- 组合规则选择只排除与声明实验冲突或无法取得残差证书的规则；在所有给定上下文上观察等价的规则不可辨识。`unique_selection` 只表示固定协议下存在唯一最短候选，不等于证明真实机制唯一。`description_length` 是调用方在固定编码器下提供的长度，不是框架从 Python 函数中推断的 Kolmogorov 复杂度。
+- 组合规则验证只排除有已验证操作反例的规则，无法取得残差证书时保持未决；在所有给定上下文上观察等价的规则不可辨识。`unique_selection` 只表示固定协议下存在唯一最短候选，不等于证明真实机制唯一。`description_length` 是调用方在固定编码器下提供的长度，不是框架从 Python 函数中推断的 Kolmogorov 复杂度。
 - 权威场景清单全部覆盖时，即使惰性迭代器恰好触及模拟上限也可证明任务域完整；没有调用方场景清单的第三方模型，即使返回已耗尽的普通 `tuple` 或 `list` 也不能自行证明场景域完整。
 - 对应证书只覆盖指定的两个模型、上下文、场景域和时间范围；投影函数是调用方声明的待检验假说，不是由有限数据自动识别出的唯一映射。
 - `CorrespondenceValidationCase.independent=True` 是调用方对数据隔离和来源独立性的显式声明，不是安全边界；严格盲测仍需在外部阻止投影构造过程读取留出模型、场景和结果。
@@ -285,3 +285,24 @@ CI 在 Python 3.9、3.11 和 3.13 上运行全部单元测试、覆盖率门槛�
 
 
 解释可能有多个相容候选或未决检查时，微观往返须使用 `selected_hypothesis="候选名称"` 指定已验证目标。两个往返接口均支持 `observations=`；状态、异常与审计导出的完整边界见 [集合解释](set_interpretation.md)。
+
+
+## 判断、诊断与选择的边界
+
+数值条件在比较前不把整数转换为浮点数。浮点输入表示其已有的二进制值，只有显式误差界才允许近似。`CheckResult.margin` 是当前要求在原单位中的余量，负值表示越界；严格不等式的零余量仍不通过。无法给出数值余量时为 None。没有跨条件统一的 robustness 分数。
+
+`EquivalenceSpec.equivalent` 与残差商使用相同的结构身份：未分桶的布尔、整数、浮点数区分类型。`tolerances` 在此特指调用方声明的数值分辨率，按确定性桶形成传递的等价关系；它不代表世界的天然分类。
+
+实现搜索的 `undecided` 保存执行失败或探针不完整的候选，`rejected` 保存完整失败验证或阻断反例。候选目录尚未遍历完时另有 `truncated` 标记。闭合分析将错误放入 `diagnostics`，仅把真实的状态/动作冲突放入 `counterexamples`。组合分析中的残差分区非同余见证只否定该分区，深度不足时不能据此否定整条组合规则。
+
+```python
+from bidirectional_modeling.composition import CompositionRuleSelector
+
+selector = CompositionRuleSelector()
+verified = selector.select(rules, experiments)
+# verified.certified 保留全部认证规则；selected 为空；未请求的长度为 None。
+preferred = selector.select(rules, experiments, selection_policy="shortest_description")
+# 必须提供同一编码下的 rule.description_length；选择不改变认证真假。
+```
+
+概念记忆从 `bidirectional_modeling.extensions.concepts` 导入；访问 `engine.concepts` 或在细化时指定 concept_name 才加载它。`record_judgment(..., source="操作者/记录来源")` 和 `history` 保存判断来源、版本与变更前后的判断事件。异常和预算诊断不能成为概念负例。
