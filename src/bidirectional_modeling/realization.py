@@ -83,9 +83,7 @@ def _dominates(left: CandidateEvaluation, right: CandidateEvaluation) -> bool:
     right_metrics = right.model.metrics.as_tuple()
     no_worse = all(a <= b for a, b in zip(left_metrics, right_metrics))
     strictly_better = any(a < b for a, b in zip(left_metrics, right_metrics))
-    confidence_no_worse = left.confidence >= right.confidence
-    confidence_better = left.confidence > right.confidence
-    return no_worse and confidence_no_worse and (strictly_better or confidence_better)
+    return no_worse and strictly_better
 
 
 def pareto_partition(
@@ -98,8 +96,8 @@ def pareto_partition(
             dominated.append(candidate)
         else:
             frontier.append(candidate)
-    frontier.sort(key=lambda item: (-item.confidence, item.model.metrics.as_tuple(), item.model.name))
-    dominated.sort(key=lambda item: (-item.confidence, item.model.name))
+    frontier.sort(key=lambda item: (item.model.metrics.as_tuple(), item.model.name))
+    dominated.sort(key=lambda item: (item.model.metrics.as_tuple(), item.model.name))
     return tuple(frontier), tuple(dominated)
 
 
@@ -236,3 +234,4 @@ class Realizer:
             truncated=truncated,
             simulations_used=simulations_used,
         )
+

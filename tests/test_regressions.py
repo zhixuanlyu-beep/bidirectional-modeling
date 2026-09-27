@@ -53,7 +53,6 @@ class LazyTwoScenarioModel:
     metrics = ModelMetrics(1, 1, 1)
     assumptions = ()
     failure_boundaries = ()
-    prior_reliability = 1.0
     capabilities = ()
 
     def __init__(self):
@@ -73,7 +72,6 @@ class TupleTraceModel:
     metrics = ModelMetrics(1, 1, 1)
     assumptions = ()
     failure_boundaries = ()
-    prior_reliability = 1.0
     capabilities = ()
 
     def __init__(self, name, traces):
@@ -129,7 +127,7 @@ class RegressionTests(unittest.TestCase):
         self.assertFalse(certificate.complete)
         self.assertTrue(certificate.requirements_passed)
         self.assertFalse(certificate.satisfied)
-        self.assertEqual(certificate.confidence.coverage, 0.5)
+        self.assertEqual(certificate.verification.coverage, 0.5)
 
     def test_candidate_cannot_forge_completeness_with_scenario_count(self):
         model = LyingScenarioModel()
@@ -175,7 +173,7 @@ class RegressionTests(unittest.TestCase):
 
         self.assertFalse(certificate.complete)
         self.assertFalse(certificate.satisfied)
-        self.assertEqual(certificate.confidence.coverage, 0.5)
+        self.assertEqual(certificate.verification.coverage, 0.5)
         self.assertTrue(
             any("missing required scenarios" in item for item in certificate.failure_boundaries)
         )
@@ -281,10 +279,10 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(len(evaluation.probe_certificates), 1)
         self.assertTrue(evaluation.probe_certificates[0].complete)
         self.assertEqual(
-            evaluation.verification_score,
+            evaluation.verification.robustness,
             min(
-                evaluation.certificate.verification_score,
-                evaluation.probe_certificates[0].verification_score,
+                evaluation.certificate.verification.robustness,
+                evaluation.probe_certificates[0].verification.robustness,
             ),
         )
 
@@ -848,7 +846,6 @@ class RegressionTests(unittest.TestCase):
 
         class InvalidMetadataModel:
             metrics = InvalidMetrics()
-            prior_reliability = 2.0
             capabilities = ()
 
             @property
@@ -880,7 +877,7 @@ class RegressionTests(unittest.TestCase):
 
         self.assertFalse(certificate.satisfied)
         self.assertEqual(certificate.model_name, "InvalidMetadataModel")
-        self.assertEqual(certificate.confidence.assumption_reliability, 0.0)
+        self.assertEqual(certificate.verification.robustness, 0.0)
         self.assertEqual(len(certificate.checks), 2)
         self.assertTrue(all(not item.passed for item in certificate.checks))
         self.assertTrue(any("metadata" in item for item in certificate.failure_boundaries))
@@ -904,7 +901,7 @@ class RegressionTests(unittest.TestCase):
         self.assertTrue(result.rejected[0].counterexamples[0].blocking)
         self.assertTrue(result.truncated)
 
-    def test_information_gain_uses_declared_priors_not_ranking_scores(self):
+    def test_set_selection_does_not_depend_on_evidence_strength(self):
         model = TupleTraceModel(
             "information-source",
             (Trace("information-source", "s", "baseline", ({"x": 0}, {"x": 1})),),
@@ -914,18 +911,16 @@ class RegressionTests(unittest.TestCase):
                 "A",
                 PurposeLevel.FUNCTION,
                 x_spec("A"),
-                prior=0.5,
-                predictions={"distinguish": 1.0},
+                allowed_outcomes={"distinguish": ("yes",)},
             ),
             PurposeHypothesis(
                 "B",
                 PurposeLevel.FUNCTION,
                 x_spec("B"),
-                prior=0.5,
-                predictions={"distinguish": 0.0},
+                allowed_outcomes={"distinguish": ("no",)},
             ),
         )
-        experiment = Experiment("distinguish", "Which outcome occurs?")
+        experiment = Experiment("distinguish", "Which outcome occurs?", ("yes", "no"))
         engine = BidirectionalModelingEngine()
         context = scenario_context(("s", "baseline"))
         baseline = engine.interpret(model, context, hypotheses, experiments=(experiment,))
@@ -938,11 +933,11 @@ class RegressionTests(unittest.TestCase):
         )
 
         self.assertAlmostEqual(
-            baseline.discriminating_query.expected_information_gain, 1.0
+            baseline.discriminating_query.guaranteed_class_eliminations, 1.0
         )
         self.assertAlmostEqual(
-            skewed.discriminating_query.expected_information_gain,
-            baseline.discriminating_query.expected_information_gain,
+            skewed.discriminating_query.guaranteed_class_eliminations,
+            baseline.discriminating_query.guaranteed_class_eliminations,
         )
 
     def test_macro_tolerance_is_the_default_numeric_error_bound(self):
@@ -991,9 +986,9 @@ class RegressionTests(unittest.TestCase):
 
     def test_negative_costs_and_tolerances_are_rejected(self):
         with self.assertRaises(ValueError):
-            Experiment("bad", "bad", cost=-1)
+            Experiment("bad", "bad", ("yes", "no"), cost=-1)
         with self.assertRaises(ValueError):
-            Experiment("bad", "bad", cost=float("nan"))
+            Experiment("bad", "bad", ("yes", "no"), cost=float("nan"))
         with self.assertRaises(ValueError):
             ResourceBudget(max_cost=-1)
         with self.assertRaises(ValueError):
@@ -1023,7 +1018,7 @@ class RegressionTests(unittest.TestCase):
         self.assertFalse(result.truncated)
         self.assertEqual(tuple(item.model.name for item in result.candidates), ("only",))
 
-    def test_weak_intent_evidence_does_not_remove_the_cap(self):
+    def test_intent_evidence_never_becomes_a_truth_score(self):
         context, model, hypotheses, experiments, _ = (
             organization_interpretation_scenario()
         )
@@ -1056,10 +1051,12 @@ class RegressionTests(unittest.TestCase):
             for item in strong_result.candidates
             if item.hypothesis.name == "preserve central control"
         )
-        self.assertLessEqual(weak_candidate.ranking_score, 0.49)
-        self.assertGreater(strong_candidate.ranking_score, 0.49)
-        self.assertIn("not a probability", weak_result.score_semantics)
+        self.assertTrue(weak_candidate.caveats)
+        self.assertTrue(strong_candidate.caveats)
+        self.assertEqual(weak_candidate.certificate.verification, strong_candidate.certificate.verification)
+        self.assertIn("no belief ranking", weak_result.ordering_policy)
 
 
 if __name__ == "__main__":
     unittest.main()
+

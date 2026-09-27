@@ -56,7 +56,7 @@ def model_declaration_fingerprint(model):
         declaration = (
             model.name, model.states, model.initial_states, model.actions,
             model.metrics.as_tuple(), model.assumptions, model.failure_boundaries,
-            model.prior_reliability, model.capabilities,
+            model.capabilities,
             callable_signature(model.transition), callable_signature(model.readout),
             None if model.applicable is None else callable_signature(model.applicable),
         )
@@ -159,3 +159,4 @@ class ExecutableSearchAdapter:
             hypotheses.append(hypothesis)
         search = ExperimentHypothesisSearch(bound_protocol,tuple(hypotheses),bound_target,backend=backend,world_answers=world_answers)
         return ModelSearchResult(search,used,tuple(bindings),tuple(diagnostics))
+

@@ -77,7 +77,8 @@ def build_demo_report() -> Dict[str, Any]:
             "pareto_candidates": [
                 {
                     "model": item.model.name,
-                    "verification_score": round(item.verification_score, 4),
+                    "coverage": item.verification.coverage,
+                    "robustness": item.verification.robustness,
                     "complete": item.certificate.complete,
                     "coverage_authority": item.certificate.coverage_authority,
                     "horizon": item.certificate.horizon,
@@ -115,11 +116,13 @@ def build_demo_report() -> Dict[str, Any]:
         },
         "interpret": {
             "structure": org_model.name,
-            "ranked_hypotheses": [
+            "compatible_hypotheses": [
                 {
                     "name": item.hypothesis.name,
                     "level": item.hypothesis.level.value,
-                    "ranking_score": round(item.ranking_score, 4),
+                    "coverage": item.certificate.verification.coverage,
+                    "robustness": item.certificate.verification.robustness,
+                    "requirement_count": item.requirement_count,
                     "spec_fingerprint": item.certificate.spec_fingerprint,
                     "model_fingerprint": item.certificate.model_fingerprint,
                     "context_fingerprint": item.certificate.context_fingerprint,
@@ -132,15 +135,15 @@ def build_demo_report() -> Dict[str, Any]:
                 for item in interpreted.candidates
             ],
             "non_identifiable": interpreted.non_identifiable,
-            "score_semantics": interpreted.score_semantics,
+            "ordering_policy": interpreted.ordering_policy,
             "discriminating_query": (
                 {
                     "experiment": interpreted.discriminating_query.experiment.name,
                     "question": interpreted.discriminating_query.experiment.question,
-                    "information_gain": round(
-                        interpreted.discriminating_query.expected_information_gain, 4
-                    ),
-                    "predictions": dict(interpreted.discriminating_query.predictions),
+                    "guaranteed_class_eliminations": interpreted.discriminating_query.guaranteed_class_eliminations,
+                    "separated_class_pairs": interpreted.discriminating_query.separated_class_pairs,
+                    "selection_score": interpreted.discriminating_query.selection_score,
+                    "allowed_outcomes": dict(interpreted.discriminating_query.allowed_outcomes),
                 }
                 if interpreted.discriminating_query
                 else None
@@ -343,8 +346,8 @@ def _print_human(report: Dict[str, Any]) -> None:
     print("宏观目的 → 微观结构：%s" % realized["goal"])
     for candidate in realized["pareto_candidates"]:
         print(
-            "  ✓ %s  verification_score=%.4f  metrics=%s"
-            % (candidate["model"], candidate["verification_score"], candidate["metrics"])
+            "  ✓ %s  coverage=%.4f robustness=%.4f  metrics=%s"
+            % (candidate["model"], candidate["coverage"], candidate["robustness"], candidate["metrics"])
         )
     for rejected in realized["rejected"]:
         why = rejected["counterexamples"] or rejected["failed_checks"]
@@ -352,15 +355,15 @@ def _print_human(report: Dict[str, Any]) -> None:
 
     interpreted = report["interpret"]
     print("\n微观结构 → 宏观目的：%s" % interpreted["structure"])
-    for candidate in interpreted["ranked_hypotheses"]:
+    for candidate in interpreted["compatible_hypotheses"]:
         caveat = "；" + "；".join(candidate["caveats"]) if candidate["caveats"] else ""
         print(
-            "  • %s [%s] ranking_score=%.4f%s"
-            % (candidate["name"], candidate["level"], candidate["ranking_score"], caveat)
+            "  • %s [%s] coverage=%.4f%s"
+            % (candidate["name"], candidate["level"], candidate["coverage"], caveat)
         )
     query = interpreted["discriminating_query"]
     if query:
-        print("  ? 最佳区分问题：%s" % query["question"])
+        print("  ? 建议区分问题：%s" % query["question"])
 
     residual = report["residual_quotient"]
     print(

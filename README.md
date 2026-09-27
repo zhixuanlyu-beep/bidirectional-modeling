@@ -20,6 +20,8 @@
 
 相容性、宏观异义和低阶替代共享统一查询接口，低阶替代直接使用 `LowerSubstituteQuery`。查询区分 `FOUND / ABSENT / UNKNOWN`，预算耗尽不能作为不存在的证明。
 
+目的解释按名称展示相容候选，不使用先验或综合可信度排序；实验按最坏结果下可排除的响应类数与成本选择。
+
 描述复杂度决定搜索顺序，矛盾继承决定可剪除的候选。共同材料、相似名称或父子关系本身都不能传播反例。
 
 ## 安装与运行
@@ -76,6 +78,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 | 统一判断与独立复核 | [查询接口](docs/search_queries.md) |
 | 按候选执行与缓存 | [惰性预测](docs/search_lazy.md) |
 | 按实验预测与排除 | [部分响应](docs/search_partial.md) |
+| 无概率解释、观测过滤与实验选择 | [允许结果集合](docs/set_interpretation.md) |
 | 协议变化、证书迁移及可选扩展 | [情境转换](docs/context_network.md) |
 | 历史变化与迁移说明 | [CHANGELOG](CHANGELOG.md) |
 
@@ -85,7 +88,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 - 证书绑定具体问题、协议和证据。哈希保证一致性检查，不证明来源真实；独立数据和校准声明由实验方负责。
 - 回调边界隔离状态，证明型执行重放转移与读出。显式无定义转移是合法偏函数，普通异常与预算截断保留未知。
 - 部分吻合不等于完整模型通过；排除证书只针对绑定的候选及活跃证据。重构或跨协议转换后需重证适用性。
-- 描述长度依赖显式编码，排序分数不是概率；充分性不等于最小性，结构也不能单独证明意图。
+- 默认解释使用允许结果集合，缺失预测保持未知；描述长度依赖显式编码；充分性不等于最小性，结构也不能单独证明意图。
 - 闭合与残差共用内部可达状态探索，但各自保留判断、反例与证书规则。穷举与核最小化仍可能指数增长。
 
 ## 开发验证

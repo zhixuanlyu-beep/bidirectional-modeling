@@ -44,7 +44,7 @@ class FrameworkTests(unittest.TestCase):
             all(candidate.certificate.satisfied for candidate in result.candidates)
         )
 
-    def test_interpretation_preserves_multiple_purposes_and_caps_intention(self):
+    def test_interpretation_preserves_multiple_purposes_and_intention_caveats(self):
         context, model, hypotheses, experiments, evidence = (
             organization_interpretation_scenario()
         )
@@ -59,11 +59,8 @@ class FrameworkTests(unittest.TestCase):
             result.discriminating_query.experiment.name, "delegate-low-risk"
         )
         by_name = {item.hypothesis.name: item for item in result.candidates}
-        self.assertGreater(
-            by_name["prevent fraud"].confidence,
-            by_name["provide auditability"].confidence,
-        )
-        self.assertLessEqual(by_name["preserve central control"].confidence, 0.49)
+        self.assertEqual(tuple(by_name), tuple(sorted(by_name)))
+        self.assertFalse(by_name["preserve central control"].direct_intent_evidence)
         self.assertTrue(by_name["preserve central control"].caveats)
 
     def test_observed_effects_are_generated_without_claiming_intention(self):
@@ -113,7 +110,6 @@ class FrameworkTests(unittest.TestCase):
                         "recovered reliable operation",
                         PurposeLevel.FUNCTION,
                         replace(spec, name="independently recovered operation"),
-                        prior=0.7,
                     ),
                 )
 
@@ -159,3 +155,4 @@ class FrameworkTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -8,7 +8,7 @@
 - `MacroSpec G` 明确可观测量、目标、等价关系、不变量、约束、误差与时间范围。
 - 向下推断搜索满足 `M |=Γ G` 的模型，返回成本、复杂度和风险上的帕累托候选，而非虚构唯一实现。
 - 向上推断严格区分效果、功能和意图。仅凭结构通常只能支持效果；功能依赖环境，意图还需要足够强的主体、设计或选择证据。
-- 解释结果中的 `ranking_score` 是未校准的相对分数，不是“目的为真”的概率。区分实验的信息增益只使用显式声明的 `PurposeHypothesis.prior`，不会把排序分数偷换成概率。
+- 解释保留相容候选并按名称展示；未知响应保留整个声明结果域。实验按最坏结果下可排除的响应类数及成本选择，见 [集合解释](set_interpretation.md)。
 - 模拟预算在候选、红队探测、目的解释、效果生成和双向往返的各阶段全局共享；结果同时报告 `simulations_used` 与 `truncated`。
 - `FiniteStateModel` 深度复制进入和离开 `applicable`、`transition`、`readout` 的状态和上下文，避免候选通过嵌套可变对象污染实验或其他候选；满足性 requirement 也分别接收隔离的轨迹与上下文。残差与闭合证明会重放同一输入，结果或动作支撑不一致时按未知行为失败关闭。
 - 证书完整性必须相对于独立场景域证明。内置 `FiniteStateModel` 由框架从初态与干预导出场景清单；第三方模型必须由调用者通过 `Context.scenario_manifest` 提供 `ScenarioKey` 清单。候选提供的 `scenario_count()` 只作诊断提示，不能证明覆盖完整。
@@ -30,7 +30,7 @@
 - `CompositionRuleSelector`：先用共享操作测试排除观察、支撑或执行不一致的微观组合规则，再要求残差最小性证书，最后按透明的两段描述长度代理量排序；多实验用例必须全部通过。
 - `SatisfactionEvaluator`：惰性消费模拟轨迹，对照调用方或框架持有的场景清单验证身份、去重、轨迹长度和模型归属，不信任候选自报的场景数；批次绑定检查通过时，同一已认证轨迹可被多个相同 horizon 的规格安全复用。
 - `Realizer`：接受设计库或参数化候选生成器，执行验证和红队探测，保留主证书与探测证书，并输出帕累托前沿、被支配候选和被拒候选。
-- `Interpreter`：生成或接收目的假设，按时间范围缓存轨迹、共享模拟预算，用解释力、简洁性、鲁棒性和上下文证据排序，并提出信息增益最高的区分实验。
+- `Interpreter`：生成或接收目的假设，按时间范围缓存轨迹、共享模拟预算，分别展示覆盖率、鲁棒性、规范要求数与证据，并提出基于允许结果集合的区分实验。
 - `ClosureAnalyzer`：只从声明的初始状态探索可达状态，构造 `x₁ ~ x₂` 但未来宏观结果分化的见证，并列出可供人工批准的分离特征。
 - `refine_until_closed`：把闭合性反例接回规格细化；每次提升新可观测量后重新验证，直到闭合、预算耗尽或人工拒绝。
 - `ConceptLibrary`：保存定义、正反例、边界、相关概念、候选细化和一致的版本历史。
@@ -89,7 +89,7 @@ for candidate in result.candidates:
     print("bound to goal:", certificate.binds_specification(goal))
     print("bound to context:", certificate.binds_context(context))
     print("protocol:", certificate.protocol_fingerprint)
-    print("verification score:", candidate.verification_score)
+    print("verification measures:", candidate.verification)
     for check in certificate.checks:
         print(check.name, check.passed, check.observed)
 ```
@@ -167,9 +167,9 @@ interpretation = engine.interpret(
     context,
     ObservedEffectGenerator(horizon=goal.horizon),
 )
-print(interpretation.score_semantics)
+print(interpretation.ordering_policy)
 for candidate in interpretation.candidates:
-    print(candidate.hypothesis.level.value, candidate.ranking_score)
+    print(candidate.hypothesis.level.value, candidate.certificate.verification)
 ```
 
 显式验证相邻尺度间的对应：
@@ -227,7 +227,7 @@ for result in suite.cases:
 3. **残差语义商**：三个当前观察相同的不透明初态经 `probe` 暴露两种未来结果；框架自动拆分未来行为不同的状态，同时合并只有无关微观副本编号不同的状态。
 4. **局部动作支撑**：两个当前观察相同的状态只有一个支持 `consume`；残差商将“有后继”和 `⊥` 作为不同操作行为，并产生支撑不闭合见证。
 5. **组合规则选择**：常量规则、错误支撑规则和深层过拟合规则与正确奇偶组合规则竞争；前两者由反例排除，后者因残差商和上下文基更复杂而在描述长度上落败。
-6. **组织机制**：同一审批结构兼容防欺诈、审计和中央控制等多个解释；系统保留不可识别性、限制弱证据意图推断，并选择区分候选的信息增益问题。
+6. **组织机制**：同一审批结构兼容防欺诈、审计和中央控制等多个解释；系统保留不可识别性、保持意图判断边界，并按声明允许结果集合选择区分问题。
 7. **跨尺度对应**：两个不同的微观分量划分映射到同一个宏观总量状态；验证器先在已知划分上校准，再用未见划分作独立留出复核，确认多对一粗粒化在完整时间轨迹上与宏观动力学交换。
 
 ## 扩展接口
@@ -276,7 +276,7 @@ context = Context(
 - `ScaleGraph` 中的多跳路径只具有逐边证书。若要主张微观到宏观的端到端对应，必须另外声明并直接验证该端到端 `Correspondence`，不能仅凭传递闭包推断。
 - 可达状态搜索受深度和状态数预算限制；预算内未发现反例只会产生不完整报告，不会被误报为闭合证明。
 - 分离特征只是反例相关的候选，不自动等同于因果变量；`refine_until_closed` 要求显式的 `feature_selector` 决策。
-- 结构不能单独证明设计者意图。弱意图证据受到分数上限约束，真正的意图判断需要独立历史或主体证据。
+- 结构不能单独证明设计者意图。意图类解释始终保留限定说明，历史或主体证据作为原始记录单独展示。
 
 ## 开发验证
 

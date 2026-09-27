@@ -8,7 +8,7 @@ from typing import Optional, Tuple
 
 from .core import (
     CheckResult,
-    ConfidenceBreakdown,
+    VerificationMeasures,
     Context,
     ExecutableModel,
     FiniteStateModel,
@@ -659,20 +659,9 @@ class SatisfactionEvaluator:
             if requirements_passed
             else 0.0
         )
-        try:
-            reliability = float(model.prior_reliability)
-            if not 0.0 <= reliability <= 1.0:
-                raise ValueError("prior reliability must be in [0, 1]")
-        except Exception as error:
-            reliability = 0.0
-            boundaries.append(
-                "candidate prior reliability was invalid and was replaced with zero: %s"
-                % error
-            )
-        confidence = ConfidenceBreakdown(
+        verification = VerificationMeasures(
             coverage=batch.coverage if provenance_complete else 0.0,
             robustness=robustness,
-            assumption_reliability=reliability,
         )
         try:
             model_boundaries = tuple(
@@ -709,7 +698,7 @@ class SatisfactionEvaluator:
             satisfied=satisfied,
             checks=tuple(checks),
             verified_scenarios=batch.simulations_used,
-            confidence=confidence,
+            verification=verification,
             assumptions=tuple(
                 dict.fromkeys(
                     context.assumptions + spec.assumptions + model_assumptions
@@ -792,7 +781,7 @@ class SatisfactionEvaluator:
             satisfied=False,
             checks=(check,),
             verified_scenarios=0,
-            confidence=ConfidenceBreakdown(0.0, 0.0, 0.0),
+            verification=VerificationMeasures(0.0, 0.0),
             assumptions=tuple(dict.fromkeys(context.assumptions + spec.assumptions)),
             failure_boundaries=tuple(boundaries),
             horizon=spec.horizon,
@@ -817,3 +806,4 @@ class SatisfactionEvaluator:
         budget = budget or ResourceBudget()
         batch = self.collect(model, context, spec.horizon, budget)
         return self.evaluate_batch(model, spec, context, batch, budget)
+

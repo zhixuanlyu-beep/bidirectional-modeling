@@ -13,7 +13,7 @@ from bidirectional_modeling import (
     Experiment,
     FieldRequirement,
     FiniteStateModel,
-    InterpretationScoringPolicy,
+    VerificationMeasures,
     MacroSpec,
     ModelMetrics,
     ResidualQuotientAnalyzer,
@@ -315,9 +315,9 @@ class SemanticSubstrateRegressionTests(unittest.TestCase):
                 tolerance=math.inf,
             )
         with self.assertRaises(ValueError):
-            Experiment("x", "x", cost=math.inf)
+            Experiment("x", "x", ("yes", "no"), cost=math.inf)
         with self.assertRaises(ValueError):
-            InterpretationScoringPolicy(coverage_weight=math.nan)
+            VerificationMeasures(coverage=math.nan, robustness=1.0)
         with self.assertRaises(TypeError):
             ResourceBudget(max_candidates=1.5)
 
@@ -343,3 +343,4 @@ class SemanticSubstrateRegressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
