@@ -1,3 +1,4 @@
+from bidirectional_modeling.search_queries import LowerSubstituteQuery, QueryStatus
 import unittest
 from dataclasses import replace
 from itertools import product
@@ -164,14 +165,14 @@ class SearchTests(unittest.TestCase):
 
     def test_irreducibility_is_relative_to_declared_lower_class(self):
         search, _ = scenario()
-        self.assertTrue(search.irreducible_against('xz', ('x','z')))
-        self.assertFalse(search.irreducible_against('x', ('x',)))
-        self.assertIsNone(search.irreducible_against('xz', ()))
+        self.assertEqual(search.query(LowerSubstituteQuery('xz', ('x','z'))).status, QueryStatus.ABSENT)
+        self.assertEqual(search.query(LowerSubstituteQuery('x', ('x',))).status, QueryStatus.FOUND)
+        self.assertEqual(search.query(LowerSubstituteQuery('xz', ())).status, QueryStatus.UNKNOWN)
         h = SearchHypothesis('unknown',None,'other',DescriptionLength())
         other = ExperimentHypothesisSearch(search.protocol,search.hypotheses+(h,),search.target)
-        self.assertIsNone(other.irreducible_against('xz', ('unknown',)))
-        self.assertIsNone(other.irreducible_against('unknown', ('xz',)))
-        with self.assertRaises(ValueError): search.irreducible_against('xz', ('missing',))
+        self.assertEqual(other.query(LowerSubstituteQuery('xz', ('unknown',))).status, QueryStatus.UNKNOWN)
+        self.assertEqual(other.query(LowerSubstituteQuery('unknown', ('xz',))).status, QueryStatus.UNKNOWN)
+        with self.assertRaises(ValueError): search.query(LowerSubstituteQuery('xz', ('missing',)))
 
     def test_compression_preserves_multiple_answers_without_claiming_success(self):
         search, evidence = scenario()
@@ -225,3 +226,4 @@ class SearchTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

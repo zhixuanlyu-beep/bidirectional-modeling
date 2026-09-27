@@ -37,6 +37,8 @@ jobs:
           python -m json.tool demo.json > /dev/null
           bidirectional-modeling search-demo --json > search-demo.json
           python -m json.tool search-demo.json > /dev/null
+          bidirectional-modeling context-demo --json > context-demo.json
+          python -m json.tool context-demo.json > /dev/null
 
   package:
     name: Build and inspect package
@@ -82,6 +84,14 @@ jobs:
               "bidirectional_modeling/search_queries.py",
               "bidirectional_modeling/search_lazy.py",
               "bidirectional_modeling/search_partial.py",
+              "bidirectional_modeling/context_network.py",
+              "bidirectional_modeling/certificate_transport.py",
+              "bidirectional_modeling/macro_certificates.py",
+              "bidirectional_modeling/context_examples.py",
+              "bidirectional_modeling/_exploration.py",
+              "bidirectional_modeling/extensions/__init__.py",
+              "bidirectional_modeling/extensions/boolean.py",
+              "bidirectional_modeling/extensions/gluing.py",
           }
           missing = required - names
           if missing:
@@ -90,9 +100,10 @@ jobs:
       - name: Install built wheel and smoke-test it
         run: |
           python -m pip install dist/*.whl
-          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.18.1'"
+          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.19.0'"
           bidirectional-modeling demo --json > /dev/null
           bidirectional-modeling search-demo --json > /dev/null
+          bidirectional-modeling context-demo --json > /dev/null
           bidirectional-modeling search-benchmark --json > /dev/null
           bidirectional-modeling search-updates-benchmark --json > /dev/null
           python - <<'PYCODE'
@@ -104,3 +115,4 @@ jobs:
           assert receipt.status is QueryStatus.FOUND
           assert verify_query_result(problem, query, receipt).status == 'valid'
           PYCODE
+

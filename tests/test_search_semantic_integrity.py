@@ -2,11 +2,8 @@ import json
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    DescriptionLength, ExecutableSearchAdapter, ExperimentHypothesisSearch,
-    ReconstructionRule, SearchHypothesis, SearchObservation, SearchProtocol,
-    SearchExperiment, SearchSession, benchmark_search,
-)
+from bidirectional_modeling import (DescriptionLength, ExecutableSearchAdapter, ExperimentHypothesisSearch, ReconstructionRule, SearchHypothesis, SearchObservation, SearchProtocol, SearchExperiment, SearchSession)
+from bidirectional_modeling.search_benchmark import (benchmark_search)
 from bidirectional_modeling.evaluation import SatisfactionEvaluator
 from bidirectional_modeling.search_examples import conflict_search_scenario
 from bidirectional_modeling.structural import fingerprint_value
@@ -120,3 +117,4 @@ class SemanticIntegrityTests(unittest.TestCase):
                      target='g',world_answers=('a','hybrid','b'))
         self.assertIsNone(result.search.hypotheses[0].world)
         self.assertIn('search_signature',result.diagnostics[0][2])
+

@@ -3,10 +3,8 @@ import unittest
 from dataclasses import asdict, replace, FrozenInstanceError
 from unittest.mock import patch
 
-from bidirectional_modeling import (
-    ExperimentHypothesisSearch, SearchBenchmarkStep, SearchBudgetExceeded,
-    SearchSession, SearchWorkBudget, benchmark_search_updates,
-)
+from bidirectional_modeling import (ExperimentHypothesisSearch, SearchBudgetExceeded, SearchSession, SearchWorkBudget)
+from bidirectional_modeling.search_benchmark import (SearchBenchmarkStep, benchmark_search_updates)
 from bidirectional_modeling.search_examples import conflict_search_scenario, dynamic_search_scenario
 from bidirectional_modeling.structural import fingerprint_value
 
@@ -115,3 +113,4 @@ class DynamicBenchmarkTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): benchmark_search_updates(search,steps)
         finally:
             tracemalloc.stop()
+

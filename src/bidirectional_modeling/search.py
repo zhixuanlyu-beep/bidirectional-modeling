@@ -495,30 +495,6 @@ class ExperimentHypothesisSearch:
                 return False
         return True
 
-    def irreducible_against(self, hypothesis: str, lower_names, *, budget=None) -> Optional[bool]:
-        """Whether no representative in the declared finite lower class substitutes it.
-
-        The adapter defines the allowed lower-order language, not variable count.
-        None means an empty reference class or unknown predictions. True is only
-        relative to this explicit class, never all imaginable lower-order models.
-        """
-        budget = budget if budget is not None else SearchWorkBudget()
-        by_name = {h.name: h for h in self.hypotheses}
-        lower_names = tuple(lower_names)
-        if hypothesis not in by_name or any(n not in by_name for n in lower_names):
-            raise ValueError("unknown hypothesis")
-        candidate = by_name[hypothesis]
-        if candidate.world is None or not lower_names:
-            return None
-        unknown = False
-        for name in lower_names:
-            budget.consume("candidate_checks")
-            h = by_name[name]
-            if h.world == candidate.world:
-                return False
-            unknown = unknown or h.world is None
-        return None if unknown else True
-
     def search(self, evidence=(), certificates=(), *, max_replays=None,
                budget=None, learn_conflicts=True) -> HypothesisSearchReport:
         budget = budget if budget is not None else SearchWorkBudget()
@@ -710,3 +686,4 @@ class ExperimentHypothesisSearch:
             if covered:
                 ranked.append((Fraction(covered, experiment.cost), -experiment.cost, -i, experiment))
         return max(ranked, key=lambda item: item[:3])[3] if ranked else None
+

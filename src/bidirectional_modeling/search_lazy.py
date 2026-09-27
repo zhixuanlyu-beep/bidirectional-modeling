@@ -25,8 +25,8 @@ class LazyQueryResult:
 class LazyExecutableSearch:
     """Resolve only needed candidates; cache only completely replayed predictions.
 
-    Each candidate still executes two complete experiment matrices. No partial
-    row is used to prune a candidate. Create a new instance for changed inputs.
+    Each candidate still executes two complete experiment matrices. The separate screen_evidence API can reject a candidate using a certified
+    partial mismatch; finite query snapshots still require complete rows. Create a new instance for changed inputs.
     Instances are sequential, not thread-safe. Callback purity remains a caller
     obligation, as with ExecutableSearchAdapter.
     """
@@ -129,6 +129,66 @@ class LazyExecutableSearch:
         self._partial[candidate] = prediction
         return result
 
+    def screen_evidence(self, evidence, *, max_simulations=10000, budget=None):
+        """Stop each candidate at its first certified mismatch, cheapest data first.
+
+        Matching all supplied observations is not a complete prediction or a
+        macro proof. Exclusions are scoped to this evidence, not persisted in
+        the candidate catalogue; retracting evidence restores consideration.
+        """
+        from .search_partial import CandidateExclusionCertificate, EvidenceScreeningResult
+        _natural(max_simulations)
+        self._check_declaration()
+        budget = budget if budget is not None else SearchWorkBudget()
+        evidence = tuple(evidence)
+        excluded, matching, certificates = [], [], []
+        used, reason = 0, 'completed'
+        try:
+            evidence = self._search._evidence(evidence, budget)
+            # Inconsistent data is not a candidate-specific experimental failure.
+            if not self._search._worlds(evidence=evidence, budget=budget):
+                reason = 'inconsistent_evidence'
+            else:
+                costs = {e.name: e.cost for e in self._protocol.experiments}
+                ordered = sorted(evidence, key=lambda o: costs[o.experiment])
+                # Extend prefixes geometrically: joint replay remains intact,
+                # but successful screening performs O(k), not O(k**2), simulations.
+                experiments = tuple(dict.fromkeys(o.experiment for o in ordered))
+                for candidate in self._candidates:
+                    name = candidate.model.name
+                    all_matched = True
+                    stop = 1
+                    while experiments:
+                        budget.consume('candidate_checks')
+                        selected = experiments[:stop]
+                        result = self.predict_experiments(name, selected,
+                            max_simulations=max_simulations-used, budget=budget)
+                        used += result.simulations_used
+                        if result.prediction is None:
+                            all_matched = False
+                            reason = result.reason
+                            break
+                        values = dict(zip(result.prediction.experiments, result.prediction.responses))
+                        conflict = next((o for o in ordered if o.experiment in values
+                                         and values[o.experiment] != o.response), None)
+                        if conflict is not None:
+                            certificates.append(CandidateExclusionCertificate(result.prediction, conflict))
+                            excluded.append(name)
+                            all_matched = False
+                            break
+                        if stop >= len(experiments):
+                            break
+                        stop = min(2*stop, len(experiments))
+                    if all_matched:
+                        matching.append(name)
+        except SearchBudgetExceeded as error:
+            reason = error.reason
+        self._check_declaration()
+        undecided = tuple(c.model.name for c in self._candidates
+                          if c.model.name not in excluded and c.model.name not in matching)
+        return EvidenceScreeningResult(self._declaration, evidence, tuple(excluded),
+            tuple(matching), undecided, tuple(certificates), used, reason)
+
     def execute(self, query, *, max_simulations=10000, budget=None):
         """Simulation limit is per call; successful candidate cache survives calls.
 
@@ -223,3 +283,4 @@ class LazyExecutableSearch:
             receipt = self._search.query(query, budget=budget)
         return LazyQueryResult(self._search, receipt, used, tuple(resolved),
                                self._bindings, tuple(diagnostics), self._declaration)
+

@@ -435,9 +435,13 @@ def _print_human(report: Dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the bidirectional modeling reference demo")
-    parser.add_argument("command", nargs="?", default="demo", choices=("demo", "search-demo", "search-benchmark", "search-updates-benchmark"))
+    parser.add_argument("command", nargs="?", default="demo", choices=("demo", "context-demo", "search-demo", "search-benchmark", "search-updates-benchmark"))
     parser.add_argument("--json", action="store_true", help="emit a machine-readable report")
     args = parser.parse_args()
+    if args.command == "context-demo":
+        from .context_examples import build_context_demo_report
+        print(json.dumps(build_context_demo_report(), ensure_ascii=False, indent=2, sort_keys=True))
+        return
     if args.command == "search-updates-benchmark":
         from .search_examples import dynamic_search_scenario
         from .search_benchmark import benchmark_search_updates
@@ -463,3 +467,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

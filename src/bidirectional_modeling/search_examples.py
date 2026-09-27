@@ -2,6 +2,8 @@
 from itertools import product
 from dataclasses import asdict
 
+from .search_queries import LowerSubstituteQuery
+
 from .search import (
     DescriptionLength, ExperimentHypothesisSearch, ResponseConstraint,
     SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol,
@@ -61,7 +63,7 @@ def build_search_demo_report():
         'minimum_cardinality': basis.minimum_cardinality,
         'certificate_valid': search.validates_macro(basis, evidence),
         'initial_next_experiment': search.next_experiment().name,
-        'irreducible_against_x_and_z': search.irreducible_against('xz', ('x','z')),
+        'lower_substitute_status': search.query(LowerSubstituteQuery('xz', ('x', 'z'))).status.value,
         'protocol_fingerprint': search.protocol.fingerprint,
         'problem_fingerprint': search.fingerprint,
     }
@@ -83,3 +85,4 @@ def dynamic_search_scenario(copies=20):
         SearchBenchmarkStep('recalibrated',tuple(replace(o,source='lab-v2') for o in data)),
     )
     return initial,steps
+
