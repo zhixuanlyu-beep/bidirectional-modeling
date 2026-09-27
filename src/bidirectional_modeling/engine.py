@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, replace
-from typing import Callable, Dict, Iterable, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, Iterable, Optional, Sequence, Tuple
 
 from .correspondence import (
     Correspondence,
@@ -37,7 +37,10 @@ from .core import (
 )
 from .interpretation import HypothesisSource, Interpreter
 from .realization import CandidateSource, Realizer
-from .refinement import ClosureAnalyzer, ConceptLibrary
+if TYPE_CHECKING:
+    from .extensions.concepts import ConceptLibrary
+
+from .refinement import ClosureAnalyzer
 from .residual import ResidualQuotientAnalyzer, ResidualQuotientReport
 
 
@@ -48,19 +51,17 @@ class MacroRoundTripReport:
     semantic_preservation: Tuple[bool, ...]
     simulations_used: int = 0
     truncated: bool = False
-    independent_recovery: bool = False
+    independence_declared: bool = False
+    generation_source: str = "catalogue"
 
     @property
     def compatibility_passed(self) -> bool:
         return (
             not self.truncated
+            and not self.realization.undecided
             and bool(self.semantic_preservation)
             and all(self.semantic_preservation)
         )
-
-    @property
-    def passed(self) -> bool:
-        return self.independent_recovery and self.compatibility_passed
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class MicroRoundTripReport:
     behaviorally_equivalent_models: Tuple[str, ...]
     simulations_used: int = 0
     truncated: bool = False
+    selected_hypothesis: Optional[str] = None
 
     @property
     def passed(self) -> bool:
@@ -171,7 +173,7 @@ class BidirectionalModelingEngine:
         self.compositions = composition_selector or CompositionRuleSelector(
             self.residuals
         )
-        self.concepts = concept_library or ConceptLibrary()
+        self._concepts = concept_library
         self.correspondence_validator = correspondence_validator or CorrespondenceValidator(
             self.realizer.evaluator
         )
@@ -182,6 +184,14 @@ class BidirectionalModelingEngine:
         from .search_adapter import ExecutableSearchAdapter
         return ExecutableSearchAdapter(self.realizer.evaluator).prepare(
             protocol, candidates, cases, **options)
+
+    @property
+    def concepts(self):
+        """Opt-in collaboration memory; ordinary validation does not load it."""
+        if self._concepts is None:
+            from .extensions.concepts import ConceptLibrary
+            self._concepts = ConceptLibrary()
+        return self._concepts
 
     def realize(
         self,
@@ -246,9 +256,9 @@ class BidirectionalModelingEngine:
         max_states: int = 1_000,
         max_context_depth: Optional[int] = None,
         max_context_tests: int = 256,
-        exception_penalty: float = 64.0,
+        *, selection_policy: Optional[str] = None,
     ) -> CompositionSelectionReport:
-        """Reject inconsistent composition rules and rank certified quotients."""
+        """Verify composition rules and apply only an explicitly chosen policy."""
 
         return self.compositions.select(
             rules,
@@ -257,7 +267,7 @@ class BidirectionalModelingEngine:
             max_states=max_states,
             max_context_depth=max_context_depth,
             max_context_tests=max_context_tests,
-            exception_penalty=exception_penalty,
+            selection_policy=selection_policy,
         )
 
     def verify_correspondence(
@@ -338,7 +348,7 @@ class BidirectionalModelingEngine:
                     RefinementStep(iteration, current_spec, current_model.name, report, None)
                 )
                 reason = (
-                    "closure-analysis-budget-exhausted"
+                    "closure-analysis-undecided"
                     if not report.complete
                     else "no-separating-feature"
                 )
@@ -399,7 +409,7 @@ class BidirectionalModelingEngine:
         if final_report.closed:
             stopped_reason = "closed"
         elif not final_report.complete:
-            stopped_reason = "closure-analysis-budget-exhausted"
+            stopped_reason = "closure-analysis-undecided"
         else:
             stopped_reason = "max-iterations-reached"
         return RefinementLoopReport(
@@ -420,15 +430,17 @@ class BidirectionalModelingEngine:
         evidence: Sequence[Evidence] = (),
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
+        *, observations=(),
     ) -> MacroRoundTripReport:
-        """Check semantic recovery, distinguishing inference from injected catalogs."""
+        """Check catalogue-relative recovery compatibility and report generation provenance."""
 
         budget = budget or ResourceBudget()
+        experiments, observations = tuple(experiments), tuple(observations)
         realization = self.realize(spec, context, source, budget)
         interpretations = []
         preservation = []
-        independent_recovery = bool(
-            getattr(hypotheses, "independent_recovery", False)
+        independence_declared = bool(
+            getattr(hypotheses, "independence_declared", False)
         )
         hypothesis_source: HypothesisSource
         if hasattr(hypotheses, "generate"):
@@ -447,7 +459,6 @@ class BidirectionalModelingEngine:
                     candidates=(),
                     equivalent_explanations=(),
                     discriminating_query=None,
-                    non_identifiable=False,
                     truncated=True,
                 )
             else:
@@ -460,14 +471,14 @@ class BidirectionalModelingEngine:
                     hypothesis_source,
                     evidence,
                     experiments,
-                    interpretation_budget,
+                    interpretation_budget, observations=observations,
                 )
                 simulations_used += result.simulations_used
                 remaining_simulations -= result.simulations_used
             interpretations.append(result)
             truncated = truncated or result.truncated
             preservation.append(
-                any(
+                not result.undecided and not result.truncated and any(
                     item.hypothesis.spec.semantically_equivalent(spec)
                     for item in result.candidates
                 )
@@ -478,7 +489,9 @@ class BidirectionalModelingEngine:
             semantic_preservation=tuple(preservation),
             simulations_used=simulations_used,
             truncated=truncated,
-            independent_recovery=independent_recovery,
+            independence_declared=independence_declared,
+            generation_source=("trace-derived" if callable(getattr(hypotheses, "generate_from_traces", None))
+                               else "generator" if hasattr(hypotheses, "generate") else "catalogue"),
         )
 
     def micro_round_trip(
@@ -491,16 +504,26 @@ class BidirectionalModelingEngine:
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
         allow_identity: bool = False,
+        *, selected_hypothesis: Optional[str] = None, observations=(),
     ) -> MicroRoundTripReport:
         """Re-realize inferred behavior; exclude the original object by default."""
 
         budget = budget or ResourceBudget()
         interpretation = self.interpret(
-            model, context, hypotheses, evidence, experiments, budget
+            model, context, hypotheses, evidence, experiments, budget, observations=observations
         )
         if not interpretation.candidates:
             raise ValueError("no compatible macro hypothesis can seed the return realization")
-        top_spec = interpretation.candidates[0].hypothesis.spec
+        if selected_hypothesis is None:
+            if interpretation.non_identifiable:
+                raise ValueError('select an explicit compatible hypothesis for an ambiguous or undecided interpretation')
+            chosen = interpretation.candidates[0]
+        else:
+            chosen = next((c for c in interpretation.candidates
+                           if c.hypothesis.name == selected_hypothesis), None)
+            if chosen is None:
+                raise ValueError('selected hypothesis is not a verified compatible candidate')
+        selected_spec = chosen.hypothesis.spec
         simulations_used = interpretation.simulations_used
         remaining_simulations = max(
             0, budget.max_simulations - simulations_used
@@ -508,7 +531,7 @@ class BidirectionalModelingEngine:
         truncated = interpretation.truncated
         if remaining_simulations <= 0:
             realization = RealizationResult(
-                spec=top_spec,
+                spec=selected_spec,
                 candidates=(),
                 rejected=(),
                 dominated=(),
@@ -521,7 +544,7 @@ class BidirectionalModelingEngine:
                 budget, max_simulations=remaining_simulations
             )
             realization = self.realize(
-                top_spec, context, realization_source, realization_budget
+                selected_spec, context, realization_source, realization_budget
             )
             simulations_used += realization.simulations_used
             remaining_simulations -= realization.simulations_used
@@ -538,7 +561,7 @@ class BidirectionalModelingEngine:
                 budget, max_simulations=remaining_simulations
             )
             original_batch = self.realizer.evaluator.collect(
-                model, context, top_spec.horizon, trace_budget
+                model, context, selected_spec.horizon, trace_budget
             )
             simulations_used += original_batch.simulations_used
             remaining_simulations -= original_batch.simulations_used
@@ -558,7 +581,7 @@ class BidirectionalModelingEngine:
                         budget, max_simulations=remaining_simulations
                     )
                     candidate_batch = self.realizer.evaluator.collect(
-                        item.model, context, top_spec.horizon, trace_budget
+                        item.model, context, selected_spec.horizon, trace_budget
                     )
                     simulations_used += candidate_batch.simulations_used
                     remaining_simulations -= candidate_batch.simulations_used
@@ -567,7 +590,7 @@ class BidirectionalModelingEngine:
                     truncated = True
                     continue
                 if _traces_behaviorally_equivalent(
-                    original_batch.traces, candidate_batch.traces, top_spec
+                    original_batch.traces, candidate_batch.traces, selected_spec
                 ):
                     equivalent.append(item.model.name)
         if compared < len(satisfying):
@@ -578,5 +601,6 @@ class BidirectionalModelingEngine:
             tuple(equivalent),
             simulations_used,
             truncated,
+            chosen.hypothesis.name,
         )
 

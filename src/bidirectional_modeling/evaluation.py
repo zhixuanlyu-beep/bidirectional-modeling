@@ -566,8 +566,9 @@ class SatisfactionEvaluator:
                     passed=False,
                     observed=model_cost,
                     expected="a readable non-negative candidate cost",
-                    robustness=0.0,
+
                     detail=str(error),
+                    evaluation_error=str(error),
                 )
             )
         else:
@@ -579,7 +580,7 @@ class SatisfactionEvaluator:
                         passed=False,
                         observed=model_cost,
                         expected="cost <= %s" % budget.max_cost,
-                        robustness=0.0,
+
                         detail="candidate exceeds the caller's computation/resource budget",
                     )
                 )
@@ -621,8 +622,9 @@ class SatisfactionEvaluator:
                         passed=False,
                         observed="unavailable",
                         expected="requirement must be evaluable",
-                        robustness=0.0,
+
                         detail=str(error),
+                        evaluation_error=str(error),
                     )
                 )
 
@@ -652,16 +654,11 @@ class SatisfactionEvaluator:
         requirements_passed = bool(batch.traces) and all(
             check.passed for check in checks
         )
-        complete = batch.complete and provenance_complete
+        complete = (batch.complete and provenance_complete
+                    and not any(check.evaluation_error is not None for check in checks))
         satisfied = complete and requirements_passed
-        robustness = (
-            min((check.robustness for check in checks), default=1.0)
-            if requirements_passed
-            else 0.0
-        )
         verification = VerificationMeasures(
             coverage=batch.coverage if provenance_complete else 0.0,
-            robustness=robustness,
         )
         try:
             model_boundaries = tuple(
@@ -772,8 +769,9 @@ class SatisfactionEvaluator:
             passed=False,
             observed="error",
             expected="candidate verification must complete",
-            robustness=0.0,
+
             detail=detail,
+            evaluation_error=detail,
         )
         return SatisfactionCertificate(
             spec_name=spec.name,
@@ -781,7 +779,7 @@ class SatisfactionEvaluator:
             satisfied=False,
             checks=(check,),
             verified_scenarios=0,
-            verification=VerificationMeasures(0.0, 0.0),
+            verification=VerificationMeasures(0.0),
             assumptions=tuple(dict.fromkeys(context.assumptions + spec.assumptions)),
             failure_boundaries=tuple(boundaries),
             horizon=spec.horizon,

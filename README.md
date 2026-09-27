@@ -67,6 +67,8 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 
 通用包导入和查询链不加载这两个领域模块。布尔搜索找到替代即停止；布尔与拼接的存在性证书直接验证见证。不存在及极小性主张仍需相应的穷尽检查。
 
+概念记忆从 `extensions.concepts` 按需加载，保存人工判断来源，不能作为结构证明。组合规则验证默认保留全部认证候选，最短描述选择须显式启用。
+
 领域接口仅从上述扩展模块导入；网络容器从 `bidirectional_modeling.context_network` 导入；基准从 `bidirectional_modeling.search_benchmark` 导入或通过 CLI 使用。已移除旧领域模块路径、顶层领域/基准导出和 `irreducible_against`，迁移方式见 [变更记录](CHANGELOG.md)。
 
 ## 文档
@@ -88,6 +90,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 - 证书绑定具体问题、协议和证据。哈希保证一致性检查，不证明来源真实；独立数据和校准声明由实验方负责。
 - 回调边界隔离状态，证明型执行重放转移与读出。显式无定义转移是合法偏函数，普通异常与预算截断保留未知。
 - 部分吻合不等于完整模型通过；排除证书只针对绑定的候选及活跃证据。重构或跨协议转换后需重证适用性。
+- 数值条件保留精确整数判断；观测等价与残差商共用结构身份。执行错误进入未决诊断，不是反证。
 - 默认解释使用允许结果集合，缺失预测保持未知；描述长度依赖显式编码；充分性不等于最小性，结构也不能单独证明意图。
 - 闭合与残差共用内部可达状态探索，但各自保留判断、反例与证书规则。穷举与核最小化仍可能指数增长。
 

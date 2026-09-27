@@ -28,7 +28,7 @@ from .structural import freeze_value
 
 
 class HypothesisGenerator(Protocol):
-    independent_recovery: bool
+    independence_declared: bool
 
     def generate(
         self, model: ExecutableModel, context: Context
@@ -42,7 +42,7 @@ HypothesisSource = Union[HypothesisGenerator, Iterable[PurposeHypothesis]]
 class CatalogHypothesisGenerator:
     """Supplies contextual function/intention hypotheses from a domain catalog."""
 
-    independent_recovery = False
+    independence_declared = False
 
     def __init__(self, hypotheses: Iterable[PurposeHypothesis]) -> None:
         self.hypotheses = tuple(hypotheses)
@@ -60,7 +60,7 @@ class ObservedEffectGenerator:
     environmental or actor evidence beyond the structure itself.
     """
 
-    independent_recovery = True
+    independence_declared = False
 
     def __init__(self, horizon: int = 1) -> None:
         if horizon < 1:
@@ -232,7 +232,7 @@ class Interpreter:
             if observation.experiment in observed and observed[observation.experiment] != observation.outcome:
                 raise ValueError('conflicting outcomes require distinct experiment instances')
             observed[observation.experiment] = observation.outcome
-        excluded = []
+        excluded, rejected, undecided = [], [], []
         all_evidence = tuple(context.history) + tuple(evidence)
         batches: dict[int, TraceBatch] = {}
         simulations_used = 0
@@ -295,6 +295,13 @@ class Interpreter:
                 model, hypothesis.spec, context, batch, budget
             )
             if not certificate.satisfied:
+                if not certificate.complete:
+                    reasons = tuple(c.evaluation_error for c in certificate.checks
+                                    if c.evaluation_error is not None)
+                    undecided.append((hypothesis.name, reasons + certificate.failure_boundaries
+                                      or ('verification_incomplete',)))
+                else:
+                    rejected.append((hypothesis.name, certificate))
                 continue
             relevant = tuple(e for e in all_evidence if e.hypothesis == hypothesis.name)
             direct = tuple(e for e in relevant if e.kind in {
@@ -312,18 +319,17 @@ class Interpreter:
 
         candidates.sort(key=lambda item: item.hypothesis.name)
         groups = _equivalent_groups(candidates, experiments)
-        query = _select_experiment(candidates, experiments, observed) if len(candidates) > 1 else None
+        query = _select_experiment(candidates, experiments, observed) if len(candidates) > 1 and not (truncated or undecided) else None
 
         # A proposed experiment does not make the current evidence identifying;
         # it only describes how the ambiguity could be reduced in a later turn.
-        non_identifiable = truncated or len(candidates) != 1
         return InterpretationResult(
             model_name=model.name,
             candidates=tuple(candidates),
             equivalent_explanations=groups,
             discriminating_query=query,
-            non_identifiable=non_identifiable,
             excluded=tuple(excluded), observations=observations,
+            rejected=tuple(rejected), undecided=tuple(undecided),
             simulations_used=simulations_used,
             truncated=truncated,
         )

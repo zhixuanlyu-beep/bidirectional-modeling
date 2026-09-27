@@ -29,6 +29,7 @@ from .core import (
     Aggregation,
     CandidateEvaluation,
     CheckResult,
+    VerificationIssue,
     ClosureReport,
     Concept,
     VerificationMeasures,
@@ -95,7 +96,7 @@ from .realization import (
     pareto_partition,
 )
 
-from .refinement import ClosureAnalyzer, ConceptLibrary
+from .refinement import ClosureAnalyzer
 from .residual import (
     DistinguishingContext,
     ResidualClass,
@@ -168,10 +169,10 @@ __all__ = [
     "CandidateGenerator",
     "CatalogHypothesisGenerator",
     "CheckResult",
+    "VerificationIssue",
     "ClosureAnalyzer",
     "ClosureReport",
     "Concept",
-    "ConceptLibrary",
     "CompositionCaseResult",
     "CompositionExperiment",
     "CompositionRule",
@@ -251,7 +252,7 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.20.0"
+__version__ = "0.21.0"
 
 from .context_network import (
     ModelingContext, ContextChange, ContextTransition, ContextTransitionReport,
