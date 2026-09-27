@@ -70,6 +70,7 @@ class MicroRoundTripReport:
     behaviorally_equivalent_models: Tuple[str, ...]
     simulations_used: int = 0
     truncated: bool = False
+    selected_hypothesis: Optional[str] = None
 
     @property
     def passed(self) -> bool:
@@ -420,10 +421,12 @@ class BidirectionalModelingEngine:
         evidence: Sequence[Evidence] = (),
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
+        *, observations=(),
     ) -> MacroRoundTripReport:
         """Check semantic recovery, distinguishing inference from injected catalogs."""
 
         budget = budget or ResourceBudget()
+        experiments, observations = tuple(experiments), tuple(observations)
         realization = self.realize(spec, context, source, budget)
         interpretations = []
         preservation = []
@@ -447,7 +450,6 @@ class BidirectionalModelingEngine:
                     candidates=(),
                     equivalent_explanations=(),
                     discriminating_query=None,
-                    non_identifiable=False,
                     truncated=True,
                 )
             else:
@@ -460,14 +462,14 @@ class BidirectionalModelingEngine:
                     hypothesis_source,
                     evidence,
                     experiments,
-                    interpretation_budget,
+                    interpretation_budget, observations=observations,
                 )
                 simulations_used += result.simulations_used
                 remaining_simulations -= result.simulations_used
             interpretations.append(result)
             truncated = truncated or result.truncated
             preservation.append(
-                any(
+                not result.undecided and not result.truncated and any(
                     item.hypothesis.spec.semantically_equivalent(spec)
                     for item in result.candidates
                 )
@@ -491,16 +493,26 @@ class BidirectionalModelingEngine:
         experiments: Sequence[Experiment] = (),
         budget: Optional[ResourceBudget] = None,
         allow_identity: bool = False,
+        *, selected_hypothesis: Optional[str] = None, observations=(),
     ) -> MicroRoundTripReport:
         """Re-realize inferred behavior; exclude the original object by default."""
 
         budget = budget or ResourceBudget()
         interpretation = self.interpret(
-            model, context, hypotheses, evidence, experiments, budget
+            model, context, hypotheses, evidence, experiments, budget, observations=observations
         )
         if not interpretation.candidates:
             raise ValueError("no compatible macro hypothesis can seed the return realization")
-        top_spec = interpretation.candidates[0].hypothesis.spec
+        if selected_hypothesis is None:
+            if interpretation.non_identifiable:
+                raise ValueError('select an explicit compatible hypothesis for an ambiguous or undecided interpretation')
+            chosen = interpretation.candidates[0]
+        else:
+            chosen = next((c for c in interpretation.candidates
+                           if c.hypothesis.name == selected_hypothesis), None)
+            if chosen is None:
+                raise ValueError('selected hypothesis is not a verified compatible candidate')
+        selected_spec = chosen.hypothesis.spec
         simulations_used = interpretation.simulations_used
         remaining_simulations = max(
             0, budget.max_simulations - simulations_used
@@ -508,7 +520,7 @@ class BidirectionalModelingEngine:
         truncated = interpretation.truncated
         if remaining_simulations <= 0:
             realization = RealizationResult(
-                spec=top_spec,
+                spec=selected_spec,
                 candidates=(),
                 rejected=(),
                 dominated=(),
@@ -521,7 +533,7 @@ class BidirectionalModelingEngine:
                 budget, max_simulations=remaining_simulations
             )
             realization = self.realize(
-                top_spec, context, realization_source, realization_budget
+                selected_spec, context, realization_source, realization_budget
             )
             simulations_used += realization.simulations_used
             remaining_simulations -= realization.simulations_used
@@ -538,7 +550,7 @@ class BidirectionalModelingEngine:
                 budget, max_simulations=remaining_simulations
             )
             original_batch = self.realizer.evaluator.collect(
-                model, context, top_spec.horizon, trace_budget
+                model, context, selected_spec.horizon, trace_budget
             )
             simulations_used += original_batch.simulations_used
             remaining_simulations -= original_batch.simulations_used
@@ -558,7 +570,7 @@ class BidirectionalModelingEngine:
                         budget, max_simulations=remaining_simulations
                     )
                     candidate_batch = self.realizer.evaluator.collect(
-                        item.model, context, top_spec.horizon, trace_budget
+                        item.model, context, selected_spec.horizon, trace_budget
                     )
                     simulations_used += candidate_batch.simulations_used
                     remaining_simulations -= candidate_batch.simulations_used
@@ -567,7 +579,7 @@ class BidirectionalModelingEngine:
                     truncated = True
                     continue
                 if _traces_behaviorally_equivalent(
-                    original_batch.traces, candidate_batch.traces, top_spec
+                    original_batch.traces, candidate_batch.traces, selected_spec
                 ):
                     equivalent.append(item.model.name)
         if compared < len(satisfying):
@@ -578,5 +590,6 @@ class BidirectionalModelingEngine:
             tuple(equivalent),
             simulations_used,
             truncated,
+            chosen.hypothesis.name,
         )
 

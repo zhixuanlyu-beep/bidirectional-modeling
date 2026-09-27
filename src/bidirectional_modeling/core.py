@@ -11,7 +11,6 @@ import math
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from statistics import mean
-from types import MappingProxyType
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
 
 from .structural import (
@@ -247,8 +246,11 @@ class CheckResult:
     expected: str
     robustness: float
     detail: str = ""
+    evaluation_error: Optional[str] = None
 
     def __post_init__(self) -> None:
+        if self.evaluation_error is not None and self.passed:
+            raise ValueError("an unresolved check cannot pass")
         if not 0.0 <= self.robustness <= 1.0:
             raise ValueError("robustness must be in [0, 1]")
 
@@ -882,6 +884,8 @@ class SatisfactionCertificate:
             raise TypeError("verified_scenarios must be an integer")
         if self.verified_scenarios < 0:
             raise ValueError("verified_scenarios must be non-negative")
+        if self.complete and any(c.evaluation_error is not None for c in self.checks):
+            raise ValueError("a complete certificate cannot contain unresolved checks")
         if self.satisfied and (not self.complete or not self.requirements_passed):
             raise ValueError(
                 "a satisfied certificate must be complete and pass its requirements"
@@ -1024,6 +1028,32 @@ def _labels(values, what):
     return values
 
 
+@dataclass(frozen=True, eq=False)
+class _OutcomeMap(Mapping[str, Tuple[str, ...]]):
+    """Tuple-backed declaration snapshot: immutable and deepcopy/asdict safe."""
+    entries: Tuple[Tuple[str, Tuple[str, ...]], ...]
+
+    def __getitem__(self, key):
+        for name, outcomes in self.entries:
+            if name == key:
+                return outcomes
+        raise KeyError(key)
+
+    def __iter__(self):
+        return (name for name, _ in self.entries)
+
+    def __len__(self):
+        return len(self.entries)
+
+
+def _outcome_snapshot(mapping):
+    entries = []
+    for name, outcomes in mapping.items():
+        _labels((name,), 'experiment or candidate')
+        entries.append((name, _labels(outcomes, 'allowed outcomes')))
+    return _OutcomeMap(tuple(entries))
+
+
 @dataclass(frozen=True)
 class PurposeHypothesis:
     name: str
@@ -1035,11 +1065,14 @@ class PurposeHypothesis:
 
     def __post_init__(self):
         _labels((self.name,), 'hypothesis')
-        declarations = {}
-        for name, outcomes in self.allowed_outcomes.items():
-            _labels((name,), 'experiment')
-            declarations[name] = _labels(outcomes, 'allowed outcomes')
-        object.__setattr__(self, 'allowed_outcomes', MappingProxyType(declarations))
+        object.__setattr__(self, 'allowed_outcomes', _outcome_snapshot(self.allowed_outcomes))
+
+    def to_dict(self):
+        """Export declaration data and specification identity, never callbacks."""
+        from .provenance import macro_spec_fingerprint
+        return dict(name=self.name, level=self.level.value, explanation=self.explanation,
+                    spec_fingerprint=macro_spec_fingerprint(self.spec),
+                    allowed_outcomes={k: list(v) for k, v in self.allowed_outcomes.items()})
 
 
 @dataclass(frozen=True)
@@ -1079,6 +1112,20 @@ class DiscriminatingQuery:
     # Diagnostic heuristic, not a probability or proof of truth.
     selection_score: float
 
+    def __post_init__(self):
+        object.__setattr__(self, 'candidate_names', tuple(self.candidate_names))
+        object.__setattr__(self, 'allowed_outcomes', _outcome_snapshot(self.allowed_outcomes))
+        if set(self.candidate_names) != set(self.allowed_outcomes):
+            raise ValueError('query candidates must match outcome declarations')
+
+    def to_dict(self):
+        from dataclasses import asdict
+        return dict(experiment=asdict(self.experiment), candidate_names=list(self.candidate_names),
+                    allowed_outcomes={k: list(v) for k, v in self.allowed_outcomes.items()},
+                    guaranteed_class_eliminations=self.guaranteed_class_eliminations,
+                    separated_class_pairs=self.separated_class_pairs,
+                    selection_score=self.selection_score)
+
 
 @dataclass(frozen=True)
 class InterpretationCandidate:
@@ -1100,12 +1147,64 @@ class InterpretationResult:
     candidates: Tuple[InterpretationCandidate, ...]
     equivalent_explanations: Tuple[Tuple[str, ...], ...]
     discriminating_query: Optional[DiscriminatingQuery]
-    non_identifiable: bool
     ordering_policy: str = "name; no belief ranking"
     excluded: Tuple[Tuple[str, InterpretationObservation], ...] = ()
     observations: Tuple[InterpretationObservation, ...] = ()
     simulations_used: int = 0
     truncated: bool = False
+    # Evaluated false versus unable to evaluate are deliberately separate.
+    rejected: Tuple[Tuple[str, SatisfactionCertificate], ...] = ()
+    undecided: Tuple[Tuple[str, Tuple[str, ...]], ...] = ()
+
+    def __post_init__(self):
+        for name in ('candidates', 'equivalent_explanations', 'excluded', 'observations', 'rejected'):
+            object.__setattr__(self, name, tuple(getattr(self, name)))
+        object.__setattr__(self, 'undecided',
+                           tuple((name, tuple(reasons)) for name, reasons in self.undecided))
+
+    @property
+    def identification_status(self):
+        if self.truncated or self.undecided:
+            return 'undecided'
+        if len(self.candidates) == 1:
+            return 'unique'
+        if self.candidates:
+            return 'ambiguous'
+        return 'all_excluded' if self.excluded or self.rejected else 'empty_catalogue'
+
+    @property
+    def non_identifiable(self):
+        return self.identification_status != 'unique'
+
+    def to_dict(self):
+        """Audit snapshot, not an executable model or a restorable proof object."""
+        from dataclasses import asdict
+        for candidate in self.candidates:
+            if not candidate.certificate.binds_specification(candidate.hypothesis.spec):
+                raise ValueError("cannot export a changed hypothesis specification")
+        def binding(certificate):
+            return {name: getattr(certificate, name) for name in (
+                'spec_fingerprint', 'model_fingerprint', 'context_fingerprint',
+                'trace_batch_fingerprint', 'protocol_fingerprint')}
+        return dict(
+            model_name=self.model_name, identification_status=self.identification_status,
+            non_identifiable=self.non_identifiable, truncated=self.truncated,
+            simulations_used=self.simulations_used, ordering_policy=self.ordering_policy,
+            candidates=[dict(hypothesis=c.hypothesis.to_dict(), binding=binding(c.certificate),
+                             verification=asdict(c.certificate.verification),
+                             requirement_count=c.requirement_count,
+                             evidence=[asdict(e) for e in c.evidence],
+                             direct_intent_evidence=[asdict(e) for e in c.direct_intent_evidence],
+                             caveats=list(c.caveats)) for c in self.candidates],
+            equivalent_explanations=[list(group) for group in self.equivalent_explanations],
+            observations=[asdict(o) for o in self.observations],
+            excluded=[dict(candidate=name, observation=asdict(o)) for name, o in self.excluded],
+            rejected=[dict(candidate=name, binding=binding(certificate),
+                           failed_checks=[check.name for check in certificate.checks if not check.passed])
+                      for name, certificate in self.rejected],
+            undecided=[dict(candidate=name, reasons=list(reasons)) for name, reasons in self.undecided],
+            discriminating_query=self.discriminating_query.to_dict() if self.discriminating_query else None,
+        )
 
 
 @dataclass(frozen=True)

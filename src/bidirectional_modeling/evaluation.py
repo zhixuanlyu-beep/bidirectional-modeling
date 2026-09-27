@@ -568,6 +568,7 @@ class SatisfactionEvaluator:
                     expected="a readable non-negative candidate cost",
                     robustness=0.0,
                     detail=str(error),
+                    evaluation_error=str(error),
                 )
             )
         else:
@@ -623,6 +624,7 @@ class SatisfactionEvaluator:
                         expected="requirement must be evaluable",
                         robustness=0.0,
                         detail=str(error),
+                        evaluation_error=str(error),
                     )
                 )
 
@@ -652,7 +654,8 @@ class SatisfactionEvaluator:
         requirements_passed = bool(batch.traces) and all(
             check.passed for check in checks
         )
-        complete = batch.complete and provenance_complete
+        complete = (batch.complete and provenance_complete
+                    and not any(check.evaluation_error is not None for check in checks))
         satisfied = complete and requirements_passed
         robustness = (
             min((check.robustness for check in checks), default=1.0)
@@ -774,6 +777,7 @@ class SatisfactionEvaluator:
             expected="candidate verification must complete",
             robustness=0.0,
             detail=detail,
+            evaluation_error=detail,
         )
         return SatisfactionCertificate(
             spec_name=spec.name,

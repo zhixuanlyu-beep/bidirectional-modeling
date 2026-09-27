@@ -60,6 +60,7 @@ def build_demo_report() -> Dict[str, Any]:
     interpreted = engine.interpret(
         org_model, org_context, hypotheses, evidence, experiments
     )
+    interpretation_snapshot = interpreted.to_dict()
     observed_effects = engine.interpret(
         org_model, org_context, ObservedEffectGenerator(horizon=1)
     )
@@ -135,6 +136,9 @@ def build_demo_report() -> Dict[str, Any]:
                 for item in interpreted.candidates
             ],
             "non_identifiable": interpreted.non_identifiable,
+            "identification_status": interpreted.identification_status,
+            "undecided": interpretation_snapshot["undecided"],
+            "rejected": interpretation_snapshot["rejected"],
             "ordering_policy": interpreted.ordering_policy,
             "discriminating_query": (
                 {

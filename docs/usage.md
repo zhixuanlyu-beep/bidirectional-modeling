@@ -282,3 +282,6 @@ context = Context(
 
 CI 在 Python 3.9、3.11 和 3.13 上运行全部单元测试、覆盖率门槛、JSON 演示，并额外构建和检查 wheel 内容。许可证为 MIT。
 
+
+
+解释可能有多个相容候选或未决检查时，微观往返须使用 `selected_hypothesis="候选名称"` 指定已验证目标。两个往返接口均支持 `observations=`；状态、异常与审计导出的完整边界见 [集合解释](set_interpretation.md)。
