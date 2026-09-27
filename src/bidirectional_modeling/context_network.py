@@ -135,12 +135,29 @@ def _prepare_context_transition(transition, *, budget=None):
     counts = [0] * len(transition.source.protocol.worlds)
     unmatched = 0
     try:
+        old_names = {e.name: i for i, e in enumerate(transition.source.protocol.experiments)}
+        new_names = {e.name: i for i, e in enumerate(transition.target.protocol.experiments)}
+        columns = tuple((old_names[a], new_names[b], a) for a, b in transition.experiments)
+        translations = {(a, b): c for a, b, c in transition.responses}
+        source_index = {}
+        for i, row in enumerate(transition.source.protocol.worlds):
+            budget.consume('index_entries')
+            key = tuple(row[old] for old, _, _ in columns)
+            source_index.setdefault(key, []).append(i)
         for row in transition.target.protocol.worlds:
-            matches = transition.matching_source_worlds(row, budget)
-            relation.append(matches)
+            budget.consume('index_operations')
+            translated = []
+            for _, new, name in columns:
+                budget.consume('response_checks')
+                if (name, row[new]) not in translations:
+                    raise ValueError('unmapped target response')
+                translated.append(translations[name, row[new]])
+            matches = tuple(source_index.get(tuple(translated), ()))
             unmatched += not bool(matches)
             for i in matches:
+                budget.consume('response_checks')
                 counts[i] += 1
+            relation.append(matches)
         if transition.kind is not ContextChange.RECONSTRUCTION and unmatched:
             return result('invalid', 'target_behavior_not_represented')
         if transition.kind is ContextChange.RESTRICTION and any(n == 0 for n in counts):
