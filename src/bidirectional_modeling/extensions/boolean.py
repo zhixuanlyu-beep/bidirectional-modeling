@@ -231,18 +231,28 @@ class BooleanSubstituteReport:
     reason: str = ''
 
 
+def _validated_inputs(target, language, inputs):
+    rows = tuple(dict(row) for row in inputs)
+    variables = set(language.variables)
+    if not _variables(target.tree) <= variables:
+        raise ValueError('target must use declared variables')
+    if any(set(row) != variables for row in rows):
+        raise ValueError('inputs must use declared variables')
+    if any(type(value) is not bool for row in rows for value in row.values()):
+        raise ValueError('Boolean inputs must be bool values')
+    return rows
+
+
 def find_boolean_substitute(target, language, inputs, *, budget=None):
     """Search the entire bounded lower language, over precisely these inputs."""
     budget = budget if budget is not None else SearchWorkBudget()
-    inputs = tuple(dict(row) for row in inputs)
+    inputs = _validated_inputs(target, language, inputs)
     input_fingerprint = fingerprint_value(inputs)
     def result(status, reason, witness=None):
         return BooleanSubstituteReport(language.fingerprint, target.fingerprint,
                                        input_fingerprint, status, witness, reason)
     if not inputs:
         return result('unknown', 'empty_experiment_domain')
-    if any(set(row) != set(language.variables) for row in inputs) or not _variables(target.tree) <= set(language.variables):
-        raise ValueError('inputs and target must use declared variables')
     try:
         expected = []
         for row in inputs:
@@ -283,7 +293,10 @@ def reconstruct_boolean(parent, replacement, path, language, rule, *, name, prot
 def verify_boolean_substitute(target, language, inputs, receipt, *, budget=None):
     """Check FOUND witnesses directly; only absence requires language exhaustion."""
     budget = budget if budget is not None else SearchWorkBudget()
-    inputs = tuple(dict(row) for row in inputs)
+    try:
+        inputs = _validated_inputs(target, language, inputs)
+    except (TypeError, ValueError):
+        return 'invalid'
     if (receipt.language_fingerprint != language.fingerprint or
             receipt.target_fingerprint != target.fingerprint or
             receipt.experiment_fingerprint != fingerprint_value(inputs)):
