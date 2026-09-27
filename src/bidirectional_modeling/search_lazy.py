@@ -81,8 +81,16 @@ class LazyExecutableSearch:
         Complete predictions may enter the query cache after commitment validation.
         Partial predictions never change finite query hypotheses or prune candidates.
         """
-        _natural(max_simulations)
         self._check_declaration()
+        result = self._predict_experiments(candidate, experiments,
+            max_simulations=max_simulations, budget=budget)
+        self._check_declaration()
+        return result
+
+    def _predict_experiments(self, candidate, experiments, *, max_simulations, budget):
+        # Caller must check the full declaration before and after its public call.
+        # Any cross-candidate drift invalidates all caches before results escape.
+        _natural(max_simulations)
         candidates = {c.model.name: c for c in self._candidates}
         if candidate not in candidates:
             raise ValueError('unknown candidate')
@@ -103,7 +111,6 @@ class LazyExecutableSearch:
         result = collect_partial_prediction(self._protocol, candidates[candidate], self._cases,
             selected, max_simulations=max_simulations, budget=budget,
             evaluator=self._adapter.evaluator)
-        self._check_declaration()
         self._reject_cached_drift(result.diagnostics)
         prediction = result.prediction
         if prediction is None:
@@ -161,7 +168,7 @@ class LazyExecutableSearch:
                     while experiments:
                         budget.consume('candidate_checks')
                         selected = experiments[:stop]
-                        result = self.predict_experiments(name, selected,
+                        result = self._predict_experiments(name, selected,
                             max_simulations=max_simulations-used, budget=budget)
                         used += result.simulations_used
                         if result.prediction is None:

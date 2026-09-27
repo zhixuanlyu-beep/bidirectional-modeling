@@ -94,6 +94,9 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 python3 -m unittest discover -s tests -q
 bidirectional-modeling search-benchmark --json
 bidirectional-modeling search-updates-benchmark --json
+PYTHONPATH=src python3 benchmarks/review_costs.py
 ```
 
 CI 在 Python 3.9、3.11 和 3.13 上运行测试、覆盖率门槛、JSON 演示及 wheel 内容检查。许可证为 MIT。
+
+成本脚本分别报告查询、证书复核、关系准备、冷/热筛查的操作或调用次数。构造成本在测量之外，声明核验次数只统计目录边界检查；耗时为辅助诊断，不作为 CI 阈值。

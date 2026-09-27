@@ -107,6 +107,27 @@ def _query_scope(problem,query):
     raise TypeError('unsupported search query')
 
 
+def _world_matcher(problem, commitments, evidence, budget):
+    """Prepare one-row checks; no response-universe traversal."""
+    indices = {e.name: i for i, e in enumerate(problem.protocol.experiments)}
+    constraints = {c.name: frozenset(c.worlds) for c in problem.protocol.constraints
+                   if c.name in commitments}
+    checks = tuple((indices[o.experiment], o.response) for o in evidence)
+
+    def matches(world):
+        for name in commitments:
+            budget.consume('constraint_checks')
+            if world not in constraints[name]:
+                return False
+        row = problem.protocol.worlds[world]
+        for index, response in checks:
+            budget.consume('response_checks')
+            if row[index] != response:
+                return False
+        return True
+    return matches
+
+
 class FiniteSearchQueryBackend:
     """Use the problem's scan/indexed exact filter with shared work accounting."""
 
@@ -124,24 +145,30 @@ class FiniteSearchQueryBackend:
             budget.consume('query_checks')
             if isinstance(query,ConstraintQuery):
                 evidence=problem._evidence(query.evidence,budget)
-                possible=problem._worlds(query.commitments,evidence,budget=budget)
-                if possible:
-                    # Deterministic witness in both backends; indexed iteration is ordered.
-                    world=min(possible) if isinstance(possible,set) else next(iter(possible))
-                    budget.consume('candidate_checks')
-                    return result(QueryStatus.FOUND,'satisfying_response',world)
+                if problem.backend == 'indexed':
+                    possible = problem._worlds(query.commitments, evidence, budget=budget)
+                    world = next(iter(possible), None)
+                    if world is not None:
+                        budget.consume('candidate_checks')
+                        return result(QueryStatus.FOUND, 'satisfying_response', world)
+                else:
+                    matches = _world_matcher(problem, query.commitments, evidence, budget)
+                    for world in range(len(problem.protocol.worlds)):
+                        budget.consume('candidate_checks')
+                        if matches(world):
+                            return result(QueryStatus.FOUND, 'satisfying_response', world)
                 return result(QueryStatus.ABSENT,'finite_domain_exhausted')
 
             if isinstance(query,MacroAlternativeQuery):
                 evidence=problem._evidence(query.evidence,budget)
-                possible=problem._worlds(evidence=evidence,budget=budget)
+                matches = _world_matcher(problem, (), evidence, budget)
                 unknown=False
                 for h in problem.hypotheses:
                     budget.consume('candidate_checks')
                     if h.world is None:
                         unknown=True
                         continue
-                    if h.world in possible:
+                    if matches(h.world):
                         nonempty=True
                         if h.macro_answer != query.answer:
                             return result(QueryStatus.FOUND,'alternative_candidate',h.world,h.name)
@@ -195,30 +222,33 @@ def verify_query_result(problem, query, receipt, *, budget=None):
         return verdict('undecided','no_decisive_claim')
     if receipt.scope != expected_scope:
         return verdict('invalid','scope_mismatch')
-    oracle=ExperimentHypothesisSearch(problem.protocol,problem.hypotheses,problem.target,
-                                      world_answers=problem.world_answers)
     try:
         budget.consume('query_checks')
         if receipt.status is QueryStatus.FOUND:
             world=receipt.witness_world
             if type(world) is not int or world < 0 or world >= len(problem.protocol.worlds):
                 return verdict('invalid','invalid_witness')
+            known_experiments = {e.name for e in problem.protocol.experiments}
             if isinstance(query,ConstraintQuery):
                 if receipt.witness_candidate is not None or receipt.compatible_catalogue_nonempty is not None:
                     return verdict('invalid','invalid_metadata')
-                evidence=oracle._evidence(query.evidence,budget)
-                if world not in oracle._worlds(query.commitments,evidence,budget=budget):
+                evidence=query.evidence
+                if any(o.experiment not in known_experiments for o in evidence):
+                    return verdict('invalid', 'witness_violates_query')
+                if not _world_matcher(problem, query.commitments, evidence, budget)(world):
                     return verdict('invalid','witness_violates_query')
             else:
-                candidates={h.name:h for h in oracle.hypotheses}
+                candidates={h.name:h for h in problem.hypotheses}
                 h=candidates.get(receipt.witness_candidate)
                 budget.consume('candidate_checks')
                 if h is None or h.world != world:
                     return verdict('invalid','invalid_witness')
                 if isinstance(query,MacroAlternativeQuery):
-                    evidence=oracle._evidence(query.evidence,budget)
+                    evidence=query.evidence
+                    if any(o.experiment not in known_experiments for o in evidence):
+                        return verdict('invalid', 'witness_violates_query')
                     if (receipt.compatible_catalogue_nonempty is not True or h.macro_answer == query.answer
-                            or world not in oracle._worlds(evidence=evidence,budget=budget)):
+                            or not _world_matcher(problem, (), evidence, budget)(world)):
                         return verdict('invalid','witness_violates_query')
                 else:
                     if (receipt.compatible_catalogue_nonempty is not None
@@ -228,6 +258,8 @@ def verify_query_result(problem, query, receipt, *, budget=None):
             return verdict('valid','witness_checked')
         if receipt.witness_world is not None or receipt.witness_candidate is not None:
             return verdict('invalid','absent_with_witness')
+        oracle = ExperimentHypothesisSearch(problem.protocol, problem.hypotheses, problem.target,
+                                          world_answers=problem.world_answers)
         replay=FiniteSearchQueryBackend().execute(oracle,query,budget=budget)
         if replay.status is QueryStatus.UNKNOWN:
             return verdict('undecided',replay.reason)
@@ -237,3 +269,4 @@ def verify_query_result(problem, query, receipt, *, budget=None):
         return verdict('valid','absence_replayed')
     except SearchBudgetExceeded as error:
         return verdict('undecided',error.reason)
+
