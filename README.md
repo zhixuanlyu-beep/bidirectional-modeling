@@ -97,7 +97,10 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 ## 开发验证
 
 ```bash
-python3 -m unittest discover -s tests -q
+coverage run -m unittest discover -s tests -q
+coverage report
+coverage json -o coverage.json
+python3 tools/check_coverage.py coverage.json
 bidirectional-modeling search-benchmark --json
 bidirectional-modeling search-updates-benchmark --json
 PYTHONPATH=src python3 benchmarks/review_costs.py
@@ -106,3 +109,5 @@ PYTHONPATH=src python3 benchmarks/review_costs.py
 CI 在 Python 3.9、3.11 和 3.13 上运行测试、覆盖率门槛、JSON 演示及 wheel 内容检查。许可证为 MIT。
 
 成本脚本分别报告查询、证书复核、关系准备、冷/热筛查的操作或调用次数。构造成本在测量之外，声明核验次数只统计目录边界检查；耗时为辅助诊断，不作为 CI 阈值。
+
+覆盖率默认测量分支，报告保留两位小数。CI 分别检查语句覆盖率至少 93%、分支覆盖率至少 86%，同时保留 90% 的合并覆盖门槛。`coverage report` 的 Cover 列合并语句和分支，不能与仅语句的历史百分比直接比较；独立指标及分子/分母由 `tools/check_coverage.py` 写入 CI 摘要。测试聚焦证据失效、预算边界与未决传播，不排除生产模块或用演示运行补高数字。

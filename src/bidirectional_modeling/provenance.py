@@ -60,6 +60,11 @@ def observed_model_fingerprint(
 ) -> str:
     """Fingerprint a model's identity and its observed, bounded trace evidence."""
 
+    # Search-only adapters may omit resource metrics. Satisfaction checking
+    # validates them separately; when present, their exact declaration is bound.
+    metrics = getattr(model, "metrics", None)
+    resource_signature = (None if metrics is None else
+                          tuple(getattr(metrics, key) for key in ("cost", "complexity", "risk")))
     trace_signatures = []
     for index, trace in enumerate(traces):
         if not isinstance(trace, Trace):
@@ -88,10 +93,11 @@ def observed_model_fingerprint(
         )
     return fingerprint_value(
         (
-            "observed-model-v1",
+            "observed-model-v2",
             type(model).__module__,
             type(model).__qualname__,
             _safe_model_name(model),
+            resource_signature,
             horizon,
             tuple(sorted(trace_signatures)),
         ),
@@ -222,3 +228,4 @@ def satisfaction_protocol_fingerprint(
         ),
         purpose="satisfaction evaluation protocol fingerprint",
     )
+
