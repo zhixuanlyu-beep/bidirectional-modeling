@@ -141,8 +141,10 @@ class PartialTests(unittest.TestCase):
         lazy = self.lazy((p, c, cases))
         first = lazy.predict_experiments('zero', ('a',))
         self.assertIsNotNone(first.prediction)
-        with self.assertRaisesRegex(ValueError, 'commitment'):
-            lazy.predict_experiments('zero', ('b',))
+        failed = lazy.predict_experiments('zero', ('b',))
+        self.assertIsNone(failed.prediction)
+        self.assertEqual(failed.reason, 'prediction_declaration_invalid')
+        self.assertIn('commitment', failed.diagnostics[0][2])
         self.assertIsNone(lazy.snapshot.hypotheses[0].world)
         self.assertEqual(lazy.predict_experiments('zero', ('a',)).prediction, first.prediction)
 

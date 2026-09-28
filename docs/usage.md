@@ -331,3 +331,10 @@ for step in refinement.steps:
 ```
 
 批次 `diagnostics` 保存 TraceDiagnostic 的稳定 code 和展示 detail，`boundaries` 为展示文案的派生视图。复核绑定原因码、证据与原始资源协议；仅修改 detail 不改变证书身份。复核执行预算只限制本次运行，不能把未完整采集的证据升级为完整证书。
+
+
+生成过程的边界：RealizationResult 与 InterpretationResult 的 diagnostics 记录候选源错误，已完成候选保留，truncated 表示目录未完整处理。读取候选前检查上限；未知长度迭代器恰好达到上限时保持未决，不额外取样确认结束。宏观往返采用相同边界。
+
+验证器抛异常后若无法取得准确消耗，实现搜索将剩余额度保守计入 simulations_used 并停止执行；base-budget 诊断记录 reserved_simulations。这是防止再次分配的记账上界，不是虚构已验证场景数。失败证书仍记录零个已认证场景并绑定本次预算。
+
+ObservedEffectGenerator 生成的“maintain”目标用 EACH 检查整个声明时域；非恒定轨迹生成“at horizon …”终值目标。后者不主张初值、单调性、增加、减少或目录外的因果关系。

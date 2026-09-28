@@ -86,6 +86,8 @@ def build_demo_report() -> Dict[str, Any]:
 
     return {
         "realize": {
+            "truncated": realized.truncated,
+            "diagnostics": [asdict(issue) for issue in realized.diagnostics],
             "goal": software_spec.name,
             "pareto_candidates": [
                 {
@@ -152,6 +154,8 @@ def build_demo_report() -> Dict[str, Any]:
             ],
             "non_identifiable": interpreted.non_identifiable,
             "identification_status": interpreted.identification_status,
+            "truncated": interpreted.truncated,
+            "diagnostics": interpretation_snapshot["diagnostics"],
             "undecided": interpretation_snapshot["undecided"],
             "rejected": interpretation_snapshot["rejected"],
             "ordering_policy": interpreted.ordering_policy,
@@ -500,4 +504,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

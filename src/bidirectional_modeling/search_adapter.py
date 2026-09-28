@@ -72,6 +72,17 @@ class PredictionDomainError(ValueError):
     """A completed prediction lies outside the declared response universe."""
 
 
+def _promote_prediction(problem, candidate, responses):
+    """Validate the complete row and commitments before publishing a hypothesis."""
+    if responses not in problem.protocol.worlds:
+        raise PredictionDomainError('prediction_outside_response_universe')
+    world = problem.protocol.worlds.index(responses)
+    proposed = SearchHypothesis(candidate.model.name, world, problem.world_answers[world],
+        candidate.description, candidate.commitments, candidate.materials)
+    problem.with_hypotheses((proposed,))
+    return proposed
+
+
 @dataclass(frozen=True)
 class _ResponseMatrix:
     responses: Optional[Tuple[str, ...]]
@@ -154,6 +165,8 @@ class ExecutableSearchAdapter:
             replace(e, semantics=e.semantics + ':' + c.fingerprint)
             for e,c in zip(protocol.experiments,cases)))
         bound_target = target + ':' + fingerprint_value(world_answers)
+        base = ExperimentHypothesisSearch(bound_protocol, (), bound_target,
+            backend=backend, world_answers=world_answers)
         used, bindings, diagnostics, hypotheses = 0, [], [], []
         for candidate in candidates:
             name = candidate.model.name
@@ -165,18 +178,11 @@ class ExecutableSearchAdapter:
                                           (), candidate.materials)
             if matrix.responses is not None:
                 try:
-                    if matrix.responses not in protocol.worlds:
-                        raise PredictionDomainError('prediction_outside_response_universe')
-                    world = protocol.worlds.index(matrix.responses)
-                    proposed = SearchHypothesis(name, world, world_answers[world],
-                        candidate.description, candidate.commitments, candidate.materials)
-                    ExperimentHypothesisSearch(bound_protocol, (proposed,), bound_target,
-                                               world_answers=world_answers)
-                    hypothesis = proposed
+                    hypothesis = _promote_prediction(base, candidate, matrix.responses)
                     bindings.extend(matrix.batch_bindings)
                 except Exception as error:
                     diagnostics.append((name, type(error).__name__, str(error)))
             hypotheses.append(hypothesis)
-        search = ExperimentHypothesisSearch(bound_protocol,tuple(hypotheses),bound_target,backend=backend,world_answers=world_answers)
+        search = base.with_hypotheses(tuple(hypotheses))
         return ModelSearchResult(search,used,tuple(bindings),tuple(diagnostics))
 

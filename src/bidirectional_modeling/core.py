@@ -1023,6 +1023,7 @@ class RealizationResult:
     truncated: bool
     simulations_used: int = 0
     undecided: Tuple[CandidateEvaluation, ...] = ()
+    diagnostics: Tuple[VerificationIssue, ...] = ()
 
     def __post_init__(self) -> None:
         accepted = self.candidates + self.dominated
@@ -1172,6 +1173,7 @@ class InterpretationResult:
     # Evaluated false versus unable to evaluate are deliberately separate.
     rejected: Tuple[Tuple[str, SatisfactionCertificate], ...] = ()
     undecided: Tuple[Tuple[str, Tuple[str, ...]], ...] = ()
+    diagnostics: Tuple[VerificationIssue, ...] = ()
 
     def __post_init__(self):
         for name in ('candidates', 'equivalent_explanations', 'excluded', 'observations', 'rejected'):
@@ -1181,7 +1183,7 @@ class InterpretationResult:
 
     @property
     def identification_status(self):
-        if self.truncated or self.undecided:
+        if self.truncated or self.undecided or self.diagnostics:
             return 'undecided'
         if len(self.candidates) == 1:
             return 'unique'
@@ -1207,6 +1209,7 @@ class InterpretationResult:
             model_name=self.model_name, identification_status=self.identification_status,
             non_identifiable=self.non_identifiable, truncated=self.truncated,
             simulations_used=self.simulations_used, ordering_policy=self.ordering_policy,
+            diagnostics=[asdict(issue) for issue in self.diagnostics],
             candidates=[dict(hypothesis=c.hypothesis.to_dict(), binding=binding(c.certificate),
                              verification=asdict(c.certificate.verification),
                              requirement_count=c.requirement_count,

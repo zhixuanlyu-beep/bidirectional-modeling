@@ -183,6 +183,7 @@ class EvidenceScreeningResult:
     certificates: tuple
     simulations_used: int
     reason: str
+    diagnostics: tuple = ()
 
 
 def verify_candidate_exclusion(protocol, candidate, cases, certificate, evidence, *,

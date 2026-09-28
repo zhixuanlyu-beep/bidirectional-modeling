@@ -747,26 +747,19 @@ class SatisfactionEvaluator:
             model, (), spec.horizon
         )
         context_digest, context_error = safe_context_fingerprint(context)
-        boundaries = [
-            "candidate verification failed before completion: %s" % detail,
-        ]
-        for label, error in (
-            ("macro specification", spec_error),
-            ("model evidence", model_error),
-            ("context", context_error),
+        diagnostics = [TraceDiagnostic('candidate_verification_failed',
+            "candidate verification failed before completion: %s" % detail)]
+        for code, label, error in (
+            ('spec_binding_failed', "macro specification", spec_error),
+            ('model_binding_failed', "model evidence", model_error),
+            ('context_binding_failed', "context", context_error),
         ):
             if error is not None:
-                boundaries.append("%s could not be fingerprinted: %s" % (label, error))
+                diagnostics.append(TraceDiagnostic(code, "%s could not be fingerprinted: %s" % (label, error)))
+        boundaries = tuple(d.detail for d in diagnostics)
         trace_protocol_digest = trace_batch_protocol_fingerprint(
-            model_digest,
-            context_digest,
-            spec.horizon,
-            0,
-            "none",
-            False,
-            0.0,
-            tuple(boundaries),
-        )
+            model_digest, context_digest, spec.horizon, budget.max_simulations,
+            "none", False, 0.0, tuple(d.code for d in diagnostics))
         protocol_digest = satisfaction_protocol_fingerprint(
             spec_digest,
             model_digest,

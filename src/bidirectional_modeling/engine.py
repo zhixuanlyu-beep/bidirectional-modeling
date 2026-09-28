@@ -367,11 +367,17 @@ class BidirectionalModelingEngine:
         independence_declared = bool(
             getattr(hypotheses, "independence_declared", False)
         )
-        hypothesis_source: HypothesisSource
-        if hasattr(hypotheses, "generate"):
-            hypothesis_source = hypotheses
-        else:
-            hypothesis_source = tuple(hypotheses)  # type: ignore[arg-type]
+        hypothesis_source: HypothesisSource = hypotheses
+        source_truncated, source_diagnostics = False, ()
+        if not (hasattr(hypotheses, "generate") or hasattr(hypotheses, "generate_from_traces")):
+            if realization.candidates and realization.simulations_used < budget.max_simulations:
+                from ._generation import CandidateStream
+                stream = CandidateStream(lambda: hypotheses, budget.max_candidates)
+                hypothesis_source = tuple(stream)
+                source_truncated = not stream.complete
+                source_diagnostics = tuple(stream.diagnostics)
+            else:
+                hypothesis_source = ()
         simulations_used = realization.simulations_used
         remaining_simulations = max(
             0, budget.max_simulations - simulations_used
@@ -400,6 +406,9 @@ class BidirectionalModelingEngine:
                 )
                 simulations_used += result.simulations_used
                 remaining_simulations -= result.simulations_used
+            if source_truncated:
+                result = replace(result, truncated=True,
+                                 diagnostics=result.diagnostics + source_diagnostics)
             interpretations.append(result)
             truncated = truncated or result.truncated
             preservation.append(
