@@ -225,7 +225,7 @@ for result in suite.cases:
 
 ## 七个内置验收场景
 
-1. **软件行为**：多个可靠工作器形成帕累托候选；丢数据的“指标钻空子”方案被不变量拒绝；只在短期可靠的方案被延长时间探测反驳。
+1. **软件行为**：多个可靠工作器形成帕累托候选；丢数据的“指标钻空子”方案被不变量拒绝；延时探针另外报告扩展规范的失败，不据此否定原规范。
 2. **科学动力学**：位置相同但速度不同的状态未来分化；系统给出非闭合见证，人工批准把速度提升为宏观状态。由于该示例状态空间无界，有限搜索在细化后只报告“未发现反例但证明不完整”，不会宣称全局闭合。
 3. **残差语义商**：三个当前观察相同的不透明初态经 `probe` 暴露两种未来结果；框架自动拆分未来行为不同的状态，同时合并只有无关微观副本编号不同的状态。
 4. **局部动作支撑**：两个当前观察相同的状态只有一个支持 `consume`；残差商将“有后继”和 `⊥` 作为不同操作行为，并产生支撑不闭合见证。
@@ -296,7 +296,7 @@ CI 在 Python 3.9、3.11 和 3.13 上运行全部单元测试、覆盖率门槛�
 
 `EquivalenceSpec.equivalent` 与残差商使用相同的结构身份：未分桶的布尔、整数、浮点数区分类型。`tolerances` 在此特指调用方声明的数值分辨率，按确定性桶形成传递的等价关系；它不代表世界的天然分类。
 
-实现搜索的 `undecided` 保存执行失败或探针不完整的候选，`rejected` 保存完整失败验证或阻断反例。候选目录尚未遍历完时另有 `truncated` 标记。闭合分析将错误放入 `diagnostics`，仅把真实的状态/动作冲突放入 `counterexamples`。组合分析中的残差分区非同余见证只否定该分区，深度不足时不能据此否定整条组合规则。
+实现搜索的 `undecided` 保存基础执行失败或必需探针不完整的候选，`rejected` 保存完整失败验证或阻断反例。候选目录尚未遍历完时另有 `truncated` 标记。闭合分析将错误放入 `diagnostics`，仅把真实的状态/动作冲突放入 `counterexamples`。组合分析中的残差分区非同余见证只否定该分区，深度不足时不能据此否定整条组合规则。
 
 ```python
 from bidirectional_modeling.composition import CompositionRuleSelector
@@ -327,7 +327,12 @@ from bidirectional_modeling.extensions.concepts import ConceptLibrary
 library = ConceptLibrary((Concept("state", "declared task-relative state"),))
 for step in refinement.steps:
     if step.accepted_feature and step.closure_report.counterexamples:
-        library.refine_from_counterexample("state", step.closure_report.counterexamples[0])
+        library.refine_from_counterexample(
+            "state", step.closure_report.counterexamples[0],
+            source="operator review",
+            reason="同宏观类的状态在相同动作下产生不同后继",
+            applicability="已人工确认见证针对当前 state 定义",
+        )
 ```
 
 批次 `diagnostics` 保存 TraceDiagnostic 的稳定 code 和展示 detail，`boundaries` 为展示文案的派生视图。复核绑定原因码、证据与原始资源协议；仅修改 detail 不改变证书身份。复核执行预算只限制本次运行，不能把未完整采集的证据升级为完整证书。
@@ -338,3 +343,12 @@ for step in refinement.steps:
 验证器抛异常后若无法取得准确消耗，实现搜索将剩余额度保守计入 simulations_used 并停止执行；base-budget 诊断记录 reserved_simulations。这是防止再次分配的记账上界，不是虚构已验证场景数。失败证书仍记录零个已认证场景并绑定本次预算。
 
 ObservedEffectGenerator 生成的“maintain”目标用 EACH 检查整个声明时域；非恒定轨迹生成“at horizon …”终值目标。后者不主张初值、单调性、增加、减少或目录外的因果关系。
+
+
+### 执行与额外实验边界（0.24）
+
+`TraceBatch.simulations_used` 与证书 `simulations_used` 是预算记账量。模拟失败或证据无法留存时，无法知道实际用量，保守预留本批剩余额度；证书 `verified_scenarios` 不包含这些预留。预算约束不等于进程隔离，不能阻止第三方回调内部自行开展额外工作。
+
+延时探针默认只报告扩展规范的实验结果，失败或未决不撤销原目标的通过。只有显式配置 `HorizonExtensionProbe(blocking=True)`，才把额外规范纳入验收；两个规范的身份保存在见证中。
+
+均值聚合保留精确有理数。`Fraction` 的分子和分母可以用于无损 JSON 展示；不得先转换成浮点数再决定证书真假。

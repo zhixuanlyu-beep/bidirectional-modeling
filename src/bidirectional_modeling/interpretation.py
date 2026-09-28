@@ -23,10 +23,12 @@ from .core import (
     EquivalenceSpec,
     MacroSpec,
     InterpretationObservation,
+    InterpretationExclusion,
 )
 from .evaluation import SatisfactionEvaluator, TraceBatch
 from ._generation import CandidateStream
 from .structural import freeze_value
+from .provenance import safe_macro_spec_fingerprint, safe_context_fingerprint
 
 
 class HypothesisGenerator(Protocol):
@@ -250,7 +252,17 @@ class Interpreter:
             conflict = next((o for o in observations
                              if o.outcome not in _possibilities(hypothesis, by_experiment[o.experiment])), None)
             if conflict is not None:
-                excluded.append((hypothesis.name, conflict))
+                spec_digest, spec_error = safe_macro_spec_fingerprint(hypothesis.spec)
+                context_digest, context_error = safe_context_fingerprint(context)
+                if spec_error or context_error:
+                    undecided.append((hypothesis.name, tuple(
+                        error for error in (spec_error, context_error) if error)))
+                    continue
+                excluded.append(InterpretationExclusion(
+                    hypothesis.name, spec_digest,
+                    by_experiment[conflict.experiment],
+                    hypothesis.allowed_outcomes[conflict.experiment], conflict,
+                    context_digest))
                 continue
             horizon = hypothesis.spec.horizon
             batch = batches.get(horizon)

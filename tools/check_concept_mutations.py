@@ -41,6 +41,20 @@ MUTATIONS = (
     ('failure wording enters certificate identity', 'evaluation.py',
      'tuple(d.code for d in diagnostics))', 'tuple(d.detail for d in diagnostics))',
      'test_execution_contracts.FailureBudgetTests'),
+    ('internal collection failure becomes free work', 'evaluation.py',
+     'return self.simulation_limit', 'return len(self.traces)',
+     'test_claim_boundaries.WorkAccountingTests'),
+    ('mean rounded before truth judgment', 'core.py',
+     'return sum((Fraction(value) for value in values), Fraction()) / len(values)',
+     'return float(sum((Fraction(value) for value in values), Fraction()) / len(values))',
+     'test_claim_boundaries.ExactMeanTests'),
+    ('extra horizon silently changes acceptance', 'probes.py',
+     'blocking: bool = False', 'blocking: bool = True',
+     'test_claim_boundaries.ProbeScopeTests'),
+    ('concept relation loses required provenance', 'extensions/concepts.py',
+     'if any(not isinstance(v, str) or not v.strip() for v in (source, reason, applicability)):',
+     'if False:', 'test_claim_boundaries.JudgmentAndExclusionTests'),
+
 )
 
 
@@ -52,7 +66,7 @@ def run(source, target, cwd):
 
 
 def main():
-    for module in ('test_concept_contracts', 'test_execution_contracts'):
+    for module in ('test_concept_contracts', 'test_execution_contracts', 'test_claim_boundaries'):
         baseline = run(ROOT/'src', module, ROOT)
         if baseline.returncode:
             print(baseline.stderr)

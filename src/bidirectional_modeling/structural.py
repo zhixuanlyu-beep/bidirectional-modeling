@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from fractions import Fraction
 from copy import deepcopy
 from enum import Enum
 from functools import partial
@@ -52,6 +53,8 @@ def freeze_value(
         if math.isnan(value):
             return ("float", "nan")
         return ("float", value.hex())
+    if type(value) is Fraction:
+        return ("rational", value.numerator, value.denominator)
     if type(value) is str:
         return ("str", value)
     if type(value) is bytes:
@@ -370,3 +373,4 @@ def isolated_mapping(
     if not isinstance(copied, Mapping):
         raise TypeError("%s must remain a mapping after isolation" % purpose)
     return dict(copied)
+

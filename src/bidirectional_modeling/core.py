@@ -10,7 +10,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from statistics import mean
 from fractions import Fraction
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
 
@@ -274,7 +273,7 @@ def _compare(observed: Any, operator: str, expected: Any, tolerance: float):
     Floats denote their represented binary value. No numeric value is rounded
     to float for deciding truth. Non-numeric equality uses structural identity.
     """
-    numeric = type(observed) in (int, float) and type(expected) in (int, float)
+    numeric = type(observed) in (int, float, Fraction) and type(expected) in (int, float, Fraction)
     if numeric:
         if any(type(v) is float and not math.isfinite(v) for v in (observed, expected)):
             raise ValueError("numeric comparisons require finite values")
@@ -346,7 +345,9 @@ class FieldRequirement:
         if self.aggregation == Aggregation.MAX:
             return max(values)
         if self.aggregation == Aggregation.MEAN:
-            return mean(values)
+            if any(type(value) not in (int, float, Fraction) for value in values):
+                raise TypeError("mean requires explicit numeric values")
+            return sum((Fraction(value) for value in values), Fraction()) / len(values)
         if self.aggregation == Aggregation.DELTA:
             return values[-1] - values[0]
         return tuple(values)
@@ -876,6 +877,11 @@ class SatisfactionCertificate:
     complete: bool = True
     requirements_passed: bool = True
     coverage_authority: str = "candidate-enumeration"
+    charged_simulations: Optional[int] = None
+
+    @property
+    def simulations_used(self) -> int:
+        return self.verified_scenarios if self.charged_simulations is None else self.charged_simulations
 
     def __post_init__(self) -> None:
         if not self.spec_name or not self.model_name:
@@ -891,6 +897,11 @@ class SatisfactionCertificate:
             raise TypeError("verified_scenarios must be an integer")
         if self.verified_scenarios < 0:
             raise ValueError("verified_scenarios must be non-negative")
+        if self.charged_simulations is not None and (
+            type(self.charged_simulations) is not int
+            or self.charged_simulations < self.verified_scenarios
+        ):
+            raise ValueError("charged simulations must cover verified scenarios")
         if self.complete and any(c.evaluation_error is not None for c in self.checks):
             raise ValueError("a complete certificate cannot contain unresolved checks")
         if self.satisfied and (not self.complete or not self.requirements_passed):
@@ -961,6 +972,8 @@ class SatisfactionCertificate:
             getattr(batch, "protocol_fingerprint", None)
             == self.trace_batch_fingerprint
             and getattr(batch, "horizon", None) == self.horizon
+            and getattr(batch, "simulations_used", None) == self.simulations_used
+            and len(getattr(batch, "traces", ())) == self.verified_scenarios
             and getattr(batch, "model_fingerprint", None)
             == self.model_fingerprint
             and getattr(batch, "context_fingerprint", None)
@@ -994,7 +1007,7 @@ class ProbeOutcome:
 
     @property
     def simulations_used(self) -> int:
-        return self.certificate.verified_scenarios if self.certificate else 0
+        return self.certificate.simulations_used if self.certificate else 0
 
 
 @dataclass(frozen=True)
@@ -1121,6 +1134,26 @@ class InterpretationObservation:
 
 
 @dataclass(frozen=True)
+class InterpretationExclusion:
+    candidate: str
+    spec_fingerprint: str
+    experiment: Experiment
+    allowed_outcomes: Tuple[str, ...]
+    observation: InterpretationObservation
+    context_fingerprint: str
+
+    def __post_init__(self):
+        object.__setattr__(self, "allowed_outcomes", _labels(self.allowed_outcomes, "allowed outcomes"))
+        validate_fingerprint(self.spec_fingerprint, purpose="excluded specification")
+        validate_fingerprint(self.context_fingerprint, purpose="exclusion context")
+        if (self.observation.experiment != self.experiment.name
+                or self.observation.outcome not in self.experiment.outcomes
+                or not set(self.allowed_outcomes) <= set(self.experiment.outcomes)
+                or self.observation.outcome in self.allowed_outcomes):
+            raise ValueError("exclusion must contain a contradiction in the declared experiment")
+
+
+@dataclass(frozen=True)
 class DiscriminatingQuery:
     experiment: Experiment
     candidate_names: Tuple[str, ...]
@@ -1166,7 +1199,7 @@ class InterpretationResult:
     equivalent_explanations: Tuple[Tuple[str, ...], ...]
     discriminating_query: Optional[DiscriminatingQuery]
     ordering_policy: str = "name; no belief ranking"
-    excluded: Tuple[Tuple[str, InterpretationObservation], ...] = ()
+    excluded: Tuple[InterpretationExclusion, ...] = ()
     observations: Tuple[InterpretationObservation, ...] = ()
     simulations_used: int = 0
     truncated: bool = False
@@ -1218,7 +1251,7 @@ class InterpretationResult:
                              caveats=list(c.caveats)) for c in self.candidates],
             equivalent_explanations=[list(group) for group in self.equivalent_explanations],
             observations=[asdict(o) for o in self.observations],
-            excluded=[dict(candidate=name, observation=asdict(o)) for name, o in self.excluded],
+            excluded=[asdict(item) for item in self.excluded],
             rejected=[dict(candidate=name, binding=binding(certificate),
                            failed_checks=[check.name for check in certificate.checks if not check.passed])
                       for name, certificate in self.rejected],
