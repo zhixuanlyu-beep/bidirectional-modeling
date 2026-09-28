@@ -3,15 +3,14 @@ import unittest
 from dataclasses import replace
 from itertools import combinations, product
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine, CandidateEvaluation, Context, Experiment,
-    InterpretationObservation, PurposeHypothesis, PurposeLevel, ResourceBudget,
-    VerificationMeasures, pareto_partition,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.core import (CandidateEvaluation, VerificationMeasures)
+from bidirectional_modeling import (Context, Experiment, InterpretationObservation, PurposeHypothesis, PurposeLevel, ResourceBudget)
+from bidirectional_modeling.realization import (pareto_partition)
 from bidirectional_modeling.examples import organization_interpretation_scenario
 from bidirectional_modeling.interpretation import Interpreter
 from test_regressions import TupleTraceModel, x_spec, scenario_context
-from bidirectional_modeling import Trace
+from bidirectional_modeling import (Trace)
 
 
 class SetInterpretationTests(unittest.TestCase):

@@ -3,10 +3,8 @@ from bidirectional_modeling.search_queries import LowerSubstituteQuery, QuerySta
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    DescriptionLength, ExperimentHypothesisSearch, SearchBudgetExceeded,
-    SearchHypothesis, SearchObservation, SearchWorkBudget,
-)
+from bidirectional_modeling import (DescriptionLength, ExperimentHypothesisSearch, SearchHypothesis, SearchObservation, SearchWorkBudget)
+from bidirectional_modeling.search import (SearchBudgetExceeded)
 from bidirectional_modeling.search_examples import conflict_search_scenario
 
 
@@ -25,7 +23,7 @@ class SearchBudgetTests(unittest.TestCase):
         self.assertEqual(result.sufficiency, 'valid')
         self.assertEqual(result.minimality, 'undecided')
         self.assertEqual(result.stop_reason, 'subset_budget_exhausted')
-        self.assertFalse(self.search.validates_macro(self.certificate, self.data, max_subsets=0))
+        self.assertFalse(self.search.verify_macro(self.certificate, self.data, max_subsets=0).valid)
         result = self.search.verify_macro(self.certificate, self.data)
         self.assertTrue(result.valid)
         self.assertEqual(result.minimality, 'valid')
@@ -57,7 +55,6 @@ class SearchBudgetTests(unittest.TestCase):
     def test_report_separates_three_partition_domains(self):
         result = self.search.search(self.data)
         self.assertEqual(result.full_quotient, (('x',),('z',),('xz',)))
-        self.assertEqual(result.quotient, result.full_quotient)  # compatibility alias
         self.assertEqual(result.surviving_quotient, (('xz',),))
         self.assertEqual(result.observed_quotient, (('xz',),))
         self.assertEqual(result.stop_reason, 'determined')

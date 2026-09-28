@@ -2,6 +2,19 @@
 
 版本记录描述各版本引入时的行为；当前使用方式以 README 和专题文档为准。
 
+## 0.23.0
+
+- `CorrespondenceCertificate.commutes` 改为由反例与完整性推导的只读属性，删除构造参数；`status` 与 `passed` 不再接受相互矛盾的交换声明。局部见证可以与整体未决并存。
+- `engine.behaviorally_equivalent` 通过 SatisfactionEvaluator 收集完整、已绑定批次，与微观往返共用批次比较。返回 True/False/None；空、截断或未绑定证据返回 None，可显式传入共享预算。
+- 组合操作测试采用 audited_step/audited_observe。不稳定回调进入未决；可靠操作反例默认跳过该用例的残差分析，`full_diagnostics=True` 可显式请求完整诊断。
+- 完整适配与部分预测共用内部双轮矩阵采集。部分响应直接检查在声明响应域中的可扩展性，不再构造临时协议、目标、答案表和搜索目录。
+- TraceBatch 改为保存 `TraceDiagnostic(code, detail)`；boundaries 只读派生展示文案。trace-batch-v2 绑定原因码及原资源协议，不绑定提示文字；独立复核预算不改写原始采集预算。旧批次和预测回执需重新采集。
+- 顶层仅导出常用声明与实现、解释、有限查询入口；详细证书、指纹、适配、上下文和编排 API 从所属模块导入。顶层不再导出 BidirectionalModelingEngine，使用 `bidirectional_modeling.engine`。
+- 引擎删除 check_closure、discover_residual_quotient、select_composition_rules、prepare_hypothesis_search 转发方法；分别使用 ClosureAnalyzer.analyze、ResidualQuotientAnalyzer.analyze、CompositionRuleSelector.select、ExecutableSearchAdapter.prepare。对应验证器与尺度图按需创建。
+- 删除引擎 concept_library/concepts/concept_name 接口。调用方按 RefinementStep.accepted_feature 和 closure_report.counterexamples 显式更新 extensions.concepts.ConceptLibrary。
+- 删除 validates_macro，使用 verify_macro 的结构化结论；HypothesisSearchReport 只保留 full_quotient；SearchSession 只读取 schema 2。独立转换扫描参照移入差分测试。
+- 新增状态一致性、空域/预算/绑定、非确定执行、反驳短路、采集复用、诊断文案无关性和可选服务隔离回归。历史修复说明收归本变更记录。
+
 ## 0.22.0
 
 - 对应模块新增 CorrespondenceIssue，将 diagnostics、applicability_failures 与真实 counterexamples 分开；新增 status。commutes 改为 True/False/None，覆盖不足或未执行的用例不再返回 True；passed 仍为布尔值。不保留旧混合结果语义。
@@ -76,7 +89,41 @@ PR #14 的配套改动：
 
 ## 0.18.1
 
-`0.18.1` 修复审查发现的跨接口问题：域外预测使已有缓存失效，失效实例不再提供当前快照；部分预测记录原始采集预算，允许独立设置复核执行预算；惰性查询批量发布已完成预测，消除逐候选全目录重扫。兼容性与规模回归结果见 [修复说明](docs/search_review_fixes.md)。
+`0.18.1` 修复审查发现的跨接口问题：域外预测使已有缓存失效，失效实例不再提供当前快照；部分预测记录原始采集预算，允许独立设置复核执行预算；惰性查询批量发布已完成预测，消除逐候选全目录重扫。兼容性与规模回归结果如下。
+
+本轮修复 0.18.0 的四个跨接口问题。测试先复现原问题，再验证结论、资源上限和缓存边界；未引入部分响应剪枝或自动实验规划。
+
+### 缓存失效与快照
+
+适配器现在用明确的 `PredictionDomainError` 报告完整响应落到声明域外，诊断原因是 `prediction_outside_response_universe`，不再依赖 Python 的 `tuple.index` 错误文案。已有完整或部分缓存的候选出现此诊断时，惰性实例失效。没有旧缓存的失败候选继续保持未知，后面的候选仍可提供见证。
+
+实例失效或声明变更后，`snapshot`、`execute`、`predict_experiments` 均拒绝使用并要求重建。已返回的快照保持不变，供历史审计；框架无法撤销调用者已经持有的 Python 对象。这一限制不意味着旧快照可代表当前模型。
+
+### 原始采集预算和复核执行预算
+
+`PartialPrediction.simulation_limit` 保存原始采集预算，回执指纹版本升级为 `partial-prediction-v2`。验证器按该原始协议重建批次绑定，同时对实际重放使用独立的 `max_simulations` 上限。例如原始预算为 10000、完整重放只需 2 次模拟时，复核预算为 2 或 10000 均可有效通过；预算为 1 则未决。
+
+只有完整覆盖且绑定正确的重放批次，才能重建原始资源协议。恰好达到较小执行上限时，收集器可能记录“未证明迭代器耗尽”的预算提示；独立场景清单已证明完整覆盖的情况下，重建较大原始预算的批次时去掉这一特定提示，保留其他诊断。不完整批次不会因此变为完整。
+
+回执记录的原始预算仍参与批次一致性验证；篡改预算或响应不能通过。旧对象若缺少该字段，返回 `undecided / missing_collection_protocol`，需要重新采集。未猜测旧预算，也未直接忽略批次来源差异。现有 SearchSession JSON schema 不变。
+
+### 惰性查询的规模回归
+
+之前每完成一个候选都会重建有限问题并重扫整个目录。现在每次调用：先检查已缓存候选，按需验证新完成的候选，最后一次性发布成功预测并生成绑定最终快照的回执。工作预算中断仍保留已完整验证的候选，返回结论由最终查询预算决定。
+
+用同一单实验、同一宏观标签的目录查询异义候选，必须穷尽目录才能确认 `ABSENT`：
+
+| 候选数 | 修复前候选检查 | 修复后候选检查 | 模拟次数（前后相同） |
+| --- | ---: | ---: | ---: |
+| 10 | 110 | 30 | 20 |
+| 20 | 420 | 60 | 40 |
+| 40 | 1640 | 120 | 80 |
+
+这是语义操作计数对照，不是墙钟速度承诺。规模回归由 `tests/test_search_review_regressions.py` 验证线性检查上界，并由独立扫描验证器复核最终结论。同时覆盖缓存低阶替代候选、预算截断及历史快照保留。
+
+完整性能基准中，惰性预测的耗时、内存和自动实验选择成本仍待后续扩展；已有 `benchmark_search` 和 `benchmark_search_updates` 仍明确排除预测准备成本。
+
+
 
 ## 0.18.0
 

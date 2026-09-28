@@ -1,14 +1,9 @@
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine,
-    Correspondence,
-    EquivalenceSpec,
-    ResourceBudget,
-    Scale,
-    ScenarioKey,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.correspondence import (Correspondence, Scale)
+from bidirectional_modeling import (EquivalenceSpec, ResourceBudget, ScenarioKey)
 from bidirectional_modeling.examples import scale_correspondence_scenario
 
 

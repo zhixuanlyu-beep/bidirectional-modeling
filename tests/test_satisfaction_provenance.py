@@ -1,18 +1,11 @@
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine,
-    CheckResult,
-    Context,
-    CustomRequirement,
-    EquivalenceSpec,
-    MacroSpec,
-    ResidualQuotientAnalyzer,
-    RequirementCategory,
-    SatisfactionEvaluator,
-    macro_spec_fingerprint,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.core import (CheckResult)
+from bidirectional_modeling import (Context, CustomRequirement, EquivalenceSpec, MacroSpec, RequirementCategory, SatisfactionEvaluator)
+from bidirectional_modeling.residual import (ResidualQuotientAnalyzer)
+from bidirectional_modeling.provenance import (macro_spec_fingerprint)
 from bidirectional_modeling.examples import (
     residual_quotient_scenario,
     software_scenario,

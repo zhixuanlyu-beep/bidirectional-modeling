@@ -5,13 +5,9 @@ from copy import deepcopy
 from dataclasses import FrozenInstanceError, asdict, replace
 from itertools import permutations
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine, CheckResult, Context, CustomRequirement,
-    DiscriminatingQuery, EquivalenceSpec, Experiment, FieldRequirement,
-    FiniteStateModel, InterpretationObservation, InterpretationResult,
-    MacroSpec, ModelMetrics, PurposeHypothesis, PurposeLevel, RequirementCategory,
-    ResourceBudget, SatisfactionEvaluator,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.core import (CheckResult, DiscriminatingQuery, InterpretationResult)
+from bidirectional_modeling import (Context, CustomRequirement, EquivalenceSpec, Experiment, FieldRequirement, FiniteStateModel, InterpretationObservation, MacroSpec, ModelMetrics, PurposeHypothesis, PurposeLevel, RequirementCategory, ResourceBudget, SatisfactionEvaluator)
 
 
 def crash(model, traces, context):

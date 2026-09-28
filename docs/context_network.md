@@ -44,7 +44,7 @@ bidirectional-modeling context-demo --json
 ## 证书迁移与会话
 
 ```python
-from bidirectional_modeling import transport_conflict, verify_transported_conflict
+from bidirectional_modeling.certificate_transport import (transport_conflict, verify_transported_conflict)
 
 receipt = transport_conflict(
     source_search, target_search, transition, source_certificate,
@@ -145,7 +145,7 @@ for certificate in screen.certificates:
 
 ## API 和运行边界
 
-0.19.0 移除旧兼容入口（详见 [变更记录](../CHANGELOG.md)），不改变 `SearchProtocol`、现有查询状态与完整预测缓存的语义，不降低旧证书的指纹约束。核心仍没有第三方运行依赖，支持 Python 3.9+。
+核心没有第三方运行依赖，支持 Python 3.9+。接口迁移见 [变更记录](../CHANGELOG.md)。
 
 新有限查询接受共享 `SearchWorkBudget`；该预算统计语义工作，不覆盖全部构造、哈希、排序、Python 指令或内存分配。布尔枚举和整体赋值穷举可能指数增长。部分预测另外使用模拟预算。
 

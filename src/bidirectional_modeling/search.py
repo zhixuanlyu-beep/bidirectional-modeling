@@ -249,7 +249,7 @@ class HypothesisSearchReport:
     pruned: Tuple[str, ...]
     rejected: Tuple[str, ...]
     undecided: Tuple[str, ...]
-    quotient: Tuple[Tuple[str, ...], ...]
+    full_quotient: Tuple[Tuple[str, ...], ...]
     answers: Tuple[str, ...]
     determined: bool
     conflicts: Tuple[ConflictCertificate, ...]
@@ -263,10 +263,6 @@ class HypothesisSearchReport:
     stop_reason: str = "completed"
     work: SearchWork = SearchWork()
 
-    @property
-    def full_quotient(self) -> Tuple[Tuple[str, ...], ...]:
-        """Explicit name for the backward-compatible full-catalogue quotient."""
-        return self.quotient
 
 
 class ExperimentHypothesisSearch:
@@ -650,14 +646,6 @@ class ExperimentHypothesisSearch:
             return MacroValidationReport(sufficient, "valid", "completed", checked, budget.work)
         except SearchBudgetExceeded as error:
             return MacroValidationReport(sufficient, minimality, error.reason, checked, budget.work)
-
-    def validates_macro(self, certificate: MacroEvidenceCertificate, evidence, *,
-                        max_subsets=10000, budget=None) -> bool:
-        """Bounded boolean compatibility wrapper; False also includes undecided.
-
-        Use verify_macro to distinguish invalidity from resource exhaustion.
-        """
-        return self.verify_macro(certificate, evidence, max_subsets=max_subsets, budget=budget).valid
 
     def next_experiment(self, evidence=(), *, budget=None) -> Optional[SearchExperiment]:
         """Greedy unequal-answer pair coverage per cost, not information gain.

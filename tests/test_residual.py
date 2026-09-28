@@ -1,18 +1,13 @@
+
+from bidirectional_modeling.refinement import ClosureAnalyzer
+from bidirectional_modeling.residual import ResidualQuotientAnalyzer
 import unittest
 from dataclasses import replace
 from enum import Enum
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine,
-    Context,
-    EquivalenceSpec,
-    FiniteStateModel,
-    ModelMetrics,
-    MacroSpec,
-    ResidualClass,
-    ResidualQuotientAnalyzer,
-    UndefinedTransition,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling import (Context, EquivalenceSpec, FiniteStateModel, ModelMetrics, MacroSpec, UndefinedTransition)
+from bidirectional_modeling.residual import (ResidualClass, ResidualQuotientAnalyzer)
 from bidirectional_modeling.examples import (
     partial_residual_scenario,
     residual_quotient_scenario,
@@ -47,7 +42,7 @@ class ResidualQuotientTests(unittest.TestCase):
         self.engine = BidirectionalModelingEngine()
 
     def discover(self, **kwargs):
-        return self.engine.discover_residual_quotient(
+        return ResidualQuotientAnalyzer().analyze(
             self.model, self.equivalence, self.context, **kwargs
         )
 
@@ -128,7 +123,7 @@ class ResidualQuotientTests(unittest.TestCase):
             ("advance",),
             transition,
         )
-        report = self.engine.discover_residual_quotient(
+        report = ResidualQuotientAnalyzer().analyze(
             model, EquivalenceSpec(("signal",)), Context()
         )
 
@@ -221,7 +216,7 @@ class ResidualQuotientTests(unittest.TestCase):
 
     def test_declared_partial_support_is_semantic_and_keeps_completeness(self):
         equivalence, context, model = partial_residual_scenario()
-        report = self.engine.discover_residual_quotient(
+        report = ResidualQuotientAnalyzer().analyze(
             model, equivalence, context
         )
 
@@ -274,7 +269,7 @@ class ResidualQuotientTests(unittest.TestCase):
             horizon=1,
         )
 
-        report = self.engine.check_closure(model, spec, context)
+        report = ClosureAnalyzer().analyze(model, spec, context)
         self.assertFalse(report.closed)
         self.assertTrue(report.complete)
         self.assertEqual(
@@ -406,7 +401,7 @@ class ResidualQuotientTests(unittest.TestCase):
         shifted_context = replace(
             self.context, environment={"experiment": "holdout"}
         )
-        shifted = self.engine.discover_residual_quotient(
+        shifted = ResidualQuotientAnalyzer().analyze(
             self.model, self.equivalence, shifted_context
         )
 
@@ -431,3 +426,4 @@ class ResidualQuotientTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

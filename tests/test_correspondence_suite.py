@@ -1,17 +1,10 @@
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine,
-    Context,
-    CorrespondenceCaseRole,
-    CorrespondenceSuiteCertificate,
-    CorrespondenceValidationCase,
-    Intervention,
-    ResourceBudget,
-    ScenarioKey,
-    context_fingerprint,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling import (Context, Intervention, ResourceBudget, ScenarioKey)
+from bidirectional_modeling.correspondence import (CorrespondenceCaseRole, CorrespondenceSuiteCertificate, CorrespondenceValidationCase)
+from bidirectional_modeling.provenance import (context_fingerprint)
 from bidirectional_modeling.examples import scale_correspondence_suite
 
 
@@ -199,3 +192,4 @@ class CorrespondenceSuiteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

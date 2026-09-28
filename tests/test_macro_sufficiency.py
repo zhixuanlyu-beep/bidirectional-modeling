@@ -1,8 +1,8 @@
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (certify_macro_sufficiency, verify_macro_sufficiency,
-                                    SearchWorkBudget, SearchObservation)
+from bidirectional_modeling.macro_certificates import (certify_macro_sufficiency, verify_macro_sufficiency)
+from bidirectional_modeling import (SearchWorkBudget, SearchObservation)
 from bidirectional_modeling.search_examples import conflict_search_scenario
 
 

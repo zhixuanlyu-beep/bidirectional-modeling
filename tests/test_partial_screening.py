@@ -1,7 +1,9 @@
 import unittest
 from dataclasses import replace
-from bidirectional_modeling import (LazyExecutableSearch, SearchObservation, SearchWorkBudget,
-                                    verify_candidate_exclusion, ExecutableSearchAdapter)
+from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
+from bidirectional_modeling import (SearchObservation, SearchWorkBudget)
+from bidirectional_modeling.search_partial import (verify_candidate_exclusion)
+from bidirectional_modeling.search_adapter import (ExecutableSearchAdapter)
 from test_search_partial import partial_args
 
 

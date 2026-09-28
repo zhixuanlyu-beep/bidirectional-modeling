@@ -7,13 +7,10 @@ from dataclasses import replace
 from itertools import product
 from unittest.mock import patch
 
-from bidirectional_modeling import (
-    Aggregation, BidirectionalModelingEngine, Context, DescriptionLength,
-    ExperimentHypothesisSearch, FieldRequirement, ResourceBudget, ResponseConstraint,
-    SatisfactionEvaluator, SearchExperiment, SearchHypothesis, SearchObservation,
-    SearchProtocol, Trace, transport_conflict,
-)
-from bidirectional_modeling import cli
+from bidirectional_modeling import (Aggregation, Context, DescriptionLength, ExperimentHypothesisSearch, FieldRequirement, ResourceBudget, ResponseConstraint, SatisfactionEvaluator, SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol, Trace)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.certificate_transport import (transport_conflict)
+from bidirectional_modeling import (cli)
 from bidirectional_modeling.examples import scale_correspondence_scenario
 from test_context_network import identity_transition
 from test_interpretation_status import model, spec

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .refinement import ClosureAnalyzer
+from .residual import ResidualQuotientAnalyzer
+from .composition import CompositionRuleSelector
+
 from dataclasses import asdict
 import argparse
 import json
@@ -32,29 +36,34 @@ def build_demo_report() -> Dict[str, Any]:
     residual_equivalence, residual_context, residual_model = (
         residual_quotient_scenario()
     )
-    residual = engine.discover_residual_quotient(
+    residual = ResidualQuotientAnalyzer().analyze(
         residual_model,
         residual_equivalence,
         residual_context,
     )
 
     composition_experiments, composition_rules = composition_rule_scenario()
-    composition = engine.select_composition_rules(
+    composition = CompositionRuleSelector().select(
         composition_rules,
         composition_experiments,
         selection_policy="shortest_description",
     )
 
     science_spec, science_context, science_model = science_closure_scenario()
-    closure = engine.check_closure(science_model, science_spec, science_context)
+    closure = ClosureAnalyzer().analyze(science_model, science_spec, science_context)
     refinement = engine.refine_until_closed(
         science_model,
         science_spec,
         science_context,
         lambda report, _spec, _model: report.suggested_features[0],
-        concept_name="position state",
     )
-    refined = engine.concepts.get("position state")
+    from .extensions.concepts import ConceptLibrary
+    from .core import Concept
+    concepts = ConceptLibrary((Concept("position state", "task-relative position equivalence"),))
+    for step in refinement.steps:
+        if step.accepted_feature and step.closure_report.counterexamples:
+            concepts.refine_from_counterexample("position state", step.closure_report.counterexamples[0])
+    refined = concepts.get("position state")
 
     org_context, org_model, hypotheses, experiments, evidence = (
         organization_interpretation_scenario()

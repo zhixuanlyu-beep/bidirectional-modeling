@@ -7,12 +7,10 @@ from dataclasses import replace
 from itertools import product
 from unittest.mock import patch
 
-from bidirectional_modeling import (
-    Context, EquivalenceSpec, FiniteStateModel, MacroSpec, ModelMetrics, ScenarioKey,
-    SearchProtocol, SearchExperiment, SearchObservation, SearchWorkBudget, SearchSession,
-    ModelSearchCase, ModelSearchCandidate, LazyExecutableSearch, ExperimentHypothesisSearch,
-    LowerSubstituteQuery, QueryStatus, UndefinedTransition,
-)
+from bidirectional_modeling import (Context, EquivalenceSpec, FiniteStateModel, MacroSpec, ModelMetrics, ScenarioKey, SearchProtocol, SearchExperiment, SearchObservation, SearchWorkBudget, ExperimentHypothesisSearch, LowerSubstituteQuery, QueryStatus, UndefinedTransition)
+from bidirectional_modeling.search_session import (SearchSession)
+from bidirectional_modeling.search_adapter import (ModelSearchCase, ModelSearchCandidate)
+from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
 from bidirectional_modeling.extensions.boolean import (
     BooleanExpression, BooleanLanguage, find_boolean_substitute, verify_boolean_substitute,
     enumerate_boolean_language,

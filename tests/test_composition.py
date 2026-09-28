@@ -1,16 +1,12 @@
+
+from bidirectional_modeling.composition import CompositionRuleSelector
 import math
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine,
-    CompositionExperiment,
-    CompositionRule,
-    CompositionRuleSelector,
-    CompositionTest,
-    Context,
-    EquivalenceSpec,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.composition import (CompositionExperiment, CompositionRule, CompositionRuleSelector, CompositionTest)
+from bidirectional_modeling import (Context, EquivalenceSpec)
 from bidirectional_modeling.examples import composition_rule_scenario
 from bidirectional_modeling.cli import build_demo_report
 
@@ -22,7 +18,7 @@ class CompositionRuleSelectionTests(unittest.TestCase):
 
     def select(self, rules=None, experiments=None, **kwargs):
         kwargs.setdefault("selection_policy", "shortest_description")
-        return self.engine.select_composition_rules(
+        return CompositionRuleSelector().select(
             rules or self.rules,
             experiments or self.experiments,
             **kwargs,
@@ -180,7 +176,7 @@ class CompositionRuleSelectionTests(unittest.TestCase):
         self.assertIsNone(case.residual_report)
         self.assertIn("TypeError", case.analysis_error)
         self.assertEqual(case.class_count, 0)
-        self.assertEqual(case.state_description_length, 0.0)
+        self.assertIsNone(case.state_description_length)
         self.assertFalse(report.rejected)
 
     def test_readout_errors_fail_both_test_and_residual_analysis(self):

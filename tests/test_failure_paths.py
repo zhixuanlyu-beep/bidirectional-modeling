@@ -2,12 +2,10 @@
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine, CheckResult, Context, CustomRequirement,
-    ExperimentHypothesisSearch, ProbeOutcome, Realizer, RequirementCategory,
-    ResourceBudget, SatisfactionEvaluator, SearchObservation, SearchWorkBudget,
-    Trace, VerificationIssue, transport_conflict, verify_transported_conflict,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.core import (CheckResult, ProbeOutcome, VerificationIssue)
+from bidirectional_modeling import (Context, CustomRequirement, ExperimentHypothesisSearch, Realizer, RequirementCategory, ResourceBudget, SatisfactionEvaluator, SearchObservation, SearchWorkBudget, Trace)
+from bidirectional_modeling.certificate_transport import (transport_conflict, verify_transported_conflict)
 from test_context_network import additive_protocol, identity_transition
 from test_interpretation_status import hypothesis, model, spec
 from test_regressions import TupleTraceModel, scenario_context

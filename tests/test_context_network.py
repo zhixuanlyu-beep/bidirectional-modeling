@@ -2,7 +2,10 @@ import unittest
 from dataclasses import replace
 from itertools import product
 
-from bidirectional_modeling import (ModelingContext, ContextChange, ContextTransition, validate_context_transition, SearchExperiment, SearchProtocol, ResponseConstraint, ExperimentHypothesisSearch, SearchObservation, SearchWorkBudget, transport_conflict, verify_transported_conflict, SearchSession)
+from bidirectional_modeling.context_network import (ModelingContext, ContextChange, ContextTransition, validate_context_transition)
+from bidirectional_modeling import (SearchExperiment, SearchProtocol, ResponseConstraint, ExperimentHypothesisSearch, SearchObservation, SearchWorkBudget)
+from bidirectional_modeling.certificate_transport import (transport_conflict, verify_transported_conflict)
+from bidirectional_modeling.search_session import (SearchSession)
 from bidirectional_modeling.context_network import (ContextNetwork)
 
 

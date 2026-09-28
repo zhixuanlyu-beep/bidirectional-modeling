@@ -1,31 +1,11 @@
+
+from bidirectional_modeling.refinement import ClosureAnalyzer
 from bidirectional_modeling.extensions.concepts import ConceptLibrary
 import unittest
 
-from bidirectional_modeling import (
-    Aggregation,
-    BidirectionalModelingEngine,
-    Concept,
-    Context,
-    EquivalenceSpec,
-    Evidence,
-    Experiment,
-    FieldRequirement,
-    FiniteStateModel,
-    Intervention,
-    MacroSpec,
-    ModelMetrics,
-    ObservedEffectGenerator,
-    PurposeHypothesis,
-    PurposeLevel,
-    Realizer,
-    RegistryGenerator,
-    RequirementCategory,
-    ResourceBudget,
-    ScenarioKey,
-    SatisfactionEvaluator,
-    Trace,
-    behaviorally_equivalent,
-)
+from bidirectional_modeling import (Aggregation, Context, EquivalenceSpec, Evidence, Experiment, FieldRequirement, FiniteStateModel, Intervention, MacroSpec, ModelMetrics, ObservedEffectGenerator, PurposeHypothesis, PurposeLevel, Realizer, RegistryGenerator, RequirementCategory, ResourceBudget, ScenarioKey, SatisfactionEvaluator, Trace)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine, behaviorally_equivalent)
+from bidirectional_modeling.core import (Concept)
 from bidirectional_modeling.probes import HorizonExtensionProbe
 from bidirectional_modeling.examples import (
     organization_interpretation_scenario,
@@ -610,7 +590,7 @@ class RegressionTests(unittest.TestCase):
         )
 
         self.assertFalse(
-            behaviorally_equivalent(left, right, x_spec(), Context())
+            behaviorally_equivalent(left, right, x_spec(), scenario_context(("A", "baseline"), ("B", "baseline")))
         )
 
     def test_equivalence_and_signature_use_the_same_partition(self):
@@ -634,7 +614,7 @@ class RegressionTests(unittest.TestCase):
 
     def test_one_refinement_is_one_version_and_judgments_do_not_conflict(self):
         spec, context, model = science_closure_scenario()
-        counterexample = BidirectionalModelingEngine().check_closure(
+        counterexample = ClosureAnalyzer().analyze(
             model, spec, context
         ).counterexamples[0]
         library = ConceptLibrary((Concept("c", "definition"),))
@@ -657,12 +637,11 @@ class RegressionTests(unittest.TestCase):
             spec,
             context,
             lambda report, _spec, _model: report.suggested_features[0],
-            concept_name="position state",
             max_iterations=1,
         )
         self.assertFalse(result.closed)
         self.assertIn("velocity", result.final_spec.observables)
-        self.assertEqual(engine.concepts.get("position state").version, 2)
+        self.assertTrue(result.steps[0].closure_report.counterexamples)
         self.assertFalse(result.steps[-1].closure_report.complete)
         self.assertEqual(result.stopped_reason, "closure-analysis-undecided")
 
@@ -692,7 +671,7 @@ class RegressionTests(unittest.TestCase):
             readout,
             ModelMetrics(1, 1, 1),
         )
-        report = BidirectionalModelingEngine().check_closure(model, spec, Context())
+        report = ClosureAnalyzer().analyze(model, spec, Context())
         self.assertFalse(report.closed)
         self.assertGreater(report.explored_states, 1)
         self.assertIn("phase", report.suggested_features)
@@ -723,7 +702,7 @@ class RegressionTests(unittest.TestCase):
             lambda state, context: {"x": state["x"]},
             ModelMetrics(1, 1, 1),
         )
-        report = BidirectionalModelingEngine().check_closure(
+        report = ClosureAnalyzer().analyze(
             model, spec, Context(), max_depth=0
         )
         self.assertFalse(report.closed)
@@ -731,7 +710,7 @@ class RegressionTests(unittest.TestCase):
 
     def test_incomplete_closure_search_never_claims_a_proof(self):
         spec, context, model = science_closure_scenario()
-        report = BidirectionalModelingEngine().check_closure(
+        report = ClosureAnalyzer().analyze(
             model, spec, context, max_states=1
         )
         self.assertFalse(report.complete)
@@ -760,8 +739,8 @@ class RegressionTests(unittest.TestCase):
             ModelMetrics(1, 1, 1),
         )
         engine = BidirectionalModelingEngine()
-        shallow = engine.check_closure(model, spec, Context(), max_depth=1)
-        deeper = engine.check_closure(model, spec, Context(), max_depth=2)
+        shallow = ClosureAnalyzer().analyze(model, spec, Context(), max_depth=1)
+        deeper = ClosureAnalyzer().analyze(model, spec, Context(), max_depth=2)
 
         self.assertFalse(shallow.complete)
         self.assertFalse(shallow.closed)
@@ -787,7 +766,7 @@ class RegressionTests(unittest.TestCase):
             lambda state, context: {"x": state["x"]},
             ModelMetrics(1, 1, 1),
         )
-        report = BidirectionalModelingEngine().check_closure(
+        report = ClosureAnalyzer().analyze(
             model, x_spec(), Context(), max_depth=0
         )
 

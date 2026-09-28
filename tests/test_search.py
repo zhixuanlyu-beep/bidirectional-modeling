@@ -3,11 +3,8 @@ import unittest
 from dataclasses import replace
 from itertools import product
 
-from bidirectional_modeling import (
-    ConflictCertificate, DescriptionLength, ExperimentHypothesisSearch,
-    ResponseConstraint, SearchExperiment, SearchHypothesis, SearchObservation,
-    SearchProtocol,
-)
+from bidirectional_modeling.search import (ConflictCertificate)
+from bidirectional_modeling import (DescriptionLength, ExperimentHypothesisSearch, ResponseConstraint, SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol)
 
 
 def scenario():
@@ -98,16 +95,16 @@ class SearchTests(unittest.TestCase):
         self.assertTrue(c.determined)
         self.assertTrue(c.minimum_cardinality)
         self.assertEqual(len(c.retained_evidence), 2)
-        self.assertTrue(search.validates_macro(c,evidence))
-        self.assertFalse(search.validates_macro(replace(c,retained_evidence=()),evidence))
-        self.assertFalse(search.validates_macro(replace(c,answers=('wrong',)),evidence))
-        self.assertFalse(search.validates_macro(replace(c,determined=False),evidence))
-        self.assertFalse(search.validates_macro(replace(c,retained_evidence=evidence),evidence))
-        self.assertFalse(search.validates_macro(c,evidence[:-1]))
+        self.assertTrue(search.verify_macro(c,evidence).valid)
+        self.assertFalse(search.verify_macro(replace(c,retained_evidence=()),evidence).valid)
+        self.assertFalse(search.verify_macro(replace(c,answers=('wrong',)),evidence).valid)
+        self.assertFalse(search.verify_macro(replace(c,determined=False),evidence).valid)
+        self.assertFalse(search.verify_macro(replace(c,retained_evidence=evidence),evidence).valid)
+        self.assertFalse(search.verify_macro(c,evidence[:-1]).valid)
         # Expanded catalogue invalidates old macro basis, while conflict proof is reusable.
         new = SearchHypothesis('zero',0,'additive',DescriptionLength())
         other = ExperimentHypothesisSearch(search.protocol,search.hypotheses+(new,),search.target)
-        self.assertFalse(other.validates_macro(c,evidence))
+        self.assertFalse(other.verify_macro(c,evidence).valid)
         conflict = search.learn_conflict(('additive',), evidence)
         self.assertTrue(other.validates_conflict(conflict,evidence))
 
@@ -119,7 +116,7 @@ class SearchTests(unittest.TestCase):
         c = search.compress_evidence(evidence,max_subsets=0)
         self.assertEqual(c.retained_evidence, evidence)
         self.assertFalse(c.minimum_cardinality)
-        self.assertTrue(search.validates_macro(c,evidence))
+        self.assertTrue(search.verify_macro(c,evidence).valid)
         h = SearchHypothesis('timeout',None,'other',DescriptionLength())
         other = ExperimentHypothesisSearch(search.protocol,search.hypotheses+(h,),search.target)
         self.assertFalse(other.search(evidence).determined)
@@ -127,7 +124,7 @@ class SearchTests(unittest.TestCase):
         self.assertIn(('timeout',),other.partition())
         with self.assertRaises(ValueError):
             other.compress_evidence(evidence)
-        self.assertFalse(other.validates_macro(c,evidence))
+        self.assertFalse(other.verify_macro(c,evidence).valid)
 
     def test_empty_version_space_never_proves_answer(self):
         search, _ = scenario()
@@ -179,7 +176,7 @@ class SearchTests(unittest.TestCase):
         basis = search.compress_evidence(evidence[:1])
         self.assertFalse(basis.determined)
         self.assertEqual(basis.retained_evidence, ())
-        self.assertTrue(search.validates_macro(basis, evidence[:1]))
+        self.assertTrue(search.verify_macro(basis, evidence[:1]).valid)
 
     def test_joint_core_removes_redundancy_and_unknowns_can_inherit_conflicts(self):
         search, evidence = scenario()
@@ -193,7 +190,7 @@ class SearchTests(unittest.TestCase):
         # Forged evidence cannot pass by retaining an unrelated observation.
         macro = search.compress_evidence(evidence)
         bad = replace(macro, retained_evidence=(SearchObservation('00','1','fake'),))
-        self.assertFalse(search.validates_macro(bad,evidence))
+        self.assertFalse(search.verify_macro(bad,evidence).valid)
 
     def test_demo_integration(self):
         from bidirectional_modeling.search_examples import build_search_demo_report

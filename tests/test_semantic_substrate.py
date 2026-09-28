@@ -2,25 +2,12 @@ import math
 import unittest
 from enum import Enum, IntEnum
 
-from bidirectional_modeling import (
-    ClosureAnalyzer,
-    CompositionExperiment,
-    CompositionRule,
-    CompositionRuleSelector,
-    CompositionTest,
-    Context,
-    EquivalenceSpec,
-    Experiment,
-    FieldRequirement,
-    FiniteStateModel,
-    VerificationMeasures,
-    MacroSpec,
-    ModelMetrics,
-    ResidualQuotientAnalyzer,
-    ResourceBudget,
-    SatisfactionEvaluator,
-    context_fingerprint,
-)
+from bidirectional_modeling.refinement import (ClosureAnalyzer)
+from bidirectional_modeling.composition import (CompositionExperiment, CompositionRule, CompositionRuleSelector, CompositionTest)
+from bidirectional_modeling import (Context, EquivalenceSpec, Experiment, FieldRequirement, FiniteStateModel, MacroSpec, ModelMetrics, ResourceBudget, SatisfactionEvaluator)
+from bidirectional_modeling.core import (VerificationMeasures)
+from bidirectional_modeling.residual import (ResidualQuotientAnalyzer)
+from bidirectional_modeling.provenance import (context_fingerprint)
 
 
 ZERO_METRICS = ModelMetrics(0.0, 0.0, 0.0)

@@ -2,12 +2,9 @@ import unittest
 from dataclasses import replace
 from functools import partial
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine,
-    ScaleGraph,
-    ScenarioKey,
-    correspondence_fingerprint,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.correspondence import (ScaleGraph, correspondence_fingerprint)
+from bidirectional_modeling import (ScenarioKey)
 from bidirectional_modeling.cli import build_demo_report
 from bidirectional_modeling.examples import (
     scale_correspondence_scenario,

@@ -1,17 +1,13 @@
+from bidirectional_modeling.extensions.concepts import ConceptLibrary
+
+from bidirectional_modeling.refinement import ClosureAnalyzer
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine,
-    Concept,
-    HorizonExtensionProbe,
-    ObservedEffectGenerator,
-    ParametricCandidateGenerator,
-    PurposeHypothesis,
-    PurposeLevel,
-    Realizer,
-    ResourceBudget,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.core import (Concept)
+from bidirectional_modeling.probes import (HorizonExtensionProbe)
+from bidirectional_modeling import (ObservedEffectGenerator, ParametricCandidateGenerator, PurposeHypothesis, PurposeLevel, Realizer, ResourceBudget)
 from bidirectional_modeling.examples import (
     organization_interpretation_scenario,
     science_closure_scenario,
@@ -75,7 +71,7 @@ class FrameworkTests(unittest.TestCase):
 
     def test_non_closure_exposes_hidden_velocity(self):
         spec, context, model = science_closure_scenario()
-        report = self.engine.check_closure(model, spec, context)
+        report = ClosureAnalyzer().analyze(model, spec, context)
 
         self.assertFalse(report.closed)
         self.assertTrue(report.counterexamples)
@@ -86,11 +82,12 @@ class FrameworkTests(unittest.TestCase):
 
     def test_counterexample_versions_concept_memory(self):
         spec, context, model = science_closure_scenario()
-        counterexample = self.engine.check_closure(model, spec, context).counterexamples[0]
-        self.engine.concepts.add(
+        counterexample = ClosureAnalyzer().analyze(model, spec, context).counterexamples[0]
+        library = ConceptLibrary()
+        library.add(
             Concept("position state", "equal position means equal macro state")
         )
-        updated = self.engine.concepts.refine_from_counterexample(
+        updated = library.refine_from_counterexample(
             "position state", counterexample
         )
 

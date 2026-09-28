@@ -16,7 +16,7 @@ assert report.determined
 
 basis = search.compress_evidence(data)
 assert basis.minimum_cardinality
-assert search.validates_macro(basis, data)
+assert search.verify_macro(basis, data).valid
 assert len(basis.retained_evidence) == 2
 ```
 

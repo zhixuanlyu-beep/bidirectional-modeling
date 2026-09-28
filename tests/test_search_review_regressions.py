@@ -2,11 +2,10 @@
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    LazyExecutableSearch, MacroAlternativeQuery, LowerSubstituteQuery,
-    QueryStatus, SearchWorkBudget, collect_partial_prediction,
-    verify_partial_prediction, verify_query_result,
-)
+from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
+from bidirectional_modeling import (MacroAlternativeQuery, LowerSubstituteQuery, QueryStatus, SearchWorkBudget)
+from bidirectional_modeling.search_partial import (collect_partial_prediction, verify_partial_prediction)
+from bidirectional_modeling.search_queries import (verify_query_result)
 from test_search_integration import adapter_args, model
 import test_search_partial as partial_tests
 from test_search_partial import ExternalResponse, partial_args
@@ -115,3 +114,4 @@ class ReviewRegressions(unittest.TestCase):
                 self.assertEqual(known, set(r.resolved_candidates))
             if r.receipt.status is not QueryStatus.UNKNOWN:
                 self.assertEqual(verify_query_result(r.search, q, r.receipt).status, 'valid')
+

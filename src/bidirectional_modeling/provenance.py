@@ -188,13 +188,13 @@ def trace_batch_protocol_fingerprint(
     coverage_authority: str,
     complete: bool,
     coverage: float,
-    boundaries: Tuple[str, ...],
+    diagnostic_codes: Tuple[str, ...],
 ) -> str:
     """Fingerprint both the trace-collection protocol and certified outcome."""
 
     return fingerprint_value(
         (
-            "trace-batch-v1",
+            "trace-batch-v2",
             model_digest,
             context_digest,
             horizon,
@@ -202,7 +202,7 @@ def trace_batch_protocol_fingerprint(
             coverage_authority,
             complete,
             coverage,
-            boundaries,
+            tuple(sorted(set(diagnostic_codes))),
         ),
         purpose="trace batch protocol fingerprint",
     )

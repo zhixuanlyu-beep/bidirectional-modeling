@@ -1,11 +1,10 @@
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    ConstraintQuery, ExecutableSearchAdapter, LazyExecutableSearch,
-    LowerSubstituteQuery, MacroAlternativeQuery, QueryStatus,
-    SearchObservation, SearchWorkBudget, verify_query_result,
-)
+from bidirectional_modeling import (ConstraintQuery, LowerSubstituteQuery, MacroAlternativeQuery, QueryStatus, SearchObservation, SearchWorkBudget)
+from bidirectional_modeling.search_adapter import (ExecutableSearchAdapter)
+from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
+from bidirectional_modeling.search_queries import (verify_query_result)
 from test_search_integration import adapter_args, model
 
 
@@ -145,3 +144,4 @@ class LazyTests(unittest.TestCase):
             self.assertLessEqual(r.simulations_used, 3)
             self.assertLessEqual(r.receipt.work.total, limit)
             self.assertIs(r.receipt.status, QueryStatus.UNKNOWN)
+

@@ -274,7 +274,7 @@ class CompositionRuleSelector:
         error_detail = None
         for step, action in enumerate(test.actions):
             try:
-                state = dict(model.step(state, action, experiment.context))
+                state = dict(model.audited_step(state, action, experiment.context))
             except UndefinedTransition:
                 actual_defined = False
                 failure_step = step
@@ -287,7 +287,7 @@ class CompositionRuleSelector:
 
         if actual_defined:
             try:
-                observation = model.observe(state, experiment.context)
+                observation = model.audited_observe(state, experiment.context)
                 actual_signature = experiment.equivalence.signature(observation)
             except Exception as error:
                 actual_defined = None
@@ -403,7 +403,7 @@ class CompositionRuleSelector:
     @staticmethod
     def _description_lengths(report):
         if report is None:
-            return 0.0, 0.0, 0.0
+            return None, None, None
         class_count = report.quotient.class_count
         action_count = len(report.quotient.actions)
         state_width = max(1, class_count.bit_length())
@@ -420,7 +420,7 @@ class CompositionRuleSelector:
         max_states: int = 1_000,
         max_context_depth: Optional[int] = None,
         max_context_tests: int = 256,
-        *, selection_policy: Optional[str] = None,
+        *, selection_policy: Optional[str] = None, full_diagnostics: bool = False,
     ) -> CompositionSelectionReport:
         """Verify all rules; apply a preference only when explicitly requested."""
 
@@ -478,19 +478,22 @@ class CompositionRuleSelector:
                         counterexamples.append(counterexample)
 
                 analysis_error = None
-                try:
-                    residual_report = self.residual_analyzer.analyze(
-                        model,
-                        experiment.equivalence,
-                        experiment.context,
-                        max_reachability_depth=max_reachability_depth,
-                        max_states=max_states,
-                        max_context_depth=max_context_depth,
-                        max_context_tests=max_context_tests,
-                    )
-                except Exception as error:
-                    residual_report = None
-                    analysis_error = "%s: %s" % (type(error).__name__, error)
+                residual_report = None
+                # A reliable operational witness already decides rejection.
+                if not counterexamples or full_diagnostics:
+                    try:
+                        residual_report = self.residual_analyzer.analyze(
+                            model,
+                            experiment.equivalence,
+                            experiment.context,
+                            max_reachability_depth=max_reachability_depth,
+                            max_states=max_states,
+                            max_context_depth=max_context_depth,
+                            max_context_tests=max_context_tests,
+                        )
+                    except Exception as error:
+                        residual_report = None
+                        analysis_error = "%s: %s" % (type(error).__name__, error)
                 counterexamples.extend(
                     self._residual_counterexamples(
                         rule,

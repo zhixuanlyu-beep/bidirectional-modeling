@@ -279,7 +279,6 @@ class CorrespondenceCertificate:
     upper_model_name: str
     horizon: int
     complete: bool
-    commutes: Optional[bool]
     lower_scenarios: int
     upper_scenarios: int
     paired_scenarios: int
@@ -302,8 +301,6 @@ class CorrespondenceCertificate:
     def __post_init__(self) -> None:
         if self.complete and (self.diagnostics or self.applicability_failures):
             raise ValueError("an unresolved or inapplicable correspondence cannot be complete")
-        if self.commutes is True and (not self.complete or self.counterexamples):
-            raise ValueError("commutation requires complete verification without counterexamples")
         if any(
             not value
             for value in (
@@ -335,6 +332,13 @@ class CorrespondenceCertificate:
             ("upper context fingerprint", self.upper_context_fingerprint),
         ):
             validate_fingerprint(fingerprint, purpose=label)
+
+    @property
+    def commutes(self) -> Optional[bool]:
+        """Derive the relation claim from witnesses and verification coverage."""
+        if self.counterexamples:
+            return False
+        return True if self.complete else None
 
     @property
     def status(self) -> str:
@@ -811,7 +815,6 @@ class CorrespondenceValidator:
                               and item.kind not in self._EXECUTION_FAILURES)
         complete = (lower_batch.complete and upper_batch.complete and binding_complete
                     and not diagnostics and not applicability)
-        commutes = False if counterexamples else True if complete else None
         return CorrespondenceCertificate(
             correspondence_name=correspondence.name,
             lower_scale=correspondence.lower_scale.name,
@@ -820,7 +823,6 @@ class CorrespondenceValidator:
             upper_model_name=str(getattr(upper_model, "name", "")),
             horizon=horizon,
             complete=complete,
-            commutes=commutes,
             lower_scenarios=len(lower_traces),
             upper_scenarios=len(upper_traces),
             paired_scenarios=paired_scenarios,
@@ -919,7 +921,6 @@ class CorrespondenceValidator:
                     upper_model_name=str(getattr(case.upper_model, "name", "")),
                     horizon=case.horizon,
                     complete=False,
-                    commutes=None,
                     lower_scenarios=0,
                     upper_scenarios=0,
                     paired_scenarios=0,
