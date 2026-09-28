@@ -18,6 +18,7 @@ from .core import (
     ResourceBudget,
 )
 from .evaluation import SatisfactionEvaluator
+from ._generation import CandidateStream
 
 
 class CandidateGenerator(Protocol):
@@ -119,12 +120,9 @@ class Realizer:
         budget: Optional[ResourceBudget] = None,
     ) -> RealizationResult:
         budget = budget or ResourceBudget()
-        if hasattr(source, "generate"):
-            models = source.generate(spec, context, budget)  # type: ignore[union-attr]
-            source_count = len(models) if hasattr(models, "__len__") else None
-        else:
-            source_count = len(source) if hasattr(source, "__len__") else None
-            models = iter(source)  # type: ignore[arg-type]
+        def factory():
+            return source.generate(spec, context, budget) if hasattr(source, "generate") else source
+        stream = CandidateStream(factory, budget.max_candidates)
 
         accepted = []
         rejected = []
@@ -133,27 +131,36 @@ class Realizer:
         truncated = False
         simulations_used = 0
         remaining_simulations = budget.max_simulations
-        model_iterator = iter(models)
         while searched < budget.max_candidates and remaining_simulations > 0:
             try:
-                model = next(model_iterator)
+                model = next(stream)
             except StopIteration:
                 break
             searched += 1
             candidate_budget = replace(budget, max_simulations=remaining_simulations)
+            reserved = 0
             try:
                 certificate = self.evaluator.evaluate(
                     model, spec, context, candidate_budget
                 )
             except Exception as error:
                 certificate = self.evaluator.failure_certificate(
-                    model, spec, context, str(error)
+                    model, spec, context, str(error), candidate_budget
                 )
+                # No reliable accounting survived this evaluator failure.
+                reserved = remaining_simulations
+                simulations_used += reserved
+                remaining_simulations = 0
+                truncated = True
             simulations_used += certificate.verified_scenarios
             remaining_simulations -= certificate.verified_scenarios
             counterexamples = []
             probe_certificates = []
             diagnostics = []
+            if reserved:
+                diagnostics.append(VerificationIssue('base-budget',
+                    'evaluator consumption unknown; remaining allowance reserved',
+                    {'reserved_simulations': reserved}))
             unresolved = not certificate.complete
             if not certificate.complete:
                 diagnostics.append(VerificationIssue("base-verification", "; ".join(
@@ -215,14 +222,7 @@ class Realizer:
             else:
                 rejected.append(evaluation)
 
-        if remaining_simulations <= 0 and (
-            source_count is None or source_count > searched
-        ):
-            truncated = True
-        if searched >= budget.max_candidates and (
-            source_count is None or source_count > searched
-        ):
-            truncated = True
+        truncated = truncated or not stream.complete
 
         frontier, dominated = pareto_partition(accepted)
         return RealizationResult(
@@ -234,5 +234,6 @@ class Realizer:
             truncated=truncated,
             simulations_used=simulations_used,
             undecided=tuple(undecided),
+            diagnostics=tuple(stream.diagnostics),
         )
 

@@ -2,11 +2,10 @@ import unittest
 from dataclasses import replace
 from itertools import product
 
-from bidirectional_modeling import (
-    Context, LazyExecutableSearch, MacroAlternativeQuery, QueryStatus,
-    ResponseConstraint, ScenarioKey, SearchExperiment, SearchProtocol, SearchWorkBudget,
-    Trace, collect_partial_prediction, verify_partial_prediction, verify_query_result,
-)
+from bidirectional_modeling import (Context, MacroAlternativeQuery, QueryStatus, ResponseConstraint, ScenarioKey, SearchExperiment, SearchProtocol, SearchWorkBudget, Trace)
+from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
+from bidirectional_modeling.search_partial import (collect_partial_prediction, verify_partial_prediction)
+from bidirectional_modeling.search_queries import (verify_query_result)
 from test_search_integration import adapter_args
 
 
@@ -66,7 +65,7 @@ class PartialTests(unittest.TestCase):
     def test_projection_of_all_subsets_and_worlds(self):
         p, c, cases = partial_args()
         # Contexts provide per-experiment outputs, so all four worlds are executable.
-        from bidirectional_modeling import FiniteStateModel, ModelMetrics
+        from bidirectional_modeling import (FiniteStateModel, ModelMetrics)
         for row in p.worlds:
             model = FiniteStateModel('row', {'s': {}}, ('s',), ('noop',),
                 lambda state, action, context: state,
@@ -142,8 +141,10 @@ class PartialTests(unittest.TestCase):
         lazy = self.lazy((p, c, cases))
         first = lazy.predict_experiments('zero', ('a',))
         self.assertIsNotNone(first.prediction)
-        with self.assertRaisesRegex(ValueError, 'commitment'):
-            lazy.predict_experiments('zero', ('b',))
+        failed = lazy.predict_experiments('zero', ('b',))
+        self.assertIsNone(failed.prediction)
+        self.assertEqual(failed.reason, 'prediction_declaration_invalid')
+        self.assertIn('commitment', failed.diagnostics[0][2])
         self.assertIsNone(lazy.snapshot.hypotheses[0].world)
         self.assertEqual(lazy.predict_experiments('zero', ('a',)).prediction, first.prediction)
 
@@ -196,3 +197,4 @@ class PartialTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.lazy().predict_experiments('missing', ('a',))
         p, c, cases = args
         with self.assertRaises(ValueError): collect_partial_prediction(p, c, cases[:1], ('a',))
+

@@ -4,7 +4,11 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from bidirectional_modeling import (BidirectionalModelingEngine, Context, DescriptionLength, ExecutableSearchAdapter, FiniteStateModel, ModelMetrics, ModelSearchCandidate, ModelSearchCase, ScenarioKey, SearchBudgetExceeded, SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol, SearchSession, SearchWorkBudget)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling import (Context, DescriptionLength, FiniteStateModel, ModelMetrics, ScenarioKey, SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol, SearchWorkBudget)
+from bidirectional_modeling.search_adapter import (ExecutableSearchAdapter, ModelSearchCandidate, ModelSearchCase)
+from bidirectional_modeling.search import (SearchBudgetExceeded)
+from bidirectional_modeling.search_session import (SearchSession)
 from bidirectional_modeling.search_benchmark import (benchmark_search)
 from bidirectional_modeling.search_examples import conflict_search_scenario
 from bidirectional_modeling.structural import fingerprint_value
@@ -25,8 +29,8 @@ def adapter_args():
 
 
 class AdapterTests(unittest.TestCase):
-    def test_engine_collects_bound_predictions_without_creating_observations(self):
-        result = BidirectionalModelingEngine().prepare_hypothesis_search(
+    def test_adapter_collects_bound_predictions_without_creating_observations(self):
+        result = ExecutableSearchAdapter().prepare(
             *adapter_args(),target='output',world_answers=('low','high'))
         self.assertEqual(result.simulations_used,4)
         self.assertEqual(result.diagnostics,())
@@ -150,6 +154,6 @@ class BenchmarkTests(unittest.TestCase):
         self.assertTrue(all(r['rounds_completed']==0 for r in report['results']))
         with self.assertRaises(ValueError): benchmark_search(search,data,rounds=0)
         unknown=replace(search.hypotheses[0],world=None)
-        from bidirectional_modeling import ExperimentHypothesisSearch
+        from bidirectional_modeling import (ExperimentHypothesisSearch)
         with self.assertRaises(ValueError): benchmark_search(ExperimentHypothesisSearch(search.protocol,(unknown,),search.target),data)
 

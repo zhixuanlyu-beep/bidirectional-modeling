@@ -4,12 +4,10 @@ from dataclasses import replace
 from itertools import product
 from unittest.mock import patch
 
-from bidirectional_modeling import (
-    ConstraintQuery, Context, DescriptionLength, ExperimentHypothesisSearch,
-    LazyExecutableSearch, MacroAlternativeQuery, ModelSearchCandidate, ModelSearchCase,
-    QueryStatus, ScenarioKey, SearchExperiment, SearchHypothesis, SearchObservation,
-    SearchProtocol, SearchWorkBudget, verify_query_result,
-)
+from bidirectional_modeling import (ConstraintQuery, Context, DescriptionLength, ExperimentHypothesisSearch, MacroAlternativeQuery, QueryStatus, ScenarioKey, SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol, SearchWorkBudget)
+from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
+from bidirectional_modeling.search_adapter import (ModelSearchCandidate, ModelSearchCase)
+from bidirectional_modeling.search_queries import (verify_query_result)
 from bidirectional_modeling.context_network import (
     ContextChange, ContextTransition, ModelingContext, _prepare_context_transition,
 )
@@ -39,6 +37,19 @@ def transition(size):
     return ContextTransition(c, c, ContextChange.REFINEMENT, (('a', 'a'),),
                              tuple(('a', str(i), str(i)) for i in range(size)))
 
+
+
+def matching_source_worlds(transition, target_world, budget):
+    old_names = tuple(e.name for e in transition.source.protocol.experiments)
+    new_names = tuple(e.name for e in transition.target.protocol.experiments)
+    translated = tuple((old_names.index(a), transition.translate_response(a, target_world[new_names.index(b)]))
+                       for a, b in transition.experiments)
+    matches = []
+    for i, row in enumerate(transition.source.protocol.worlds):
+        budget.consume('response_checks')
+        if all(row[j] == response for j, response in translated):
+            matches.append(i)
+    return tuple(matches)
 
 class ReviewImprovementTests(unittest.TestCase):
     def test_all_boolean_coordinates_are_validated_before_search(self):
@@ -141,7 +152,7 @@ class ReviewImprovementTests(unittest.TestCase):
             t = replace(t, kind=ContextChange.RECONSTRUCTION, experiments=experiments,
                         responses=t.responses if experiments else ())
             report, relation = _prepare_context_transition(t)
-            reference = tuple(t.matching_source_worlds(row, SearchWorkBudget())
+            reference = tuple(matching_source_worlds(t, row, SearchWorkBudget())
                               for row in t.target.protocol.worlds)
             self.assertEqual(report.status, 'valid')
             self.assertEqual(relation, reference)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Callable, Dict, Iterable, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, Optional, Sequence, Tuple
 
 from .correspondence import (
     Correspondence,
@@ -14,17 +14,9 @@ from .correspondence import (
     CorrespondenceValidator,
     ScaleGraph,
 )
-from .composition import (
-    CompositionExperiment,
-    CompositionRule,
-    CompositionRuleSelector,
-    CompositionSelectionReport,
-)
 from .core import (
     ClosureReport,
-    Concept,
     Context,
-    EquivalenceSpec,
     Evidence,
     ExecutableModel,
     Experiment,
@@ -37,11 +29,6 @@ from .core import (
 )
 from .interpretation import HypothesisSource, Interpreter
 from .realization import CandidateSource, Realizer
-if TYPE_CHECKING:
-    from .extensions.concepts import ConceptLibrary
-
-from .refinement import ClosureAnalyzer
-from .residual import ResidualQuotientAnalyzer, ResidualQuotientReport
 
 
 @dataclass(frozen=True)
@@ -143,17 +130,33 @@ def _traces_behaviorally_equivalent(left_traces, right_traces, spec: MacroSpec) 
     )
 
 
+def _batches_behaviorally_equivalent(left, right, left_batch, right_batch, spec, context):
+    if not (left_batch.complete and right_batch.complete
+            and left_batch.traces and right_batch.traces
+            and left_batch.binds(left, context, spec.horizon)
+            and right_batch.binds(right, context, spec.horizon)):
+        return None
+    return _traces_behaviorally_equivalent(left_batch.traces, right_batch.traces, spec)
+
+
 def behaviorally_equivalent(
     left: ExecutableModel,
     right: ExecutableModel,
     spec: MacroSpec,
     context: Context,
-) -> bool:
-    return _traces_behaviorally_equivalent(
-        tuple(left.simulate(context, spec.horizon)),
-        tuple(right.simulate(context, spec.horizon)),
-        spec,
-    )
+    *, budget: Optional[ResourceBudget] = None, evaluator=None,
+) -> Optional[bool]:
+    """Compare complete bound batches; None means verification is unresolved."""
+    from .evaluation import SatisfactionEvaluator
+    evaluator = evaluator or SatisfactionEvaluator()
+    budget = budget or ResourceBudget()
+    left_batch = evaluator.collect(left, context, spec.horizon, budget)
+    remaining = budget.max_simulations - left_batch.simulations_used
+    if not left_batch.complete or remaining <= 0:
+        return None
+    right_batch = evaluator.collect(right, context, spec.horizon,
+                                    replace(budget, max_simulations=remaining))
+    return _batches_behaviorally_equivalent(left, right, left_batch, right_batch, spec, context)
 
 
 class BidirectionalModelingEngine:
@@ -161,37 +164,25 @@ class BidirectionalModelingEngine:
         self,
         realizer: Optional[Realizer] = None,
         interpreter: Optional[Interpreter] = None,
-        concept_library: Optional[ConceptLibrary] = None,
         correspondence_validator: Optional[CorrespondenceValidator] = None,
         scale_graph: Optional[ScaleGraph] = None,
-        composition_selector: Optional[CompositionRuleSelector] = None,
     ) -> None:
         self.realizer = realizer or Realizer()
         self.interpreter = interpreter or Interpreter(self.realizer.evaluator)
-        self.closure = ClosureAnalyzer()
-        self.residuals = ResidualQuotientAnalyzer()
-        self.compositions = composition_selector or CompositionRuleSelector(
-            self.residuals
-        )
-        self._concepts = concept_library
-        self.correspondence_validator = correspondence_validator or CorrespondenceValidator(
-            self.realizer.evaluator
-        )
-        self.scale_graph = scale_graph or ScaleGraph()
-
-    def prepare_hypothesis_search(self, protocol, candidates, cases, **options):
-        """Adapt executable models using this engine's satisfaction collector."""
-        from .search_adapter import ExecutableSearchAdapter
-        return ExecutableSearchAdapter(self.realizer.evaluator).prepare(
-            protocol, candidates, cases, **options)
+        self._correspondence_validator = correspondence_validator
+        self._scale_graph = scale_graph
 
     @property
-    def concepts(self):
-        """Opt-in collaboration memory; ordinary validation does not load it."""
-        if self._concepts is None:
-            from .extensions.concepts import ConceptLibrary
-            self._concepts = ConceptLibrary()
-        return self._concepts
+    def correspondence_validator(self):
+        if self._correspondence_validator is None:
+            self._correspondence_validator = CorrespondenceValidator(self.realizer.evaluator)
+        return self._correspondence_validator
+
+    @property
+    def scale_graph(self):
+        if self._scale_graph is None:
+            self._scale_graph = ScaleGraph()
+        return self._scale_graph
 
     def realize(
         self,
@@ -214,60 +205,6 @@ class BidirectionalModelingEngine:
     ) -> InterpretationResult:
         return self.interpreter.interpret(
             model, context, hypotheses, evidence, experiments, budget, observations=observations
-        )
-
-    def check_closure(
-        self,
-        model: FiniteStateModel,
-        spec: MacroSpec,
-        context: Context,
-        max_depth: Optional[int] = None,
-        max_states: int = 1_000,
-    ):
-        return self.closure.analyze(model, spec, context, max_depth, max_states)
-
-    def discover_residual_quotient(
-        self,
-        model: FiniteStateModel,
-        equivalence: EquivalenceSpec,
-        context: Context,
-        max_reachability_depth: Optional[int] = None,
-        max_states: int = 1_000,
-        max_context_depth: Optional[int] = None,
-        max_context_tests: int = 256,
-    ) -> ResidualQuotientReport:
-        """Discover a minimal context-relative quotient on a finite domain."""
-
-        return self.residuals.analyze(
-            model,
-            equivalence,
-            context,
-            max_reachability_depth,
-            max_states,
-            max_context_depth,
-            max_context_tests,
-        )
-
-    def select_composition_rules(
-        self,
-        rules: Sequence[CompositionRule],
-        experiments: Sequence[CompositionExperiment],
-        max_reachability_depth: Optional[int] = None,
-        max_states: int = 1_000,
-        max_context_depth: Optional[int] = None,
-        max_context_tests: int = 256,
-        *, selection_policy: Optional[str] = None,
-    ) -> CompositionSelectionReport:
-        """Verify composition rules and apply only an explicitly chosen policy."""
-
-        return self.compositions.select(
-            rules,
-            experiments,
-            max_reachability_depth=max_reachability_depth,
-            max_states=max_states,
-            max_context_depth=max_context_depth,
-            max_context_tests=max_context_tests,
-            selection_policy=selection_policy,
         )
 
     def verify_correspondence(
@@ -322,18 +259,19 @@ class BidirectionalModelingEngine:
         feature_selector: Callable[
             [ClosureReport, MacroSpec, FiniteStateModel], Optional[str]
         ],
-        concept_name: Optional[str] = None,
         max_iterations: int = 8,
         max_depth: Optional[int] = None,
         max_states: int = 1_000,
     ) -> RefinementLoopReport:
         if max_iterations < 1:
             raise ValueError("max_iterations must be positive")
+        from .refinement import ClosureAnalyzer
+        analyzer = ClosureAnalyzer()
         current_model = model
         current_spec = spec
         steps = []
         for iteration in range(1, max_iterations + 1):
-            report = self.check_closure(
+            report = analyzer.analyze(
                 current_model, current_spec, context, max_depth, max_states
             )
             if report.closed:
@@ -378,23 +316,10 @@ class BidirectionalModelingEngine:
                     iteration, current_spec, current_model.name, report, selected
                 )
             )
-            if concept_name and report.counterexamples:
-                try:
-                    self.concepts.get(concept_name)
-                except KeyError:
-                    self.concepts.add(
-                        Concept(
-                            concept_name,
-                            "task-relative equivalence for %s" % spec.name,
-                        )
-                    )
-                self.concepts.refine_from_counterexample(
-                    concept_name, report.counterexamples[0]
-                )
             current_spec = current_spec.promote_observable(selected)
             current_model = current_model.with_promoted_observables((selected,))
 
-        final_report = self.check_closure(
+        final_report = analyzer.analyze(
             current_model, current_spec, context, max_depth, max_states
         )
         steps.append(
@@ -442,11 +367,17 @@ class BidirectionalModelingEngine:
         independence_declared = bool(
             getattr(hypotheses, "independence_declared", False)
         )
-        hypothesis_source: HypothesisSource
-        if hasattr(hypotheses, "generate"):
-            hypothesis_source = hypotheses
-        else:
-            hypothesis_source = tuple(hypotheses)  # type: ignore[arg-type]
+        hypothesis_source: HypothesisSource = hypotheses
+        source_truncated, source_diagnostics = False, ()
+        if not (hasattr(hypotheses, "generate") or hasattr(hypotheses, "generate_from_traces")):
+            if realization.candidates and realization.simulations_used < budget.max_simulations:
+                from ._generation import CandidateStream
+                stream = CandidateStream(lambda: hypotheses, budget.max_candidates)
+                hypothesis_source = tuple(stream)
+                source_truncated = not stream.complete
+                source_diagnostics = tuple(stream.diagnostics)
+            else:
+                hypothesis_source = ()
         simulations_used = realization.simulations_used
         remaining_simulations = max(
             0, budget.max_simulations - simulations_used
@@ -475,6 +406,9 @@ class BidirectionalModelingEngine:
                 )
                 simulations_used += result.simulations_used
                 remaining_simulations -= result.simulations_used
+            if source_truncated:
+                result = replace(result, truncated=True,
+                                 diagnostics=result.diagnostics + source_diagnostics)
             interpretations.append(result)
             truncated = truncated or result.truncated
             preservation.append(
@@ -589,9 +523,11 @@ class BidirectionalModelingEngine:
                 if not candidate_batch.complete:
                     truncated = True
                     continue
-                if _traces_behaviorally_equivalent(
-                    original_batch.traces, candidate_batch.traces, selected_spec
-                ):
+                comparison = _batches_behaviorally_equivalent(
+                    model, item.model, original_batch, candidate_batch, selected_spec, context)
+                if comparison is None:
+                    truncated = True
+                elif comparison:
                     equivalent.append(item.model.name)
         if compared < len(satisfying):
             truncated = True

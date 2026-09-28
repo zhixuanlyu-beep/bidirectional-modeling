@@ -1,6 +1,6 @@
 """Convert independently certified executable-model responses to search hypotheses."""
 from dataclasses import dataclass, replace
-from typing import Tuple
+from typing import Optional, Tuple
 
 from .core import Context, ExecutableModel, FiniteStateModel, ResourceBudget, ScenarioKey
 from .evaluation import SatisfactionEvaluator
@@ -72,6 +72,71 @@ class PredictionDomainError(ValueError):
     """A completed prediction lies outside the declared response universe."""
 
 
+def _promote_prediction(problem, candidate, responses):
+    """Validate the complete row and commitments before publishing a hypothesis."""
+    if responses not in problem.protocol.worlds:
+        raise PredictionDomainError('prediction_outside_response_universe')
+    world = problem.protocol.worlds.index(responses)
+    proposed = SearchHypothesis(candidate.model.name, world, problem.world_answers[world],
+        candidate.description, candidate.commitments, candidate.materials)
+    problem.with_hypotheses((proposed,))
+    return proposed
+
+
+@dataclass(frozen=True)
+class _ResponseMatrix:
+    responses: Optional[Tuple[str, ...]]
+    batch_bindings: tuple
+    simulations_used: int
+    diagnostics: tuple = ()
+
+
+def _collect_response_matrix(candidate, cases, *, max_simulations, evaluator=None):
+    """Collect and replay one selected matrix; no candidate or target semantics."""
+    evaluator = evaluator or SatisfactionEvaluator()
+    name, used = candidate.model.name, 0
+    try:
+        model = isolated_copy(candidate.model, purpose='search model snapshot')
+        declaration = model_declaration_fingerprint(model)
+        case_ids = tuple(c.fingerprint for c in cases)
+        batches = [[] for _ in cases]
+        for _ in range(2):
+            for i, case in enumerate(cases):
+                if used >= max_simulations:
+                    raise RuntimeError('simulation_budget_exhausted')
+                if model_declaration_fingerprint(model) != declaration:
+                    raise RuntimeError('model_declaration_changed')
+                try:
+                    batch = evaluator.collect(model, isolated_copy(case.context), case.horizon,
+                        ResourceBudget(max_simulations=max_simulations-used))
+                except Exception:
+                    used = max_simulations
+                    raise
+                used += batch.simulations_used
+                if model_declaration_fingerprint(model) != declaration:
+                    raise RuntimeError('model_declaration_changed')
+                if not batch.complete or not batch.binds(model, case.context, case.horizon):
+                    raise RuntimeError('incomplete_or_unbound_batch')
+                batches[i].append(batch)
+        responses, bindings = [], []
+        for case, pair in zip(cases, batches):
+            if pair[0].model_fingerprint != pair[1].model_fingerprint:
+                raise RuntimeError('non_deterministic_response')
+            selected = [t for t in pair[0].traces if t.scenario_key == case.scenario]
+            if len(selected) != 1:
+                raise ValueError('selected scenario is absent or duplicated')
+            response = selected[0].snapshots[-1][case.field]
+            _name(response)
+            responses.append(response)
+            bindings.append((name, case.experiment, pair[0].protocol_fingerprint,
+                             pair[1].protocol_fingerprint, declaration))
+        if tuple(c.fingerprint for c in cases) != case_ids:
+            raise RuntimeError('experiment declaration changed during collection')
+        return _ResponseMatrix(tuple(responses), tuple(bindings), used)
+    except Exception as error:
+        return _ResponseMatrix(None, (), used, ((name, type(error).__name__, str(error)),))
+
+
 class ExecutableSearchAdapter:
     def __init__(self, evaluator=None):
         self.evaluator = evaluator or SatisfactionEvaluator()
@@ -96,67 +161,28 @@ class ExecutableSearchAdapter:
         if tuple(c.experiment for c in cases) != tuple(e.name for e in protocol.experiments):
             raise ValueError('cases must match the complete ordered experiment domain')
         cases = isolated_copy(cases, purpose='adapter cases')
-        case_ids = tuple(c.fingerprint for c in cases)
         bound_protocol = replace(protocol, experiments=tuple(
             replace(e, semantics=e.semantics + ':' + c.fingerprint)
             for e,c in zip(protocol.experiments,cases)))
         bound_target = target + ':' + fingerprint_value(world_answers)
+        base = ExperimentHypothesisSearch(bound_protocol, (), bound_target,
+            backend=backend, world_answers=world_answers)
         used, bindings, diagnostics, hypotheses = 0, [], [], []
         for candidate in candidates:
             name = candidate.model.name
-            responses, candidate_bindings = [], []
-            try:
-                # Collect on one isolated configuration; do not mutate caller state.
-                model = isolated_copy(candidate.model, purpose='search model snapshot')
-                declaration = model_declaration_fingerprint(model)
-                batches = [[] for _ in cases]
-                # Replay the complete experimental matrix, not adjacent pairs only.
-                for _ in range(2):
-                    for i,case in enumerate(cases):
-                        if used >= max_simulations:
-                            raise RuntimeError('simulation_budget_exhausted')
-                        if model_declaration_fingerprint(model) != declaration:
-                            raise RuntimeError('model_declaration_changed')
-                        remaining = max_simulations-used
-                        try:
-                            batch = self.evaluator.collect(model, isolated_copy(case.context), case.horizon,
-                                                           ResourceBudget(max_simulations=remaining))
-                        except Exception:
-                            used = max_simulations
-                            raise
-                        used += batch.simulations_used
-                        if model_declaration_fingerprint(model) != declaration:
-                            raise RuntimeError('model_declaration_changed')
-                        if not batch.complete or not batch.binds(model,case.context,case.horizon):
-                            raise RuntimeError('incomplete_or_unbound_batch')
-                        batches[i].append(batch)
-                for case,pair in zip(cases,batches):
-                    if pair[0].model_fingerprint != pair[1].model_fingerprint:
-                        raise RuntimeError('non_deterministic_response')
-                    selected = [t for t in pair[0].traces if t.scenario_key == case.scenario]
-                    if len(selected) != 1:
-                        raise ValueError('selected scenario is absent or duplicated')
-                    response = selected[0].snapshots[-1][case.field]
-                    _name(response)
-                    responses.append(response)
-                    candidate_bindings.append((name, case.experiment,
-                                     pair[0].protocol_fingerprint, pair[1].protocol_fingerprint,
-                                     declaration))
-                if tuple(c.fingerprint for c in cases) != case_ids:
-                    raise RuntimeError('experiment declaration changed during collection')
-                if tuple(responses) not in protocol.worlds:
-                    raise PredictionDomainError('prediction_outside_response_universe')
-                world = protocol.worlds.index(tuple(responses))
-                hypothesis = SearchHypothesis(name, world, world_answers[world],
-                                              candidate.description, candidate.commitments, candidate.materials)
-                ExperimentHypothesisSearch(bound_protocol,(hypothesis,),bound_target,
-                                           world_answers=world_answers)
-                bindings.extend(candidate_bindings)
-            except Exception as error:
-                diagnostics.append((name, type(error).__name__, str(error)))
-                hypothesis = SearchHypothesis(name,None,'unresolved',candidate.description,
-                                              (),candidate.materials)
+            matrix = _collect_response_matrix(candidate, cases,
+                max_simulations=max_simulations-used, evaluator=self.evaluator)
+            used += matrix.simulations_used
+            diagnostics.extend(matrix.diagnostics)
+            hypothesis = SearchHypothesis(name, None, 'unresolved', candidate.description,
+                                          (), candidate.materials)
+            if matrix.responses is not None:
+                try:
+                    hypothesis = _promote_prediction(base, candidate, matrix.responses)
+                    bindings.extend(matrix.batch_bindings)
+                except Exception as error:
+                    diagnostics.append((name, type(error).__name__, str(error)))
             hypotheses.append(hypothesis)
-        search = ExperimentHypothesisSearch(bound_protocol,tuple(hypotheses),bound_target,backend=backend,world_answers=world_answers)
+        search = base.with_hypotheses(tuple(hypotheses))
         return ModelSearchResult(search,used,tuple(bindings),tuple(diagnostics))
 

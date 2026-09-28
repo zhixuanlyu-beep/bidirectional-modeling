@@ -63,12 +63,9 @@ PYTHONPATH=src python3 -m bidirectional_modeling.cli demo
 ## 最小用法
 
 ```python
-from bidirectional_modeling import (
-    BidirectionalModelingEngine,
-    HorizonExtensionProbe,
-    Realizer,
-    ResourceBudget,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.probes import (HorizonExtensionProbe)
+from bidirectional_modeling import (Realizer, ResourceBudget)
 from bidirectional_modeling.examples import software_scenario
 
 goal, context, design_candidates = software_scenario()
@@ -97,10 +94,11 @@ for candidate in result.candidates:
 从无自然语言标签的操作观察中发现最小行为商：
 
 ```python
+from bidirectional_modeling.residual import ResidualQuotientAnalyzer
 from bidirectional_modeling.examples import residual_quotient_scenario
 
 equivalence, context, model = residual_quotient_scenario()
-report = engine.discover_residual_quotient(model, equivalence, context)
+report = ResidualQuotientAnalyzer().analyze(model, equivalence, context)
 
 print(report.minimal)                 # 完整、稳定且满足同余
 print(report.explored_states)         # 5 个可达微观状态
@@ -121,11 +119,12 @@ print(report.model_fingerprint, report.protocol_fingerprint)
 局部支撑通过 `FiniteStateModel.applicable` 声明。若一个残差类上的 `consume` 全部无定义，其商转移是良定义的偏转移；若同一类中只有部分状态支持它，该类会被继续拆分：
 
 ```python
-from bidirectional_modeling import UndefinedTransition
+from bidirectional_modeling import (UndefinedTransition)
+from bidirectional_modeling.residual import ResidualQuotientAnalyzer
 from bidirectional_modeling.examples import partial_residual_scenario
 
 equivalence, context, model = partial_residual_scenario()
-report = engine.discover_residual_quotient(model, equivalence, context)
+report = ResidualQuotientAnalyzer().analyze(model, equivalence, context)
 disabled = dict(report.quotient.initial_state_classes)["disabled"]
 try:
     report.quotient.next_class(disabled, "consume")
@@ -136,10 +135,11 @@ except UndefinedTransition:
 用无自然语言标签的操作结果筛选候选微观组合规则：
 
 ```python
+from bidirectional_modeling.composition import CompositionRuleSelector
 from bidirectional_modeling.examples import composition_rule_scenario
 
 experiments, rules = composition_rule_scenario()
-selection = engine.select_composition_rules(rules, experiments)
+selection = CompositionRuleSelector().select(rules, experiments, selection_policy="shortest_description")
 
 print(selection.selected_rule_names)  # ('parity',)
 for candidate in selection.ranked:
@@ -191,7 +191,10 @@ certificate = engine.verify_correspondence(
 print(certificate.passed)          # complete and commutes
 print(certificate.binds_correspondence(correspondence))
 print(certificate.protocol_fingerprint)
-print(certificate.counterexamples)
+print(certificate.status)          # verified / refuted / undecided / not_applicable
+print(certificate.counterexamples) # 仅成功读出后的不交换见证
+print(certificate.diagnostics)     # 执行异常、覆盖不足、声明变化
+print(certificate.applicability_failures) # 接口/域不满足声明
 ```
 
 这里验证的是整个动态交换图，而不只是终态数值相等：对每个下层场景 `s` 和每个时间步 `t`，下层快照经 `projection` 后必须与 `scenario_projection(s)` 指向的上层快照等价。投影与场景映射由调用方持有，因此候选模型不能自行改变判据。
@@ -245,7 +248,7 @@ for result in suite.cases:
 第三方模型的场景域由调用方声明，而不是由候选模型自行决定：
 
 ```python
-from bidirectional_modeling import Context, ScenarioKey
+from bidirectional_modeling import (Context, ScenarioKey)
 
 context = Context(
     scenario_manifest=(
@@ -305,4 +308,33 @@ preferred = selector.select(rules, experiments, selection_policy="shortest_descr
 # 必须提供同一编码下的 rule.description_length；选择不改变认证真假。
 ```
 
-概念记忆从 `bidirectional_modeling.extensions.concepts` 导入；访问 `engine.concepts` 或在细化时指定 concept_name 才加载它。`record_judgment(..., source="操作者/记录来源")` 和 `history` 保存判断来源、版本与变更前后的判断事件。异常和预算诊断不能成为概念负例。
+概念记忆由调用方从 `bidirectional_modeling.extensions.concepts` 显式加载，独立于引擎和细化过程。`record_judgment(..., source="操作者/记录来源")` 和 `history` 保存判断来源、版本与变更前后的判断事件。异常和预算诊断不能成为概念负例。
+
+
+对应证书的 `commutes` 是只读派生属性，不接受构造参数，为 True/False/None：只有完整验证通过时为 True，有实际不交换见证时为 False，其余为 None。`passed` 始终为布尔值。对应套件预算不足或未执行的用例同样不能声明交换成立。概念到实验的对应和排除边界见 [概念实验对应](concept_experiments.md)。
+
+
+行为等价检查使用 `bidirectional_modeling.engine.behaviorally_equivalent`，结果为 True/False/None。只有两个完整、绑定正确且非空的轨迹批次才可判定；预算不足、缺少第三方场景清单或绑定失败返回 None。调用方应显式区分 `result is False` 与 `result is None`。
+
+组合操作测试先重放转移与读出。确定的观察或支撑冲突足以排除该规则，默认跳过该用例的残差计算；需要完整诊断时传 `full_diagnostics=True`。不稳定执行保持未决，不能产生操作反例。
+
+细化返回的步骤由调用方决定是否写入概念记忆：
+
+```python
+from bidirectional_modeling.core import Concept
+from bidirectional_modeling.extensions.concepts import ConceptLibrary
+
+library = ConceptLibrary((Concept("state", "declared task-relative state"),))
+for step in refinement.steps:
+    if step.accepted_feature and step.closure_report.counterexamples:
+        library.refine_from_counterexample("state", step.closure_report.counterexamples[0])
+```
+
+批次 `diagnostics` 保存 TraceDiagnostic 的稳定 code 和展示 detail，`boundaries` 为展示文案的派生视图。复核绑定原因码、证据与原始资源协议；仅修改 detail 不改变证书身份。复核执行预算只限制本次运行，不能把未完整采集的证据升级为完整证书。
+
+
+生成过程的边界：RealizationResult 与 InterpretationResult 的 diagnostics 记录候选源错误，已完成候选保留，truncated 表示目录未完整处理。读取候选前检查上限；未知长度迭代器恰好达到上限时保持未决，不额外取样确认结束。宏观往返采用相同边界。
+
+验证器抛异常后若无法取得准确消耗，实现搜索将剩余额度保守计入 simulations_used 并停止执行；base-budget 诊断记录 reserved_simulations。这是防止再次分配的记账上界，不是虚构已验证场景数。失败证书仍记录零个已认证场景并绑定本次预算。
+
+ObservedEffectGenerator 生成的“maintain”目标用 EACH 检查整个声明时域；非恒定轨迹生成“at horizon …”终值目标。后者不主张初值、单调性、增加、减少或目录外的因果关系。

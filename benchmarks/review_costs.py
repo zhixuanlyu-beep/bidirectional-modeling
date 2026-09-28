@@ -8,12 +8,10 @@ import json
 from time import perf_counter
 from unittest.mock import patch
 
-from bidirectional_modeling import (
-    ConstraintQuery, Context, DescriptionLength, ExperimentHypothesisSearch,
-    LazyExecutableSearch, ModelSearchCandidate, ModelSearchCase, ScenarioKey,
-    SearchExperiment, SearchObservation, SearchProtocol, SearchWorkBudget,
-    verify_query_result,
-)
+from bidirectional_modeling import (ConstraintQuery, Context, DescriptionLength, ExperimentHypothesisSearch, ScenarioKey, SearchExperiment, SearchObservation, SearchProtocol, SearchWorkBudget)
+from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
+from bidirectional_modeling.search_adapter import (ModelSearchCandidate, ModelSearchCase)
+from bidirectional_modeling.search_queries import (verify_query_result)
 from bidirectional_modeling.context_network import (
     ContextChange, ContextTransition, ModelingContext, validate_context_transition,
 )

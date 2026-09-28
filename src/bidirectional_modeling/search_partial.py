@@ -8,8 +8,8 @@ from typing import Optional, Tuple
 from .core import ResourceBudget
 from .evaluation import SatisfactionEvaluator
 from .provenance import trace_batch_protocol_fingerprint
-from .search import SearchBudgetExceeded, SearchProtocol, SearchWorkBudget, _natural
-from .search_adapter import ExecutableSearchAdapter, model_declaration_fingerprint
+from .search import SearchBudgetExceeded, SearchWorkBudget, _natural
+from .search_adapter import _collect_response_matrix, model_declaration_fingerprint
 from .structural import fingerprint_value, isolated_copy
 
 
@@ -77,23 +77,27 @@ def collect_partial_prediction(protocol, candidate, cases, experiments, *,
     except SearchBudgetExceeded as error:
         return PartialPredictionResult(None, 0, error.reason)
     indexes = tuple(names.index(n) for n in selected)
-    # Projection may collapse different full worlds; retain unique partial rows.
-    projected = SearchProtocol(protocol.scope, protocol.coding,
-        tuple(protocol.experiments[i] for i in indexes),
-        tuple(dict.fromkeys(tuple(w[i] for i in indexes) for w in protocol.worlds)))
-    prepared = ExecutableSearchAdapter(evaluator).prepare(projected,
-        (replace(candidate, commitments=()),), tuple(cases[i] for i in indexes),
-        target='partial-response', world_answers=('prediction',) * len(projected.worlds),
-        max_simulations=max_simulations)
+    matrix = _collect_response_matrix(candidate, tuple(cases[i] for i in indexes),
+        max_simulations=max_simulations, evaluator=evaluator)
     if _binding(protocol, candidate, cases) != digest:
-        return PartialPredictionResult(None, prepared.simulations_used, 'input_declaration_changed')
-    h = prepared.search.hypotheses[0]
-    if h.world is None:
-        return PartialPredictionResult(None, prepared.simulations_used, 'prediction_unresolved',
-                                       prepared.diagnostics)
+        return PartialPredictionResult(None, matrix.simulations_used, 'input_declaration_changed')
+    if matrix.responses is None:
+        return PartialPredictionResult(None, matrix.simulations_used, 'prediction_unresolved',
+                                       matrix.diagnostics)
+    # Check membership without constructing a projected search problem or answer table.
+    try:
+        for world in protocol.worlds:
+            budget.consume('response_checks')
+            if tuple(world[i] for i in indexes) == matrix.responses:
+                break
+        else:
+            return PartialPredictionResult(None, matrix.simulations_used, 'prediction_unresolved',
+                ((candidate.model.name, 'PredictionDomainError', 'prediction_outside_response_universe'),))
+    except SearchBudgetExceeded as error:
+        return PartialPredictionResult(None, matrix.simulations_used, error.reason)
     prediction = PartialPrediction(digest, candidate.model.name, selected,
-                                   projected.worlds[h.world], prepared.batch_bindings, max_simulations)
-    return PartialPredictionResult(prediction, prepared.simulations_used, 'selected_matrix_replayed')
+                                   matrix.responses, matrix.batch_bindings, max_simulations)
+    return PartialPredictionResult(prediction, matrix.simulations_used, 'selected_matrix_replayed')
 
 
 class _BoundedReplayEvaluator:
@@ -119,19 +123,14 @@ class _BoundedReplayEvaluator:
         # original (possibly larger) limit. Never upgrade incomplete evidence.
         if batch.complete and batch.binds(model, context, horizon):
             limit = original_budget.max_simulations
-            boundaries = batch.boundaries
+            diagnostics = batch.diagnostics
             if cap < limit:
-                # At an exact cap, the collector records an iterator-exhaustion
-                # warning even when the independent manifest proves coverage.
-                # It would not occur under the larger original limit. Preserve
-                # all other diagnostics and never normalize incomplete batches.
-                boundaries = tuple(b for b in boundaries if not (
-                    b.startswith('partial verification covers ')
-                    and 'of an unproven total because the simulation budget was exhausted' in b))
+                diagnostics = tuple(d for d in diagnostics if d.code != 'iterator_limit_reached')
             digest = trace_batch_protocol_fingerprint(batch.model_fingerprint,
                 batch.context_fingerprint, batch.horizon, limit, batch.coverage_authority,
-                batch.complete, batch.coverage, boundaries)
-            return replace(batch, simulation_limit=limit, protocol_fingerprint=digest, boundaries=boundaries)
+                batch.complete, batch.coverage, tuple(d.code for d in diagnostics))
+            return replace(batch, simulation_limit=limit, protocol_fingerprint=digest,
+                           diagnostics=diagnostics)
         return batch
 
 
@@ -184,6 +183,7 @@ class EvidenceScreeningResult:
     certificates: tuple
     simulations_used: int
     reason: str
+    diagnostics: tuple = ()
 
 
 def verify_candidate_exclusion(protocol, candidate, cases, certificate, evidence, *,

@@ -3,7 +3,9 @@ import unittest
 from dataclasses import asdict, replace, FrozenInstanceError
 from unittest.mock import patch
 
-from bidirectional_modeling import (ExperimentHypothesisSearch, SearchBudgetExceeded, SearchSession, SearchWorkBudget)
+from bidirectional_modeling import (ExperimentHypothesisSearch, SearchWorkBudget)
+from bidirectional_modeling.search import (SearchBudgetExceeded)
+from bidirectional_modeling.search_session import (SearchSession)
 from bidirectional_modeling.search_benchmark import (SearchBenchmarkStep, benchmark_search_updates)
 from bidirectional_modeling.search_examples import conflict_search_scenario, dynamic_search_scenario
 from bidirectional_modeling.structural import fingerprint_value
@@ -56,7 +58,7 @@ class CacheTests(unittest.TestCase):
         session=SearchSession(indexed,data)
         session.add_hypothesis(replace(indexed.hypotheses[-1],name='copy'))
         self.assertIs(indexed._response_index,session.search._response_index)
-        self.assertFalse(session.search.validates_macro(certificate,data))
+        self.assertFalse(session.search.verify_macro(certificate,data).valid)
         restored=SearchSession.from_json(session.to_json())
         # Restore may build its own index to validate evidence, but never deserializes ours.
         self.assertIsNot(restored.search._response_index,indexed._response_index)

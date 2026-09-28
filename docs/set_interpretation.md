@@ -12,9 +12,7 @@
 ## 观测过滤与撤回
 
 ```python
-from bidirectional_modeling import (
-    Experiment, InterpretationObservation, PurposeHypothesis, PurposeLevel,
-)
+from bidirectional_modeling import (Experiment, InterpretationObservation, PurposeHypothesis, PurposeLevel)
 
 experiment = Experiment("probe-v1", "结果是什么？", ("0", "1"), cost=1)
 # spec 是调用者提供的 MacroSpec；model/context 与它的验证域相对应。

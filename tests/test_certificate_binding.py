@@ -2,12 +2,9 @@ import unittest
 from dataclasses import replace
 from functools import partial
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine,
-    ScaleGraph,
-    ScenarioKey,
-    correspondence_fingerprint,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling.correspondence import (ScaleGraph, correspondence_fingerprint)
+from bidirectional_modeling import (ScenarioKey)
 from bidirectional_modeling.cli import build_demo_report
 from bidirectional_modeling.examples import (
     scale_correspondence_scenario,
@@ -308,7 +305,7 @@ class CertificateBindingTests(unittest.TestCase):
         self.assertFalse(certificate.commutes)
         failures = [
             item.detail
-            for item in certificate.counterexamples
+            for item in certificate.diagnostics
             if item.kind == "projection-failed"
         ]
         self.assertTrue(
@@ -334,7 +331,7 @@ class CertificateBindingTests(unittest.TestCase):
         self.assertFalse(certificate.passed)
         identity_failures = [
             item.detail
-            for item in certificate.counterexamples
+            for item in certificate.diagnostics
             if item.kind == "correspondence-identity-changed"
         ]
         self.assertTrue(
@@ -422,3 +419,4 @@ class CertificateBindingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

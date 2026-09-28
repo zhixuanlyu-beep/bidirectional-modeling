@@ -2,13 +2,8 @@ import unittest
 from dataclasses import replace
 from itertools import combinations, product
 
-from bidirectional_modeling import (
-    ConstraintQuery, DescriptionLength, ExperimentHypothesisSearch,
-    FiniteSearchQueryBackend, LowerSubstituteQuery, MacroAlternativeQuery,
-    QueryStatus, ResponseConstraint, SearchExperiment, SearchHypothesis,
-    SearchObservation, SearchProtocol, SearchWorkBudget, query_fingerprint,
-    verify_query_result,
-)
+from bidirectional_modeling import (ConstraintQuery, DescriptionLength, ExperimentHypothesisSearch, LowerSubstituteQuery, MacroAlternativeQuery, QueryStatus, ResponseConstraint, SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol, SearchWorkBudget)
+from bidirectional_modeling.search_queries import (FiniteSearchQueryBackend, query_fingerprint, verify_query_result)
 
 
 def problem(backend='scan', allowed=(0, 1, 2, 3)):
@@ -140,3 +135,4 @@ class QueryTests(unittest.TestCase):
         with self.assertRaises(TypeError): p.query(object())
         for e in (SearchObservation('missing', '0', 'lab'), SearchObservation('a', 'outside', 'lab')):
             with self.assertRaises(ValueError): p.query(ConstraintQuery(evidence=(e,)))
+

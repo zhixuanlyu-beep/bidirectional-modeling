@@ -3,10 +3,9 @@
 `LazyExecutableSearch` 将可执行模型适配器接入统一查询接口。初始化只隔离输入、绑定声明并创建未知候选，不运行模拟。宏观查询按目录顺序逐个求值，找到异义见证后停止；低阶替代查询只求值目标及显式参考候选；约束查询只检查响应全集，不执行模型。
 
 ```python
-from bidirectional_modeling import (
-    LazyExecutableSearch, MacroAlternativeQuery, SearchWorkBudget,
-    verify_query_result,
-)
+from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
+from bidirectional_modeling import (MacroAlternativeQuery, SearchWorkBudget)
+from bidirectional_modeling.search_queries import (verify_query_result)
 
 # protocol、candidates、cases 与 ExecutableSearchAdapter.prepare 的输入相同。
 # world_answers 必须覆盖整个有限响应全集。
@@ -24,7 +23,7 @@ check = verify_query_result(result.search, query, result.receipt)
 
 每个执行的候选仍由 `ExecutableSearchAdapter` 完成两轮完整实验矩阵校验，检测模型声明变化、响应漂移和域外输出。只有完整成功结果进入缓存；失败或中断结果保持未知，下次可以重新尝试。原始调用者输入会被隔离，普通可复制配置的外部修改不影响已有实例。
 
-复用同一实例可跨查询、观测撤回或重新校准复用预测，因为实验案例和模型声明固定，观测仅用于过滤。候选、实验、目标或回答映射变化时必须创建新实例；新实例不会继承旧缓存。执行前后发现实例内声明变化会抛出异常，要求重建。0.18.1 起，已有缓存的候选出现域外完整响应也会使实例失效；`snapshot` 同样检查实例有效性。
+复用同一实例可跨查询、观测撤回或重新校准复用预测，因为实验案例和模型声明固定，观测仅用于过滤。候选、实验、目标或回答映射变化时必须创建新实例；新实例不会继承旧缓存。执行前后发现实例内声明变化会抛出异常，要求重建。已有缓存的候选出现域外完整响应也会使实例失效；`snapshot` 同样检查实例有效性。
 
 已返回的有限问题快照不会随缓存增长改变。务必使用 `result.search` 复核 `result.receipt`；后续快照可能有不同指纹。复核保证有限目录中结论和见证的语义，不重新执行模型，也不认证来源元数据。声明指纹独立于有限查询指纹，不应将查询复核视为外部模型真实性证明。
 
@@ -36,4 +35,5 @@ check = verify_query_result(result.search, query, result.receipt)
 
 测试中两个单案例候选的完整准备需 4 次模拟；首个候选提供见证时只需 2 次，重复查询为 0 次。若必须证明无异义候选，仍可能需要全部模拟，并承担额外查询成本，因此不承诺普遍加速。
 
-0.18.0 已增加显式 `predict_experiments` 入口，支持收集、复核和扩展部分响应；详见 [部分响应文档](search_partial.md)。`execute` 仍按完整候选求值，不会使用部分响应直接剪枝。
+显式 `predict_experiments` 入口，支持收集、复核和扩展部分响应；详见 [部分响应文档](search_partial.md)。`execute` 仍按完整候选求值，不会使用部分响应直接剪枝。
+

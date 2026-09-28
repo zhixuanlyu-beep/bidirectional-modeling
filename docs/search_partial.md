@@ -1,4 +1,4 @@
-# 可验证的部分响应（0.18.0）
+# 可验证的部分响应
 
 `collect_partial_prediction` 只执行明确选定的实验；结果是模型预测，不能作为真实观测输入，也不能直接作为完整世界的见证。`verify_partial_prediction` 会独立重新执行所选实验矩阵，验证响应与两轮批次来源。
 
@@ -6,11 +6,10 @@
 
 ```python
 from itertools import product
-from bidirectional_modeling import (
-    Context, DescriptionLength, FiniteStateModel, LazyExecutableSearch,
-    MacroAlternativeQuery, ModelMetrics, ModelSearchCandidate, ModelSearchCase,
-    ScenarioKey, SearchExperiment, SearchProtocol, verify_partial_prediction,
-)
+from bidirectional_modeling import (Context, DescriptionLength, FiniteStateModel, MacroAlternativeQuery, ModelMetrics, ScenarioKey, SearchExperiment, SearchProtocol)
+from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
+from bidirectional_modeling.search_adapter import (ModelSearchCandidate, ModelSearchCase)
+from bidirectional_modeling.search_partial import (verify_partial_prediction)
 
 protocol = SearchProtocol('demo', 'binary',
     (SearchExperiment('a', 'read y'), SearchExperiment('b', 'read y')),
@@ -41,7 +40,7 @@ assert result.receipt.status.value == 'found'
 
 ## 回执与验证
 
-`PartialPrediction` 包含原始输入指纹、候选名称、按协议排序的实验名称、对应响应及双轮批次绑定。0.18.1 起还记录原始 `simulation_limit`；复核的 `max_simulations` 是独立执行上限，只要足够完成重放，无须与原始预算相等。缺失原始预算的旧对象返回 `undecided / missing_collection_protocol`，需重新采集；不会猜测原始资源协议。输入指纹覆盖完整协议、模型声明、候选描述/约束/材料和全部案例声明，包括此次未执行的案例。修改未执行的案例也会使旧回执的绑定检查失败。选择顺序会规范化为协议顺序；空集合、重复或域外名称会被拒绝。
+`PartialPrediction` 包含原始输入指纹、候选名称、按协议排序的实验名称、对应响应及双轮批次绑定。以及原始 `simulation_limit`；复核的 `max_simulations` 是独立执行上限，只要足够完成重放，无须与原始预算相等。缺失原始预算的旧对象返回 `undecided / missing_collection_protocol`，需重新采集；不会猜测原始资源协议。输入指纹覆盖完整协议、模型声明、候选描述/约束/材料和全部案例声明，包括此次未执行的案例。修改未执行的案例也会使旧回执的绑定检查失败。选择顺序会规范化为协议顺序；空集合、重复或域外名称会被拒绝。
 
 收集返回 `PartialPredictionResult`，含 `prediction`、本次 `simulations_used`、原因和诊断。无法完成时 `prediction=None`，不发布半成品。投影响应全集会去重；部分回执仅表明响应属于该投影，不断言原始候选约束成立，也不确定尚未执行的坐标。
 
@@ -70,7 +69,7 @@ assert result.receipt.status.value == 'found'
 证据限定的个体排除使用下节专用接口，并保留候选与证据绑定。
 
 
-## 0.19.0：证据限定的个体筛查
+## 证据限定的个体筛查
 
 新增 `LazyExecutableSearch.screen_evidence` 与 `verify_candidate_exclusion`。已认证的部分预测冲突可提前排除一个候选；部分吻合仍不构成完整响应。筛查结果携带观测依赖且不改变全目录，原有 `execute` 保持完整矩阵语义。详细验收及限制见 [情境网络文档](context_network.md#部分预测排除)。
 
@@ -80,3 +79,8 @@ assert result.receipt.status.value == 'found'
 筛查在公共调用开始和结束时各核验一次完整候选目录声明；内部批次继续执行部分预测自身的绑定与双轮重放检查。
 若其他候选在筛查期间被回调改变，结束检查使整个实例失效且不返回筛查结论。此后 snapshot、预测与查询均拒绝访问。
 该优化减少全目录指纹重复计算，不承诺所有准备工作均为线性；完整预测提升仍需验证候选目录。
+
+完整与部分预测共享双轮矩阵采集。部分响应必须能扩展为声明响应全集中的至少一行；检查受工作预算约束，失败或耗尽时不发布预测。此条件只证明局部响应处于协议域内，不验证候选的全部承诺。
+
+
+完整响应升级为候选时，承诺核验失败返回 prediction_declaration_invalid 与 diagnostics，完整搜索快照和此前部分缓存保持不变。screen_evidence 将该候选列为 undecided 并继续筛查其他候选；该诊断不是实验反例，不生成排除证书。

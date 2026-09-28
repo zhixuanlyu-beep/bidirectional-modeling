@@ -114,7 +114,7 @@ class SearchSession:
         payload = document['payload']
         if document['checksum'] != fingerprint_value(payload):
             raise ValueError('session checksum mismatch')
-        if type(payload['schema_version']) is not int or payload['schema_version'] not in (1,2):
+        if type(payload['schema_version']) is not int or payload['schema_version'] != 2:
             raise ValueError('unsupported session schema')
         p = payload['protocol']
         protocol = SearchProtocol(p['scope'],p['coding'],
@@ -123,7 +123,7 @@ class SearchSession:
         hypotheses = tuple(SearchHypothesis(**dict(h,description=DescriptionLength(**h['description'])))
                            for h in payload['hypotheses'])
         search = ExperimentHypothesisSearch(protocol,hypotheses,payload['target'],backend=payload.get('backend','scan'),
-                    world_answers=payload['world_answers'] if payload['schema_version'] == 2 else None)
+                    world_answers=payload['world_answers'])
         if search.fingerprint != payload['problem_fingerprint']:
             raise ValueError('session problem binding mismatch')
         evidence = tuple(SearchObservation(**o) for o in payload['evidence'])

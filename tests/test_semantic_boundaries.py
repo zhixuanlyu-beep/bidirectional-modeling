@@ -5,12 +5,9 @@ import sys
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (
-    BidirectionalModelingEngine, Context, CustomRequirement, EquivalenceSpec,
-    FieldRequirement, FiniteStateModel, MacroSpec, ModelMetrics, ProbeOutcome,
-    PurposeHypothesis, PurposeLevel, Realizer, RequirementCategory, ResourceBudget,
-    SatisfactionEvaluator, VerificationIssue,
-)
+from bidirectional_modeling.engine import (BidirectionalModelingEngine)
+from bidirectional_modeling import (Context, CustomRequirement, EquivalenceSpec, FieldRequirement, FiniteStateModel, MacroSpec, ModelMetrics, PurposeHypothesis, PurposeLevel, Realizer, RequirementCategory, ResourceBudget, SatisfactionEvaluator)
+from bidirectional_modeling.core import (ProbeOutcome, VerificationIssue)
 from bidirectional_modeling.core import _compare
 from bidirectional_modeling.composition import CompositionRuleSelector
 from bidirectional_modeling.examples import composition_rule_scenario
@@ -118,14 +115,19 @@ class UnknownBoundaryTests(unittest.TestCase):
         s = replace(spec(expected=0), horizon=2)
         engine = BidirectionalModelingEngine()
         report = engine.refine_until_closed(m, s, Context(),
-            lambda report, s, m: 'k', concept_name='state', max_iterations=1)
+            lambda report, s, m: 'k', max_iterations=1)
         self.assertFalse(report.closed)
         self.assertTrue(report.steps[0].closure_report.diagnostics)
         self.assertTrue(report.steps[0].closure_report.counterexamples)
-        self.assertEqual(engine.concepts.history[0].source, 'dynamical-non-closure')
-        self.assertNotIn('unavailable', engine.concepts.history[0].example)
+        from bidirectional_modeling.core import Concept
+        library = ConceptLibrary((Concept('state', 'declared state'),))
+        for step in report.steps:
+            if step.accepted_feature and step.closure_report.counterexamples:
+                library.refine_from_counterexample('state', step.closure_report.counterexamples[0])
+        self.assertEqual(library.history[0].source, 'dynamical-non-closure')
+        self.assertNotIn('unavailable', library.history[0].example)
         with self.assertRaises(ValueError):
-            engine.concepts.refine_from_counterexample('state', VerificationIssue('execution', 'unavailable'))
+            library.refine_from_counterexample('state', VerificationIssue('execution', 'unavailable'))
 
 
 class PolicyBoundaryTests(unittest.TestCase):
@@ -164,14 +166,14 @@ class PolicyBoundaryTests(unittest.TestCase):
         self.assertFalse(plain.unique_selection)
 
     def test_concept_memory_is_optional_and_preserves_judgment_provenance(self):
-        from bidirectional_modeling import Concept
+        from bidirectional_modeling.core import (Concept)
         library = ConceptLibrary((Concept('c', 'definition'),))
         library.record_judgment('c', 'example', True, source='operator A')
         library.record_judgment('c', 'example', False, source='operator B')
         self.assertEqual(tuple(item.source for item in library.history), ('operator A', 'operator B'))
         self.assertEqual(tuple(item.accepted for item in library.history), (True, False))
         p = subprocess.run([sys.executable, '-c',
-            'import sys; from bidirectional_modeling import BidirectionalModelingEngine; '
+            'import sys; from bidirectional_modeling.engine import BidirectionalModelingEngine; '
             'e=BidirectionalModelingEngine(); '
             'assert "bidirectional_modeling.extensions.concepts" not in sys.modules'],
             capture_output=True, text=True)

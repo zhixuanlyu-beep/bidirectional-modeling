@@ -3,7 +3,7 @@ from dataclasses import asdict, dataclass
 
 from .search import (ExperimentHypothesisSearch, SearchBudgetExceeded, SearchHypothesis,
                      SearchWorkBudget, _natural)
-from .search_adapter import ExecutableSearchAdapter, model_declaration_fingerprint
+from .search_adapter import ExecutableSearchAdapter, model_declaration_fingerprint, _promote_prediction
 from .search_queries import (ConstraintQuery, LowerSubstituteQuery, QueryResult, QueryStatus,
                              _query_scope)
 from .structural import fingerprint_value, isolated_copy
@@ -125,13 +125,16 @@ class LazyExecutableSearch:
             self._invalidated = True
             raise ValueError('partial response changed; create a new instance')
         if selected == names:
-            world = self._protocol.worlds.index(prediction.responses)
-            c = candidates[candidate]
-            hypothesis = SearchHypothesis(candidate, world, self._answers[world],
-                                          c.description, c.commitments, c.materials)
-            # Validate full-world commitments before publishing either cache.
-            self._search = self._search.with_hypotheses(tuple(
-                hypothesis if h.name == candidate else h for h in self._search.hypotheses))
+            try:
+                hypothesis = _promote_prediction(self._search, candidates[candidate], prediction.responses)
+                updated = self._search.with_hypotheses(tuple(
+                    hypothesis if h.name == candidate else h for h in self._search.hypotheses))
+            except (ValueError, TypeError) as error:
+                return PartialPredictionResult(None, result.simulations_used,
+                    'prediction_declaration_invalid',
+                    ((candidate, type(error).__name__, str(error)),))
+            # Both caches remain unchanged if full promotion cannot be established.
+            self._search = updated
             self._bindings = tuple(b for b in self._bindings if b[0] != candidate) + prediction.batch_bindings
         self._partial[candidate] = prediction
         return result
@@ -148,7 +151,7 @@ class LazyExecutableSearch:
         self._check_declaration()
         budget = budget if budget is not None else SearchWorkBudget()
         evidence = tuple(evidence)
-        excluded, matching, certificates = [], [], []
+        excluded, matching, certificates, diagnostics = [], [], [], []
         used, reason = 0, 'completed'
         try:
             evidence = self._search._evidence(evidence, budget)
@@ -171,6 +174,7 @@ class LazyExecutableSearch:
                         result = self._predict_experiments(name, selected,
                             max_simulations=max_simulations-used, budget=budget)
                         used += result.simulations_used
+                        diagnostics.extend(result.diagnostics)
                         if result.prediction is None:
                             all_matched = False
                             reason = result.reason
@@ -194,7 +198,7 @@ class LazyExecutableSearch:
         undecided = tuple(c.model.name for c in self._candidates
                           if c.model.name not in excluded and c.model.name not in matching)
         return EvidenceScreeningResult(self._declaration, evidence, tuple(excluded),
-            tuple(matching), undecided, tuple(certificates), used, reason)
+            tuple(matching), undecided, tuple(certificates), used, reason, tuple(diagnostics))
 
     def execute(self, query, *, max_simulations=10000, budget=None):
         """Simulation limit is per call; successful candidate cache survives calls.

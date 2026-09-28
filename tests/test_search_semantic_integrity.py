@@ -2,7 +2,10 @@ import json
 import unittest
 from dataclasses import replace
 
-from bidirectional_modeling import (DescriptionLength, ExecutableSearchAdapter, ExperimentHypothesisSearch, ReconstructionRule, SearchHypothesis, SearchObservation, SearchProtocol, SearchExperiment, SearchSession)
+from bidirectional_modeling import (DescriptionLength, ExperimentHypothesisSearch, SearchHypothesis, SearchObservation, SearchProtocol, SearchExperiment)
+from bidirectional_modeling.search_adapter import (ExecutableSearchAdapter)
+from bidirectional_modeling.search_reconstruction import (ReconstructionRule)
+from bidirectional_modeling.search_session import (SearchSession)
 from bidirectional_modeling.search_benchmark import (benchmark_search)
 from bidirectional_modeling.evaluation import SatisfactionEvaluator
 from bidirectional_modeling.search_examples import conflict_search_scenario
@@ -55,22 +58,21 @@ class SemanticIntegrityTests(unittest.TestCase):
         doc=json.loads(session.to_json())
         doc['payload']['schema_version']=1
         doc['checksum']=fingerprint_value(doc['payload'])
-        with self.assertRaisesRegex(ValueError,'binding'): SearchSession.from_json(json.dumps(doc))
+        with self.assertRaisesRegex(ValueError,'unsupported session schema'): SearchSession.from_json(json.dumps(doc))
         doc=json.loads(session.to_json())
         doc['payload']['world_answers']=['high','low']
         doc['checksum']=fingerprint_value(doc['payload'])
         with self.assertRaises(ValueError): SearchSession.from_json(json.dumps(doc))
         with self.assertRaises(ValueError): SearchSession(prepared.search,model_bindings=(('bad',),))
 
-    def test_legacy_unmapped_session_remains_explicitly_unmapped(self):
+    def test_legacy_session_schema_is_rejected(self):
         search,data=conflict_search_scenario()
         doc=json.loads(SearchSession(search,data).to_json())
         doc['payload']['schema_version']=1
         del doc['payload']['world_answers']
         doc['checksum']=fingerprint_value(doc['payload'])
-        restored=SearchSession.from_json(json.dumps(doc))
-        self.assertIsNone(restored.search.world_answers)
-        self.assertEqual(restored.search.fingerprint,search.fingerprint)
+        with self.assertRaisesRegex(ValueError, 'unsupported session schema'):
+            SearchSession.from_json(json.dumps(doc))
 
     def test_cross_case_configuration_drift_is_rejected_and_caller_unmodified(self):
         p,c,cases=adapter_args()
@@ -97,7 +99,7 @@ class SemanticIntegrityTests(unittest.TestCase):
             (SearchExperiment('a','read y'),SearchExperiment('b','read y')),
             (('0','0'),('0','1'),('1','1')))
         cases=(replace(cases[0],experiment='a'),replace(cases[0],experiment='b'))
-        from bidirectional_modeling import Context, ScenarioKey, Trace
+        from bidirectional_modeling import (Context, ScenarioKey, Trace)
         cases=tuple(replace(case,context=Context(scenario_manifest=(ScenarioKey('s','baseline'),))) for case in cases)
         class ExternalModel:
             name='external'

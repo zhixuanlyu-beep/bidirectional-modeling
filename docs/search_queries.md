@@ -1,12 +1,10 @@
-# 有限查询接口（0.16.0）
+# 有限查询接口
 
 统一接口为未来惰性预测和符号后端提供扩展边界。目前实现仍要求显式有限响应全集及候选目录，不包含 SMT/SAT 求解器。
 
 ```python
-from bidirectional_modeling import (
-    ConstraintQuery, MacroAlternativeQuery, LowerSubstituteQuery,
-    QueryStatus, SearchWorkBudget, verify_query_result,
-)
+from bidirectional_modeling import (ConstraintQuery, MacroAlternativeQuery, LowerSubstituteQuery, QueryStatus, SearchWorkBudget)
+from bidirectional_modeling.search_queries import (verify_query_result)
 from bidirectional_modeling.search_examples import conflict_search_scenario
 
 problem, evidence = conflict_search_scenario()

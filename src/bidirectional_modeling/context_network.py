@@ -95,17 +95,6 @@ class ContextTransition:
             raise ValueError('unmapped target response')
         return translations[experiment, value]
 
-    def matching_source_worlds(self, target_world, budget):
-        old_names = tuple(e.name for e in self.source.protocol.experiments)
-        new_names = tuple(e.name for e in self.target.protocol.experiments)
-        translated = tuple((old_names.index(a), self.translate_response(a, target_world[new_names.index(b)]))
-                           for a, b in self.experiments)
-        matches = []
-        for i, row in enumerate(self.source.protocol.worlds):
-            budget.consume('response_checks')
-            if all(row[j] == response for j, response in translated):
-                matches.append(i)
-        return tuple(matches)
 
 
 @dataclass(frozen=True)

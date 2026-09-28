@@ -29,6 +29,13 @@ from .structural import isolated_copy, isolated_mapping, validate_fingerprint
 
 
 @dataclass(frozen=True)
+class TraceDiagnostic:
+    """Stable collection reason plus presentation-only detail."""
+    code: str
+    detail: str
+
+
+@dataclass(frozen=True)
 class TraceBatch:
     """A budget-bounded set of traces with independently established coverage."""
 
@@ -40,7 +47,7 @@ class TraceBatch:
     model_fingerprint: str
     context_fingerprint: str
     protocol_fingerprint: str
-    boundaries: Tuple[str, ...] = ()
+    diagnostics: Tuple[TraceDiagnostic, ...] = ()
     coverage_authority: str = "none"
 
     def __post_init__(self) -> None:
@@ -81,12 +88,16 @@ class TraceBatch:
             self.coverage_authority,
             self.complete,
             self.coverage,
-            self.boundaries,
+            tuple(d.code for d in self.diagnostics),
         )
         if expected_protocol != self.protocol_fingerprint:
             raise ValueError(
                 "trace batch fields do not match its protocol fingerprint"
             )
+
+    @property
+    def boundaries(self) -> Tuple[str, ...]:
+        return tuple(d.detail for d in self.diagnostics)
 
     @property
     def simulations_used(self) -> int:
@@ -135,7 +146,7 @@ def _trace_batch_binding_errors(
         batch.coverage_authority,
         batch.complete,
         batch.coverage,
-        batch.boundaries,
+        tuple(d.code for d in batch.diagnostics),
     )
     if batch.protocol_fingerprint != expected_protocol:
         errors.append("trace batch metadata changed after collection")
@@ -154,7 +165,7 @@ class SatisfactionEvaluator:
         traces: Tuple[Trace, ...],
         complete: bool,
         coverage: float,
-        boundaries: list[str],
+        boundaries: list[TraceDiagnostic],
         coverage_authority: str,
     ) -> TraceBatch:
         """Attach deterministic evidence and protocol identities to a batch."""
@@ -166,12 +177,12 @@ class SatisfactionEvaluator:
         if model_error is not None:
             complete = False
             boundaries.append(
-                "model evidence could not be fingerprinted: %s" % model_error
+                TraceDiagnostic('model_binding_failed', "model evidence could not be fingerprinted: %s" % model_error)
             )
         if context_error is not None:
             complete = False
             boundaries.append(
-                "context could not be fingerprinted: %s" % context_error
+                TraceDiagnostic('context_binding_failed', "context could not be fingerprinted: %s" % context_error)
             )
         final_boundaries = tuple(dict.fromkeys(boundaries))
         protocol_digest = trace_batch_protocol_fingerprint(
@@ -182,7 +193,7 @@ class SatisfactionEvaluator:
             coverage_authority,
             complete,
             coverage,
-            final_boundaries,
+            tuple(d.code for d in final_boundaries),
         )
         return TraceBatch(
             traces=traces,
@@ -193,7 +204,7 @@ class SatisfactionEvaluator:
             model_fingerprint=model_digest,
             context_fingerprint=context_digest,
             protocol_fingerprint=protocol_digest,
-            boundaries=final_boundaries,
+            diagnostics=final_boundaries,
             coverage_authority=coverage_authority,
         )
 
@@ -214,7 +225,7 @@ class SatisfactionEvaluator:
             (),
             False,
             0.0,
-            [boundary],
+            [TraceDiagnostic("not_started", boundary)],
             "none",
         )
 
@@ -226,7 +237,7 @@ class SatisfactionEvaluator:
         traces: Tuple[Trace, ...],
         source_exhausted: bool,
         source_failed: bool,
-        boundaries: list[str],
+        boundaries: list[TraceDiagnostic],
         simulation_limit: int,
     ) -> TraceBatch:
         """Validate trace integrity against a caller- or framework-owned domain."""
@@ -254,7 +265,7 @@ class SatisfactionEvaluator:
         for index, trace in enumerate(traces):
             if not isinstance(trace, Trace):
                 integrity_ok = False
-                boundaries.append("scenario %d is not a Trace instance" % index)
+                boundaries.append(TraceDiagnostic('invalid_trace', "scenario %d is not a Trace instance" % index))
                 continue
             try:
                 trace = Trace(
@@ -272,33 +283,33 @@ class SatisfactionEvaluator:
             except Exception as error:
                 integrity_ok = False
                 boundaries.append(
-                    "scenario %d evidence could not be isolated: %s"
-                    % (index, error)
+                    TraceDiagnostic('trace_isolation_failed', "scenario %d evidence could not be isolated: %s"
+                    % (index, error))
                 )
                 continue
             certified_traces.append(trace)
             if len(trace.snapshots) != horizon + 1:
                 integrity_ok = False
                 boundaries.append(
-                    "scenario %s/%s has %d snapshots; expected %d for horizon %d"
+                    TraceDiagnostic('invalid_horizon', "scenario %s/%s has %d snapshots; expected %d for horizon %d"
                     % (
                         trace.initial_state,
                         trace.intervention,
                         len(trace.snapshots),
                         horizon + 1,
                         horizon,
-                    )
+                    ))
                 )
             if expected_model_name is not None and trace.model_name != expected_model_name:
                 integrity_ok = False
                 boundaries.append(
-                    "scenario %s/%s names model %r instead of %r"
+                    TraceDiagnostic('model_name_mismatch', "scenario %s/%s names model %r instead of %r"
                     % (
                         trace.initial_state,
                         trace.intervention,
                         trace.model_name,
                         expected_model_name,
-                    )
+                    ))
                 )
             valid_keys.append(trace.scenario_key)
 
@@ -309,14 +320,14 @@ class SatisfactionEvaluator:
         if duplicate_count:
             integrity_ok = False
             boundaries.append(
-                "trace enumeration contains %d duplicate scenario identities"
-                % duplicate_count
+                TraceDiagnostic('duplicate_scenarios', "trace enumeration contains %d duplicate scenario identities"
+                % duplicate_count)
             )
 
         if expected is None:
             boundaries.append(
-                "no caller-owned scenario manifest was supplied for a third-party model; "
-                "candidate enumeration cannot prove domain coverage"
+                TraceDiagnostic('missing_manifest', "no caller-owned scenario manifest was supplied for a third-party model; "
+                "candidate enumeration cannot prove domain coverage")
             )
             return self._bound_trace_batch(
                 model,
@@ -335,19 +346,19 @@ class SatisfactionEvaluator:
         unexpected = unique_keys - expected_keys
         if missing:
             boundaries.append(
-                "missing required scenarios: %s"
+                TraceDiagnostic('missing_scenarios', "missing required scenarios: %s"
                 % ", ".join(
                     "%s/%s" % (item.initial_state, item.intervention)
                     for item in sorted(missing)
-                )
+                ))
             )
         if unexpected:
             boundaries.append(
-                "unexpected scenarios outside the manifest: %s"
+                TraceDiagnostic('unexpected_scenarios', "unexpected scenarios outside the manifest: %s"
                 % ", ".join(
                     "%s/%s" % (item.initial_state, item.intervention)
                     for item in sorted(unexpected)
-                )
+                ))
             )
         coverage = (
             len(expected_keys.intersection(unique_keys)) / len(expected_keys)
@@ -407,13 +418,13 @@ class SatisfactionEvaluator:
                 )
                 if declared_total < 0:
                     boundaries.append(
-                        "candidate declared a negative scenario count; the declaration was ignored"
+                        TraceDiagnostic('negative_scenario_count', "candidate declared a negative scenario count; the declaration was ignored")
                     )
                     declared_total = None
             except Exception as error:
                 boundaries.append(
-                    "candidate scenario-count declaration failed and was ignored: %s"
-                    % error
+                    TraceDiagnostic('scenario_count_failed', "candidate scenario-count declaration failed and was ignored: %s"
+                    % error)
                 )
 
         try:
@@ -423,7 +434,7 @@ class SatisfactionEvaluator:
             )
         except Exception as error:
             boundaries.append(
-                "simulation failed before producing a scenario: %s" % error
+                TraceDiagnostic('simulation_start_failed', "simulation failed before producing a scenario: %s" % error)
             )
             return self._certify_trace_batch(
                 model,
@@ -445,13 +456,13 @@ class SatisfactionEvaluator:
             source_exhausted = len(traces) == known_total
             if declared_total is not None and declared_total != known_total:
                 boundaries.append(
-                    "candidate declared %d scenarios but enumerated %d; the declaration was ignored"
-                    % (declared_total, known_total)
+                    TraceDiagnostic('scenario_count_mismatch', "candidate declared %d scenarios but enumerated %d; the declaration was ignored"
+                    % (declared_total, known_total))
                 )
             if not source_exhausted:
                 boundaries.append(
-                    "partial verification covers %d/%d scenarios because the simulation budget was exhausted"
-                    % (len(traces), known_total)
+                    TraceDiagnostic('container_limit_reached', "partial verification covers %d/%d scenarios because the simulation budget was exhausted"
+                    % (len(traces), known_total))
                 )
             return self._certify_trace_batch(
                 model,
@@ -478,12 +489,12 @@ class SatisfactionEvaluator:
         except Exception as error:
             source_failed = True
             boundaries.append(
-                "simulation failed after %d scenarios: %s" % (len(traces), error)
+                TraceDiagnostic('simulation_failed', "simulation failed after %d scenarios: %s" % (len(traces), error))
             )
             if declared_total is not None and len(traces) > declared_total:
                 boundaries.append(
-                    "candidate declared %d scenarios but produced more; the declaration was ignored"
-                    % declared_total
+                    TraceDiagnostic('scenario_count_mismatch', "candidate declared %d scenarios but produced more; the declaration was ignored"
+                    % declared_total)
                 )
         enumerated_count = len(traces)
         if declared_total is not None:
@@ -493,8 +504,8 @@ class SatisfactionEvaluator:
             if mismatch:
                 actual = str(enumerated_count) if exhausted else "more than %d" % declared_total
                 boundaries.append(
-                    "candidate declared %d scenarios but enumerated %s; the declaration was ignored"
-                    % (declared_total, actual)
+                    TraceDiagnostic('scenario_count_mismatch', "candidate declared %d scenarios but enumerated %s; the declaration was ignored"
+                    % (declared_total, actual))
                 )
         if not exhausted and not source_failed:
             declared_hint = (
@@ -503,8 +514,8 @@ class SatisfactionEvaluator:
                 else ""
             )
             boundaries.append(
-                "partial verification covers %d scenarios of an unproven total because the simulation budget was exhausted%s"
-                % (len(traces), declared_hint)
+                TraceDiagnostic('iterator_limit_reached', "partial verification covers %d scenarios of an unproven total because the simulation budget was exhausted%s"
+                % (len(traces), declared_hint))
             )
         return self._certify_trace_batch(
             model,
@@ -736,26 +747,19 @@ class SatisfactionEvaluator:
             model, (), spec.horizon
         )
         context_digest, context_error = safe_context_fingerprint(context)
-        boundaries = [
-            "candidate verification failed before completion: %s" % detail,
-        ]
-        for label, error in (
-            ("macro specification", spec_error),
-            ("model evidence", model_error),
-            ("context", context_error),
+        diagnostics = [TraceDiagnostic('candidate_verification_failed',
+            "candidate verification failed before completion: %s" % detail)]
+        for code, label, error in (
+            ('spec_binding_failed', "macro specification", spec_error),
+            ('model_binding_failed', "model evidence", model_error),
+            ('context_binding_failed', "context", context_error),
         ):
             if error is not None:
-                boundaries.append("%s could not be fingerprinted: %s" % (label, error))
+                diagnostics.append(TraceDiagnostic(code, "%s could not be fingerprinted: %s" % (label, error)))
+        boundaries = tuple(d.detail for d in diagnostics)
         trace_protocol_digest = trace_batch_protocol_fingerprint(
-            model_digest,
-            context_digest,
-            spec.horizon,
-            0,
-            "none",
-            False,
-            0.0,
-            tuple(boundaries),
-        )
+            model_digest, context_digest, spec.horizon, budget.max_simulations,
+            "none", False, 0.0, tuple(d.code for d in diagnostics))
         protocol_digest = satisfaction_protocol_fingerprint(
             spec_digest,
             model_digest,

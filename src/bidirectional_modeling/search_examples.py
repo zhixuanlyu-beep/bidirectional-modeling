@@ -61,7 +61,7 @@ def build_search_demo_report():
         'conflict_evidence_count': len(report.conflicts[0].evidence),
         'retained_macro_evidence': [o.experiment for o in basis.retained_evidence],
         'minimum_cardinality': basis.minimum_cardinality,
-        'certificate_valid': search.validates_macro(basis, evidence),
+        'certificate_valid': search.verify_macro(basis, evidence).valid,
         'initial_next_experiment': search.next_experiment().name,
         'lower_substitute_status': search.query(LowerSubstituteQuery('xz', ('x', 'z'))).status.value,
         'protocol_fingerprint': search.protocol.fingerprint,

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from .refinement import ClosureAnalyzer
+from .residual import ResidualQuotientAnalyzer
+from .composition import CompositionRuleSelector
+
+from dataclasses import asdict
 import argparse
 import json
 from typing import Any, Dict
@@ -31,29 +36,34 @@ def build_demo_report() -> Dict[str, Any]:
     residual_equivalence, residual_context, residual_model = (
         residual_quotient_scenario()
     )
-    residual = engine.discover_residual_quotient(
+    residual = ResidualQuotientAnalyzer().analyze(
         residual_model,
         residual_equivalence,
         residual_context,
     )
 
     composition_experiments, composition_rules = composition_rule_scenario()
-    composition = engine.select_composition_rules(
+    composition = CompositionRuleSelector().select(
         composition_rules,
         composition_experiments,
         selection_policy="shortest_description",
     )
 
     science_spec, science_context, science_model = science_closure_scenario()
-    closure = engine.check_closure(science_model, science_spec, science_context)
+    closure = ClosureAnalyzer().analyze(science_model, science_spec, science_context)
     refinement = engine.refine_until_closed(
         science_model,
         science_spec,
         science_context,
         lambda report, _spec, _model: report.suggested_features[0],
-        concept_name="position state",
     )
-    refined = engine.concepts.get("position state")
+    from .extensions.concepts import ConceptLibrary
+    from .core import Concept
+    concepts = ConceptLibrary((Concept("position state", "task-relative position equivalence"),))
+    for step in refinement.steps:
+        if step.accepted_feature and step.closure_report.counterexamples:
+            concepts.refine_from_counterexample("position state", step.closure_report.counterexamples[0])
+    refined = concepts.get("position state")
 
     org_context, org_model, hypotheses, experiments, evidence = (
         organization_interpretation_scenario()
@@ -71,10 +81,13 @@ def build_demo_report() -> Dict[str, Any]:
         correspondence,
         correspondence_cases,
     )
-    scale_paths = engine.scale_graph.find_paths("micro", "macro")
+    scale_paths = (engine.scale_graph.find_paths("micro", "macro")
+                   if correspondence_certificate.passed else ())
 
     return {
         "realize": {
+            "truncated": realized.truncated,
+            "diagnostics": [asdict(issue) for issue in realized.diagnostics],
             "goal": software_spec.name,
             "pareto_candidates": [
                 {
@@ -141,6 +154,8 @@ def build_demo_report() -> Dict[str, Any]:
             ],
             "non_identifiable": interpreted.non_identifiable,
             "identification_status": interpreted.identification_status,
+            "truncated": interpreted.truncated,
+            "diagnostics": interpretation_snapshot["diagnostics"],
             "undecided": interpretation_snapshot["undecided"],
             "rejected": interpretation_snapshot["rejected"],
             "ordering_policy": interpreted.ordering_policy,
@@ -318,6 +333,11 @@ def build_demo_report() -> Dict[str, Any]:
                     "role": item.role.value,
                     "independent": item.independent,
                     "passed": item.certificate.passed,
+                    "status": item.certificate.status,
+                    "commutes": item.certificate.commutes,
+                    "counterexamples": [asdict(c) for c in item.certificate.counterexamples],
+                    "diagnostics": [asdict(d) for d in item.certificate.diagnostics],
+                    "applicability_failures": [asdict(d) for d in item.certificate.applicability_failures],
                     "lower_model_fingerprint": (
                         item.certificate.lower_model_fingerprint
                     ),
@@ -445,6 +465,10 @@ def _print_human(report: Dict[str, Any]) -> None:
         % ("通过" if correspondence["independent_holdout"] else "缺失")
     )
 
+    labels = {"verified": "已验证", "refuted": "已反驳", "undecided": "未决", "not_applicable": "不适用"}
+    for case in correspondence["cases"]:
+        print("  %s：%s" % (case["name"], labels[case["status"]]))
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the bidirectional modeling reference demo")
@@ -480,4 +504,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

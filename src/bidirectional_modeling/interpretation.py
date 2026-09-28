@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Iterable, Mapping, Optional, Protocol, Sequence, Tuple, Union
 
 from .core import (
+    Aggregation,
     Context,
     DiscriminatingQuery,
     Evidence,
@@ -24,6 +25,7 @@ from .core import (
     InterpretationObservation,
 )
 from .evaluation import SatisfactionEvaluator, TraceBatch
+from ._generation import CandidateStream
 from .structural import freeze_value
 
 
@@ -50,7 +52,7 @@ class CatalogHypothesisGenerator:
     def generate(
         self, model: ExecutableModel, context: Context
     ) -> Iterable[PurposeHypothesis]:
-        return iter(self.hypotheses)
+        return self.hypotheses
 
 
 class ObservedEffectGenerator:
@@ -80,7 +82,6 @@ class ObservedEffectGenerator:
                 common_fields.intersection_update(snapshot)
         hypotheses = []
         for field_name in sorted(common_fields):
-            initial_values = [trace.snapshots[0][field_name] for trace in traces]
             final_values = [trace.snapshots[-1][field_name] for trace in traces]
             final_identities = tuple(
                 freeze_value(
@@ -104,35 +105,16 @@ class ObservedEffectGenerator:
                 )
                 for trace in traces
             )
-            if all(
-                freeze_value(
-                    initial,
-                    purpose="observed effect deterministic structural identity",
-                )
-                == final_identity
-                for initial in initial_values
-            ) and remains_constant:
+            if remains_constant:
                 label = "maintain %s at %r" % (field_name, final_value)
-            elif all(
-                isinstance(initial, (int, float))
-                and isinstance(final_value, (int, float))
-                and final_value > initial
-                for initial in initial_values
-            ):
-                label = "increase %s to %r" % (field_name, final_value)
-            elif all(
-                isinstance(initial, (int, float))
-                and isinstance(final_value, (int, float))
-                and final_value < initial
-                for initial in initial_values
-            ):
-                label = "decrease %s to %r" % (field_name, final_value)
+                aggregation = Aggregation.EACH
             else:
-                label = "produce %s=%r" % (field_name, final_value)
+                label = "at horizon %d, %s = %r" % (self.horizon, field_name, final_value)
+                aggregation = Aggregation.FINAL
             spec = MacroSpec(
                 name=label,
                 observables=(field_name,),
-                objectives=(FieldRequirement(label, field_name, "eq", final_value),),
+                objectives=(FieldRequirement(label, field_name, "eq", final_value, aggregation=aggregation),),
                 equivalence=EquivalenceSpec((field_name,)),
                 horizon=self.horizon,
             )
@@ -250,19 +232,15 @@ class Interpreter:
             simulations_used += batch.simulations_used
             remaining_simulations -= batch.simulations_used
             truncated = not batch.complete
-            hypothesis_items = trace_generator(batch.traces, batch.complete)
+            factory = lambda: trace_generator(batch.traces, batch.complete)
         elif hasattr(hypotheses, "generate"):
-            hypothesis_items = hypotheses.generate(model, context)  # type: ignore[union-attr]
+            factory = lambda: hypotheses.generate(model, context)  # type: ignore[union-attr]
         else:
-            hypothesis_items = iter(hypotheses)  # type: ignore[arg-type]
+            factory = lambda: hypotheses
         candidates = []
-        inspected = 0
+        stream = CandidateStream(factory, budget.max_candidates)
         names = set()
-        for hypothesis in hypothesis_items:
-            if inspected >= budget.max_candidates:
-                truncated = True
-                break
-            inspected += 1
+        for hypothesis in stream:
             if hypothesis.name in names:
                 raise ValueError("duplicate hypothesis name")
             names.add(hypothesis.name)
@@ -317,6 +295,7 @@ class Interpreter:
                 requirement_count=len(hypothesis.spec.requirements),
                 direct_intent_evidence=direct, evidence=relevant, caveats=tuple(caveats)))
 
+        truncated = truncated or not stream.complete
         candidates.sort(key=lambda item: item.hypothesis.name)
         groups = _equivalent_groups(candidates, experiments)
         query = _select_experiment(candidates, experiments, observed) if len(candidates) > 1 and not (truncated or undecided) else None
@@ -332,5 +311,6 @@ class Interpreter:
             rejected=tuple(rejected), undecided=tuple(undecided),
             simulations_used=simulations_used,
             truncated=truncated,
+            diagnostics=tuple(stream.diagnostics),
         )
 

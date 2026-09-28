@@ -50,7 +50,7 @@ assert report.pruned == ('z',)
 assert report.determined
 
 basis = search.compress_evidence(observations)
-assert search.validates_macro(basis, observations)
+assert search.verify_macro(basis, observations).valid
 assert len(basis.retained_evidence) == 2
 ```
 
@@ -58,7 +58,7 @@ assert len(basis.retained_evidence) == 2
 
 ## 可选领域模块
 
-协议转换、证书迁移、部分排除和宏观充分性属于本轮核心范围。布尔重构与有限关系拼接随包提供，按需显式导入：
+协议转换、证书迁移、部分排除和宏观充分性属于核心范围。布尔重构与有限关系拼接随包提供，按需显式导入：
 
 ```python
 from bidirectional_modeling.extensions.boolean import BooleanExpression, BooleanLanguage
@@ -69,7 +69,9 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 
 概念记忆从 `extensions.concepts` 按需加载，保存人工判断来源，不能作为结构证明。组合规则验证默认保留全部认证候选，最短描述选择须显式启用。
 
-领域接口仅从上述扩展模块导入；网络容器从 `bidirectional_modeling.context_network` 导入；基准从 `bidirectional_modeling.search_benchmark` 导入或通过 CLI 使用。已移除旧领域模块路径、顶层领域/基准导出和 `irreducible_against`，迁移方式见 [变更记录](CHANGELOG.md)。
+顶层提供常用建模声明、Realizer、Interpreter 和有限查询入口。编排引擎从 `bidirectional_modeling.engine` 导入；对应、闭合、残差、组合、预测适配、会话及证书复核从各自模块导入。概念记忆由调用方显式更新，不参与引擎的验证流程。
+
+网络容器从 `bidirectional_modeling.context_network` 导入；基准从 `bidirectional_modeling.search_benchmark` 导入或通过 CLI 使用。接口迁移见 [变更记录](CHANGELOG.md)。
 
 ## 文档
 
@@ -82,6 +84,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 | 按实验预测与排除 | [部分响应](docs/search_partial.md) |
 | 无概率解释、观测过滤与实验选择 | [允许结果集合](docs/set_interpretation.md) |
 | 协议变化、证书迁移及可选扩展 | [情境转换](docs/context_network.md) |
+| 概念、区分实验与反例排除边界 | [概念实验对应](docs/concept_experiments.md) |
 | 历史变化与迁移说明 | [CHANGELOG](CHANGELOG.md) |
 
 ## 证明边界
@@ -101,6 +104,7 @@ coverage run -m unittest discover -s tests -q
 coverage report
 coverage json -o coverage.json
 python3 tools/check_coverage.py coverage.json
+python3 tools/check_concept_mutations.py
 bidirectional-modeling search-benchmark --json
 bidirectional-modeling search-updates-benchmark --json
 PYTHONPATH=src python3 benchmarks/review_costs.py

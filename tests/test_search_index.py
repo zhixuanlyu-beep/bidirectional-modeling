@@ -2,7 +2,10 @@ import unittest
 from dataclasses import replace
 from itertools import combinations, product
 
-from bidirectional_modeling import (DescriptionLength, ExperimentHypothesisSearch, ReconstructionRule, ResponseConstraint, SearchBudgetExceeded, SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol, SearchSession, SearchWorkBudget)
+from bidirectional_modeling import (DescriptionLength, ExperimentHypothesisSearch, ResponseConstraint, SearchExperiment, SearchHypothesis, SearchObservation, SearchProtocol, SearchWorkBudget)
+from bidirectional_modeling.search_reconstruction import (ReconstructionRule)
+from bidirectional_modeling.search import (SearchBudgetExceeded)
+from bidirectional_modeling.search_session import (SearchSession)
 from bidirectional_modeling.search_benchmark import (benchmark_search)
 from bidirectional_modeling.search_examples import conflict_search_scenario
 
