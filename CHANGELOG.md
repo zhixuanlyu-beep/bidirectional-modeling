@@ -2,6 +2,13 @@
 
 版本记录描述各版本引入时的行为；当前使用方式以 README 和专题文档为准。
 
+## 0.22.0
+
+- 对应模块新增 CorrespondenceIssue，将 diagnostics、applicability_failures 与真实 counterexamples 分开；新增 status。commutes 改为 True/False/None，覆盖不足或未执行的用例不再返回 True；passed 仍为布尔值。不保留旧混合结果语义。
+- CLI JSON 与文本分别呈现未决与反证；修复失败对应没有已验证尺度路径时演示崩溃的问题。
+- FieldRequirement 在声明时检查 aggregation 类型；补充聚合、类型化成员判断、证据撤回、联合排除锥、迁移目标自相矛盾等区分实验。
+- 新增概念—实验—证书结果—排除边界文档；CI 在临时源码副本中检验六种明确语义变异。变异检查失败必须是断言发现错误，导入/执行错误不计为成功检出。
+
 ## 0.21.1
 
 - 根据未覆盖分支补充失效轨迹、验证期间规范/资源指标变化、未决探针、跨阶段预算、逐操作证书迁移预算及复核回归。

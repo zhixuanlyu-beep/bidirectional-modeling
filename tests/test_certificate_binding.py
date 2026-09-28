@@ -308,7 +308,7 @@ class CertificateBindingTests(unittest.TestCase):
         self.assertFalse(certificate.commutes)
         failures = [
             item.detail
-            for item in certificate.counterexamples
+            for item in certificate.diagnostics
             if item.kind == "projection-failed"
         ]
         self.assertTrue(
@@ -334,7 +334,7 @@ class CertificateBindingTests(unittest.TestCase):
         self.assertFalse(certificate.passed)
         identity_failures = [
             item.detail
-            for item in certificate.counterexamples
+            for item in certificate.diagnostics
             if item.kind == "correspondence-identity-changed"
         ]
         self.assertTrue(
@@ -422,3 +422,4 @@ class CertificateBindingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

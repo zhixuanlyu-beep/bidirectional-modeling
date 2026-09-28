@@ -318,6 +318,8 @@ class FieldRequirement:
     tolerance: float = 0.0
 
     def __post_init__(self) -> None:
+        if not isinstance(self.aggregation, Aggregation):
+            raise TypeError("aggregation must be an Aggregation member")
         tolerance = float(self.tolerance)
         if not math.isfinite(tolerance) or tolerance < 0:
             raise ValueError("requirement tolerance must be finite and non-negative")

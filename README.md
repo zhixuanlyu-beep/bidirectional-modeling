@@ -82,6 +82,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 | 按实验预测与排除 | [部分响应](docs/search_partial.md) |
 | 无概率解释、观测过滤与实验选择 | [允许结果集合](docs/set_interpretation.md) |
 | 协议变化、证书迁移及可选扩展 | [情境转换](docs/context_network.md) |
+| 概念、区分实验与反例排除边界 | [概念实验对应](docs/concept_experiments.md) |
 | 历史变化与迁移说明 | [CHANGELOG](CHANGELOG.md) |
 
 ## 证明边界
@@ -101,6 +102,7 @@ coverage run -m unittest discover -s tests -q
 coverage report
 coverage json -o coverage.json
 python3 tools/check_coverage.py coverage.json
+python3 tools/check_concept_mutations.py
 bidirectional-modeling search-benchmark --json
 bidirectional-modeling search-updates-benchmark --json
 PYTHONPATH=src python3 benchmarks/review_costs.py

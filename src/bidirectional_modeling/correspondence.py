@@ -246,8 +246,8 @@ def _protocol_fingerprint(
 
 
 @dataclass(frozen=True)
-class CorrespondenceCounterexample:
-    """One explicit failure of coverage, projection, or dynamic commutation."""
+class CorrespondenceIssue:
+    """A scoped applicability or execution issue, not a behavioral refutation."""
 
     kind: str
     detail: str
@@ -257,6 +257,15 @@ class CorrespondenceCounterexample:
     lower_snapshot: Optional[Mapping[str, Any]] = None
     projected_snapshot: Optional[Mapping[str, Any]] = None
     upper_snapshot: Optional[Mapping[str, Any]] = None
+
+
+@dataclass(frozen=True)
+class CorrespondenceCounterexample(CorrespondenceIssue):
+    """A successfully observed failure of the commuting relation."""
+
+    def __post_init__(self):
+        if self.kind != "non-commuting-step":
+            raise ValueError("only an observed commuting mismatch is a correspondence counterexample")
 
 
 @dataclass(frozen=True)
@@ -270,7 +279,7 @@ class CorrespondenceCertificate:
     upper_model_name: str
     horizon: int
     complete: bool
-    commutes: bool
+    commutes: Optional[bool]
     lower_scenarios: int
     upper_scenarios: int
     paired_scenarios: int
@@ -287,8 +296,14 @@ class CorrespondenceCertificate:
     lower_coverage_authority: str = "none"
     upper_coverage_authority: str = "none"
     simulations_used: int = 0
+    diagnostics: Tuple[CorrespondenceIssue, ...] = ()
+    applicability_failures: Tuple[CorrespondenceIssue, ...] = ()
 
     def __post_init__(self) -> None:
+        if self.complete and (self.diagnostics or self.applicability_failures):
+            raise ValueError("an unresolved or inapplicable correspondence cannot be complete")
+        if self.commutes is True and (not self.complete or self.counterexamples):
+            raise ValueError("commutation requires complete verification without counterexamples")
         if any(
             not value
             for value in (
@@ -322,8 +337,18 @@ class CorrespondenceCertificate:
             validate_fingerprint(fingerprint, purpose=label)
 
     @property
+    def status(self) -> str:
+        if self.diagnostics:
+            return "undecided"
+        if self.applicability_failures:
+            return "not_applicable"
+        if self.counterexamples:
+            return "refuted"
+        return "verified" if self.complete else "undecided"
+
+    @property
     def passed(self) -> bool:
-        return self.complete and self.commutes
+        return self.complete and self.commutes is True
 
     def binds_correspondence(self, correspondence: Correspondence) -> bool:
         return (
@@ -441,10 +466,12 @@ class CorrespondenceSuiteCertificate:
         )
 
     @property
-    def commutes(self) -> bool:
-        return bool(self.cases) and all(
-            item.certificate.commutes for item in self.cases
-        )
+    def commutes(self) -> Optional[bool]:
+        if any(item.certificate.commutes is False for item in self.cases):
+            return False
+        if self.truncated or not self.complete:
+            return None
+        return all(item.certificate.commutes is True for item in self.cases)
 
     @property
     def compatibility_passed(self) -> bool:
@@ -484,15 +511,9 @@ CorrespondenceEvidence = Union[
 class CorrespondenceValidator:
     """Verify that projection commutes with lower- and upper-scale dynamics."""
 
-    _COVERAGE_FAILURES = {
-        "empty-lower-domain",
-        "empty-upper-domain",
-        "invalid-lower-trace",
-        "invalid-upper-trace",
-        "scenario-projection-failed",
-        "missing-upper-scenario",
-        "ambiguous-upper-scenario",
-        "unmapped-upper-scenario",
+    _EXECUTION_FAILURES = {
+        "scenario-projection-failed", "projection-failed", "correspondence-identity-changed",
+        "incomplete-domain", "model-binding-failed",
     }
 
     def __init__(self, evaluator: Optional[SatisfactionEvaluator] = None) -> None:
@@ -546,15 +567,20 @@ class CorrespondenceValidator:
         boundaries = list(
             "lower: %s" % item for item in lower_batch.boundaries
         ) + list("upper: %s" % item for item in upper_batch.boundaries)
-        counterexamples = []
+        findings = []
+
+        for label, batch in (("lower", lower_batch), ("upper", upper_batch)):
+            if not batch.complete:
+                findings.append(CorrespondenceIssue("incomplete-domain", label + ": " +
+                    ("; ".join(batch.boundaries) or "scenario verification incomplete")))
 
         lower_traces = []
         for index, trace in enumerate(lower_batch.traces):
             if isinstance(trace, Trace):
                 lower_traces.append(trace)
             else:
-                counterexamples.append(
-                    CorrespondenceCounterexample(
+                findings.append(
+                    CorrespondenceIssue(
                         "invalid-lower-trace",
                         "lower trace %d is not a Trace instance" % index,
                     )
@@ -564,8 +590,8 @@ class CorrespondenceValidator:
         upper_by_key: Dict[ScenarioKey, list[Trace]] = {}
         for index, trace in enumerate(upper_batch.traces):
             if not isinstance(trace, Trace):
-                counterexamples.append(
-                    CorrespondenceCounterexample(
+                findings.append(
+                    CorrespondenceIssue(
                         "invalid-upper-trace",
                         "upper trace %d is not a Trace instance" % index,
                     )
@@ -575,15 +601,15 @@ class CorrespondenceValidator:
             upper_by_key.setdefault(trace.scenario_key, []).append(trace)
 
         if not lower_traces:
-            counterexamples.append(
-                CorrespondenceCounterexample(
+            findings.append(
+                CorrespondenceIssue(
                     "empty-lower-domain",
                     "a correspondence cannot be certified over an empty lower domain",
                 )
             )
         if not upper_traces:
-            counterexamples.append(
-                CorrespondenceCounterexample(
+            findings.append(
+                CorrespondenceIssue(
                     "empty-upper-domain",
                     "a correspondence cannot be certified over an empty upper domain",
                 )
@@ -598,8 +624,8 @@ class CorrespondenceValidator:
                     correspondence, lower_key
                 )
             except Exception as error:
-                counterexamples.append(
-                    CorrespondenceCounterexample(
+                findings.append(
+                    CorrespondenceIssue(
                         "scenario-projection-failed",
                         str(error),
                         lower_scenario=lower_key,
@@ -609,8 +635,8 @@ class CorrespondenceValidator:
 
             candidates = upper_by_key.get(upper_key, [])
             if not candidates:
-                counterexamples.append(
-                    CorrespondenceCounterexample(
+                findings.append(
+                    CorrespondenceIssue(
                         "missing-upper-scenario",
                         "projected scenario is absent from the upper trace batch",
                         lower_scenario=lower_key,
@@ -619,8 +645,8 @@ class CorrespondenceValidator:
                 )
                 continue
             if len(candidates) != 1:
-                counterexamples.append(
-                    CorrespondenceCounterexample(
+                findings.append(
+                    CorrespondenceIssue(
                         "ambiguous-upper-scenario",
                         "projected scenario has %d upper traces" % len(candidates),
                         lower_scenario=lower_key,
@@ -642,8 +668,8 @@ class CorrespondenceValidator:
                     upper_snapshot
                 )
                 if missing_lower:
-                    counterexamples.append(
-                        CorrespondenceCounterexample(
+                    findings.append(
+                        CorrespondenceIssue(
                             "lower-interface-mismatch",
                             "lower snapshot is missing observables: %s"
                             % sorted(missing_lower),
@@ -656,8 +682,8 @@ class CorrespondenceValidator:
                     )
                     continue
                 if missing_upper:
-                    counterexamples.append(
-                        CorrespondenceCounterexample(
+                    findings.append(
+                        CorrespondenceIssue(
                             "upper-interface-mismatch",
                             "upper snapshot is missing observables: %s"
                             % sorted(missing_upper),
@@ -680,17 +706,20 @@ class CorrespondenceValidator:
                         correspondence.upper_scale.observables
                     ) - set(projected)
                     if missing_projected:
-                        raise KeyError(
-                            "projection is missing upper observables: %s"
-                            % sorted(missing_projected)
-                        )
+                        findings.append(CorrespondenceIssue(
+                            "projection-interface-mismatch",
+                            "projection is missing upper observables: %s" % sorted(missing_projected),
+                            lower_key, upper_key, step,
+                            projected_snapshot=dict(projected),
+                        ))
+                        continue
                     equivalent = correspondence.upper_scale.equivalence.equivalent(
                         projected,
                         upper_snapshot,
                     )
                 except Exception as error:
-                    counterexamples.append(
-                        CorrespondenceCounterexample(
+                    findings.append(
+                        CorrespondenceIssue(
                             "projection-failed",
                             str(error),
                             lower_key,
@@ -703,7 +732,7 @@ class CorrespondenceValidator:
                     continue
 
                 if not equivalent:
-                    counterexamples.append(
+                    findings.append(
                         CorrespondenceCounterexample(
                             "non-commuting-step",
                             "projected lower state is not upper-scale equivalent",
@@ -717,8 +746,8 @@ class CorrespondenceValidator:
                     )
 
         for upper_key in sorted(set(upper_by_key) - mapped_upper):
-            counterexamples.append(
-                CorrespondenceCounterexample(
+            findings.append(
+                CorrespondenceIssue(
                     "unmapped-upper-scenario",
                     "upper scenario has no lower-scale preimage",
                     upper_scenario=upper_key,
@@ -743,6 +772,7 @@ class CorrespondenceValidator:
             if error is None:
                 continue
             binding_complete = False
+            findings.append(CorrespondenceIssue("model-binding-failed", label + ": " + error))
             boundaries.append(
                 "%s model evidence could not be fingerprinted: %s"
                 % (label, error)
@@ -754,8 +784,8 @@ class CorrespondenceValidator:
         )
         if binding_error is not None:
             binding_complete = False
-            counterexamples.append(
-                CorrespondenceCounterexample(
+            findings.append(
+                CorrespondenceIssue(
                     "correspondence-identity-changed",
                     binding_error,
                 )
@@ -774,18 +804,14 @@ class CorrespondenceValidator:
             budget.max_simulations,
         )
 
-        coverage_complete = not any(
-            item.kind in self._COVERAGE_FAILURES for item in counterexamples
-        )
-        commutes = not any(
-            item.kind not in self._COVERAGE_FAILURES for item in counterexamples
-        )
-        complete = (
-            lower_batch.complete
-            and upper_batch.complete
-            and coverage_complete
-            and binding_complete
-        )
+        counterexamples = tuple(item for item in findings if isinstance(item, CorrespondenceCounterexample))
+        diagnostics = tuple(item for item in findings if item.kind in self._EXECUTION_FAILURES)
+        applicability = tuple(item for item in findings
+                              if not isinstance(item, CorrespondenceCounterexample)
+                              and item.kind not in self._EXECUTION_FAILURES)
+        complete = (lower_batch.complete and upper_batch.complete and binding_complete
+                    and not diagnostics and not applicability)
+        commutes = False if counterexamples else True if complete else None
         return CorrespondenceCertificate(
             correspondence_name=correspondence.name,
             lower_scale=correspondence.lower_scale.name,
@@ -805,7 +831,9 @@ class CorrespondenceValidator:
             protocol_fingerprint=protocol_digest,
             lower_context_fingerprint=lower_context_digest,
             upper_context_fingerprint=upper_context_digest,
-            counterexamples=tuple(counterexamples),
+            counterexamples=counterexamples,
+            diagnostics=diagnostics,
+            applicability_failures=applicability,
             assumptions=correspondence.assumptions,
             boundaries=tuple(boundaries),
             lower_coverage_authority=lower_batch.coverage_authority,
@@ -891,7 +919,7 @@ class CorrespondenceValidator:
                     upper_model_name=str(getattr(case.upper_model, "name", "")),
                     horizon=case.horizon,
                     complete=False,
-                    commutes=True,
+                    commutes=None,
                     lower_scenarios=0,
                     upper_scenarios=0,
                     paired_scenarios=0,
@@ -1130,3 +1158,4 @@ class ScaleGraph:
         return tuple(
             sorted(paths, key=lambda item: (len(item.correspondences), item.correspondences))
         )
+

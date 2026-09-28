@@ -5,6 +5,7 @@ from .correspondence import (
     CorrespondenceCaseRole,
     CorrespondenceCertificate,
     CorrespondenceCounterexample,
+    CorrespondenceIssue,
     CorrespondenceSuiteCertificate,
     CorrespondenceValidationCase,
     CorrespondenceValidator,
@@ -188,6 +189,7 @@ __all__ = [
     "CorrespondenceCaseRole",
     "CorrespondenceCertificate",
     "CorrespondenceCounterexample",
+    "CorrespondenceIssue",
     "CorrespondenceSuiteCertificate",
     "CorrespondenceValidationCase",
     "CorrespondenceValidator",
@@ -252,7 +254,7 @@ __all__ = [
     "pareto_partition",
 ]
 
-__version__ = "0.21.1"
+__version__ = "0.22.0"
 
 from .context_network import (
     ModelingContext, ContextChange, ContextTransition, ContextTransitionReport,

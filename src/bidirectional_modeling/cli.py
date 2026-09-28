@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 import argparse
 import json
 from typing import Any, Dict
@@ -71,7 +72,8 @@ def build_demo_report() -> Dict[str, Any]:
         correspondence,
         correspondence_cases,
     )
-    scale_paths = engine.scale_graph.find_paths("micro", "macro")
+    scale_paths = (engine.scale_graph.find_paths("micro", "macro")
+                   if correspondence_certificate.passed else ())
 
     return {
         "realize": {
@@ -318,6 +320,11 @@ def build_demo_report() -> Dict[str, Any]:
                     "role": item.role.value,
                     "independent": item.independent,
                     "passed": item.certificate.passed,
+                    "status": item.certificate.status,
+                    "commutes": item.certificate.commutes,
+                    "counterexamples": [asdict(c) for c in item.certificate.counterexamples],
+                    "diagnostics": [asdict(d) for d in item.certificate.diagnostics],
+                    "applicability_failures": [asdict(d) for d in item.certificate.applicability_failures],
                     "lower_model_fingerprint": (
                         item.certificate.lower_model_fingerprint
                     ),
@@ -444,6 +451,10 @@ def _print_human(report: Dict[str, Any]) -> None:
         "  独立留出复核：%s"
         % ("通过" if correspondence["independent_holdout"] else "缺失")
     )
+
+    labels = {"verified": "已验证", "refuted": "已反驳", "undecided": "未决", "not_applicable": "不适用"}
+    for case in correspondence["cases"]:
+        print("  %s：%s" % (case["name"], labels[case["status"]]))
 
 
 def main() -> None:

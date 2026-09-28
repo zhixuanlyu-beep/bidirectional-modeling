@@ -191,7 +191,10 @@ certificate = engine.verify_correspondence(
 print(certificate.passed)          # complete and commutes
 print(certificate.binds_correspondence(correspondence))
 print(certificate.protocol_fingerprint)
-print(certificate.counterexamples)
+print(certificate.status)          # verified / refuted / undecided / not_applicable
+print(certificate.counterexamples) # 仅成功读出后的不交换见证
+print(certificate.diagnostics)     # 执行异常、覆盖不足、声明变化
+print(certificate.applicability_failures) # 接口/域不满足声明
 ```
 
 这里验证的是整个动态交换图，而不只是终态数值相等：对每个下层场景 `s` 和每个时间步 `t`，下层快照经 `projection` 后必须与 `scenario_projection(s)` 指向的上层快照等价。投影与场景映射由调用方持有，因此候选模型不能自行改变判据。
@@ -306,3 +309,6 @@ preferred = selector.select(rules, experiments, selection_policy="shortest_descr
 ```
 
 概念记忆从 `bidirectional_modeling.extensions.concepts` 导入；访问 `engine.concepts` 或在细化时指定 concept_name 才加载它。`record_judgment(..., source="操作者/记录来源")` 和 `history` 保存判断来源、版本与变更前后的判断事件。异常和预算诊断不能成为概念负例。
+
+
+对应证书的 `commutes` 为 True/False/None：只有完整验证通过时为 True，有实际不交换见证时为 False，其余为 None。`passed` 始终为布尔值。对应套件预算不足或未执行的用例同样不能声明交换成立。概念到实验的对应和排除边界见 [概念实验对应](concept_experiments.md)。

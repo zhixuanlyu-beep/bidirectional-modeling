@@ -122,7 +122,7 @@ class CorrespondenceTests(unittest.TestCase):
 
         self.assertFalse(certificate.passed)
         self.assertFalse(certificate.complete)
-        self.assertTrue(certificate.commutes)
+        self.assertIsNone(certificate.commutes)
         self.assertEqual(certificate.lower_coverage_authority, "none")
         self.assertTrue(
             any("scenario manifest" in item for item in certificate.boundaries)
@@ -174,7 +174,7 @@ class CorrespondenceTests(unittest.TestCase):
         self.assertFalse(certificate.passed)
         self.assertFalse(certificate.complete)
         self.assertEqual(
-            {item.kind for item in certificate.counterexamples},
+            {item.kind for item in certificate.applicability_failures},
             {"empty-lower-domain", "empty-upper-domain"},
         )
 
@@ -192,11 +192,11 @@ class CorrespondenceTests(unittest.TestCase):
 
         self.assertFalse(certificate.passed)
         self.assertFalse(certificate.complete)
-        self.assertTrue(certificate.commutes)
+        self.assertIsNone(certificate.commutes)
         self.assertEqual(certificate.covered_upper_scenarios, 1)
         self.assertIn(
             "unmapped-upper-scenario",
-            {item.kind for item in certificate.counterexamples},
+            {item.kind for item in certificate.applicability_failures},
         )
 
     def test_projection_must_produce_the_declared_upper_interface(self):
@@ -208,11 +208,11 @@ class CorrespondenceTests(unittest.TestCase):
         certificate = self.verify(incomplete_projection)
 
         self.assertFalse(certificate.passed)
-        self.assertTrue(certificate.complete)
+        self.assertFalse(certificate.complete)
         self.assertFalse(certificate.commutes)
         self.assertEqual(
-            {item.kind for item in certificate.counterexamples},
-            {"projection-failed"},
+            {item.kind for item in certificate.applicability_failures},
+            {"projection-interface-mismatch"},
         )
 
     def test_edgewise_scale_path_does_not_become_a_transitive_proof(self):
