@@ -55,6 +55,14 @@ MUTATIONS = (
      'if any(not isinstance(v, str) or not v.strip() for v in (source, reason, applicability)):',
      'if False:', 'test_claim_boundaries.JudgmentAndExclusionTests'),
 
+    ('cached exclusion ignores withdrawn observation', 'search_partial.py',
+     'if observation not in evidence:', 'if False:',
+     'test_evidence_lifecycle.ScreeningLifecycleTests'),
+    ('session retains revoked certificates', 'search_session.py',
+     'self.evidence, self.certificates = evidence, tuple(retained)',
+     'self.evidence, self.certificates = evidence, self.certificates',
+     'test_evidence_lifecycle.MigrationLifecycleTests'),
+
 )
 
 
@@ -66,7 +74,7 @@ def run(source, target, cwd):
 
 
 def main():
-    for module in ('test_concept_contracts', 'test_execution_contracts', 'test_claim_boundaries'):
+    for module in ('test_concept_contracts', 'test_execution_contracts', 'test_claim_boundaries', 'test_evidence_lifecycle'):
         baseline = run(ROOT/'src', module, ROOT)
         if baseline.returncode:
             print(baseline.stderr)
