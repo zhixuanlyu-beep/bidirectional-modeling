@@ -618,10 +618,10 @@ class RegressionTests(unittest.TestCase):
             model, spec, context
         ).counterexamples[0]
         library = ConceptLibrary((Concept("c", "definition"),))
-        refined = library.refine_from_counterexample("c", counterexample)
+        refined = library.refine_from_counterexample("c", counterexample, source="explicit caller review", reason="paired states refute the declared grouping", applicability="reviewed relation to the named concept")
         self.assertEqual(refined.version, 2)
         self.assertEqual(
-            library.refine_from_counterexample("c", counterexample).version, 2
+            library.refine_from_counterexample("c", counterexample, source="explicit caller review", reason="paired states refute the declared grouping", applicability="reviewed relation to the named concept").version, 2
         )
         switched = library.record_judgment(
             "c", refined.negative_examples[0], accepted=True
@@ -775,7 +775,7 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(report.explored_states, 1)
         self.assertFalse(report.counterexamples)
 
-    def test_crashing_candidate_is_rejected_without_aborting_search(self):
+    def test_crashing_candidate_reserves_unaccounted_work(self):
         crashing = CrashingModel()
         good = TupleTraceModel(
             "good",
@@ -788,8 +788,10 @@ class RegressionTests(unittest.TestCase):
             ResourceBudget(max_simulations=1),
         )
 
-        self.assertEqual(result.searched_candidates, 2)
-        self.assertEqual(tuple(item.model.name for item in result.candidates), ("good",))
+        self.assertEqual(result.searched_candidates, 1)
+        self.assertFalse(result.candidates)
+        self.assertEqual(result.simulations_used, 1)
+        self.assertTrue(result.truncated)
         self.assertEqual(tuple(item.model.name for item in result.undecided), ("crashing",))
         self.assertTrue(
             any(

@@ -1,5 +1,15 @@
 # 变更记录
 
+## 0.24.0
+
+- 采集启动失败、中途失败或证据丢弃时，保守预留该批次额度。`simulations_used` 表示记账额度，`verified_scenarios` 仍为留存场景数；不是耗时或底层回调次数。
+- MEAN 使用 Fraction 精确聚合，比较与结构身份支持有理数。聚合观测可能为 Fraction；JSON 调用方需显式导出分子与分母。
+- HorizonExtensionProbe 默认非阻断；扩展规范失败不反驳原规范。显式 `blocking=True` 才将该额外要求纳入验收，见证保存两个规范指纹。
+- 概念反例记录必须显式提供 source、reason、applicability；不再通过 kind 字符串猜测证明资格。该方法记录人工判断，不认证适用关系。
+- InterpretationResult.excluded 改为不可变 InterpretationExclusion 记录，保留声明、上下文身份及冲突证据；to_dict 导出完整记录。这是本次局部审计记录，不是跨协议证书。
+
+
+
 版本记录描述各版本引入时的行为；当前使用方式以 README 和专题文档为准。
 
 ## 0.23.1

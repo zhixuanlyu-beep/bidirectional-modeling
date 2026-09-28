@@ -18,10 +18,10 @@ from bidirectional_modeling.examples import (
 class FrameworkTests(unittest.TestCase):
     def setUp(self):
         self.engine = BidirectionalModelingEngine(
-            realizer=Realizer(probes=(HorizonExtensionProbe(extra_steps=2),))
+            realizer=Realizer(probes=(HorizonExtensionProbe(extra_steps=2, blocking=True),))
         )
 
-    def test_one_goal_returns_pareto_set_and_rejects_gaming(self):
+    def test_explicit_extended_acceptance_returns_pareto_set(self):
         spec, context, models = software_scenario()
         result = self.engine.realize(spec, context, models)
 
@@ -34,7 +34,7 @@ class FrameworkTests(unittest.TestCase):
         self.assertIn("short-horizon-worker", rejected)
         self.assertEqual(
             rejected["short-horizon-worker"].counterexamples[0].kind,
-            "horizon-specification-gaming",
+            "extended-specification-failure",
         )
         self.assertTrue(
             all(candidate.certificate.satisfied for candidate in result.candidates)
@@ -89,7 +89,7 @@ class FrameworkTests(unittest.TestCase):
         )
         updated = library.refine_from_counterexample(
             "position state", counterexample
-        )
+        , source="explicit caller review", reason="paired states refute the declared grouping", applicability="reviewed relation to the named concept")
 
         self.assertEqual(updated.version, 2)
         self.assertTrue(updated.negative_examples)

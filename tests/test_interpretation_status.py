@@ -128,7 +128,7 @@ class InterpretationStatusTests(unittest.TestCase):
             hs, experiments=(experiment,), observations=iter((observation,)))
         self.assertEqual(len(macro.interpretations), 2)
         for result in macro.interpretations:
-            self.assertEqual(result.excluded, (('y', observation),))
+            self.assertEqual(tuple((e.candidate, e.observation) for e in result.excluded), (('y', observation),))
             self.assertEqual(result.identification_status, 'unique')
 
     def test_outcome_maps_copy_export_and_reject_mutation(self):

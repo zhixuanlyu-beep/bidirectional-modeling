@@ -12,6 +12,8 @@ class ConceptJudgment:
     accepted: bool
     source: str
     boundary: Optional[str]
+    reason: str = ""
+    applicability: str = ""
 
 
 class ConceptLibrary:
@@ -75,11 +77,16 @@ class ConceptLibrary:
         self._history.append(ConceptJudgment(name, updated.version, example, accepted, source, boundary))
         return updated
 
-    def refine_from_counterexample(self, name: str, counterexample: Counterexample) -> Concept:
+    def refine_from_counterexample(
+        self, name: str, counterexample: Counterexample, *,
+        source: str, reason: str, applicability: str,
+    ) -> Concept:
+        """Record a caller-approved relation, never infer concept membership from a witness."""
         if (not isinstance(counterexample, Counterexample)
-                or not counterexample.witness or not counterexample.violated
-                or any(token in counterexample.kind for token in ("error", "incomplete", "budget"))):
+                or not counterexample.witness or not counterexample.violated):
             raise ValueError("a diagnostic cannot become a concept counterexample")
+        if any(not isinstance(v, str) or not v.strip() for v in (source, reason, applicability)):
+            raise ValueError("source, reason and applicability must be explicit")
         concept = self.get(name)
         boundary = counterexample.summary
         example = repr(dict(counterexample.witness))
@@ -111,6 +118,6 @@ class ConceptLibrary:
             version=concept.version + 1,
         )
         self._concepts[name] = updated
-        self._history.append(ConceptJudgment(name, updated.version, example, False, counterexample.kind, boundary))
+        self._history.append(ConceptJudgment(name, updated.version, example, False, source, boundary, reason, applicability))
         return updated
 

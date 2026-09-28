@@ -102,7 +102,7 @@ class UnknownBoundaryTests(unittest.TestCase):
         self.assertEqual(result.rejected[0].counterexamples[0].kind, 'probe-requirement-failure')
 
     def test_probe_budget_is_a_diagnostic_not_a_contradiction(self):
-        result = Realizer(probes=(HorizonExtensionProbe(),)).realize(
+        result = Realizer(probes=(HorizonExtensionProbe(blocking=True),)).realize(
             spec(), Context(), (model(),), ResourceBudget(max_simulations=1))
         self.assertFalse(result.rejected or result.candidates)
         self.assertTrue(result.truncated)
@@ -123,11 +123,11 @@ class UnknownBoundaryTests(unittest.TestCase):
         library = ConceptLibrary((Concept('state', 'declared state'),))
         for step in report.steps:
             if step.accepted_feature and step.closure_report.counterexamples:
-                library.refine_from_counterexample('state', step.closure_report.counterexamples[0])
-        self.assertEqual(library.history[0].source, 'dynamical-non-closure')
+                library.refine_from_counterexample('state', step.closure_report.counterexamples[0], source="explicit caller review", reason="paired states refute the declared grouping", applicability="reviewed relation to the named concept")
+        self.assertEqual(library.history[0].source, 'explicit caller review')
         self.assertNotIn('unavailable', library.history[0].example)
         with self.assertRaises(ValueError):
-            library.refine_from_counterexample('state', VerificationIssue('execution', 'unavailable'))
+            library.refine_from_counterexample('state', VerificationIssue('execution', 'unavailable'), source="explicit caller review", reason="paired states refute the declared grouping", applicability="reviewed relation to the named concept")
 
 
 class PolicyBoundaryTests(unittest.TestCase):

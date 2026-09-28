@@ -152,8 +152,8 @@ class Realizer:
                 simulations_used += reserved
                 remaining_simulations = 0
                 truncated = True
-            simulations_used += certificate.verified_scenarios
-            remaining_simulations -= certificate.verified_scenarios
+            simulations_used += certificate.simulations_used
+            remaining_simulations -= certificate.simulations_used
             counterexamples = []
             probe_certificates = []
             diagnostics = []
@@ -167,11 +167,13 @@ class Realizer:
                     tuple(c.evaluation_error for c in certificate.checks if c.evaluation_error)
                     + certificate.failure_boundaries) or "verification incomplete"))
             if certificate.satisfied:
-                for probe in self.probes:
+                for probe_index, probe in enumerate(self.probes):
+                    required = getattr(probe, "blocking", True)
                     if remaining_simulations <= 0:
                         diagnostics.append(VerificationIssue(
                             "probe-budget", "configured probes could not all run"))
-                        unresolved = True
+                        unresolved = unresolved or any(
+                            getattr(p, "blocking", True) for p in self.probes[probe_index:])
                         truncated = True
                         break
                     probe_budget = replace(budget, max_simulations=remaining_simulations)
@@ -182,7 +184,8 @@ class Realizer:
                     except Exception as error:
                         diagnostics.append(VerificationIssue(
                             "probe-execution", str(error), {"probe": type(probe).__name__}))
-                        unresolved = True
+                        unresolved = unresolved or any(
+                            getattr(p, "blocking", True) for p in self.probes[probe_index:])
                         # An arbitrary probe may have consumed any portion of the
                         # budget before raising. Fail closed and reserve all of
                         # the remaining allowance instead of risking overspend.
@@ -195,16 +198,16 @@ class Realizer:
                     if outcome.certificate is not None:
                         probe_certificates.append(outcome.certificate)
                         if not outcome.certificate.complete:
-                            unresolved = True
+                            unresolved = unresolved or required
                             diagnostics.append(VerificationIssue("probe-verification", "probe certificate incomplete"))
                         elif not outcome.certificate.satisfied and outcome.counterexample is None:
                             counterexamples.append(Counterexample(
                                 "probe-requirement-failure", "probe certificate contains a failed requirement",
                                 {"model": model.name, "failed_checks": tuple(
                                     c.name for c in outcome.certificate.checks if not c.passed)},
-                                violated=("configured probe requirements",)))
+                                violated=("configured probe requirements",), blocking=required))
                     if outcome.diagnostics:
-                        unresolved = True
+                        unresolved = unresolved or required
                         diagnostics.extend(outcome.diagnostics)
                     if outcome.counterexample is not None:
                         counterexamples.append(outcome.counterexample)

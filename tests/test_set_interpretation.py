@@ -34,7 +34,7 @@ class SetInterpretationTests(unittest.TestCase):
         observation = InterpretationObservation('e', '0', 'lab-v1')
         r = self.run_hypotheses(hypotheses, (observation,))
         self.assertEqual(tuple(c.hypothesis.name for c in r.candidates), ('A', 'C'))
-        self.assertEqual(r.excluded, (('B', observation),))
+        self.assertEqual(tuple((e.candidate, e.observation) for e in r.excluded), (('B', observation),))
         self.assertEqual(r.observations, (observation,))
         self.assertIsNone(r.discriminating_query)
         self.assertTrue(r.non_identifiable)

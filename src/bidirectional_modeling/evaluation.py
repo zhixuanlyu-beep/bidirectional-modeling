@@ -101,6 +101,11 @@ class TraceBatch:
 
     @property
     def simulations_used(self) -> int:
+        # Failed or discarded work cannot be counted from surviving evidence.
+        if any(d.code in {"simulation_start_failed", "simulation_failed",
+                          "invalid_trace", "trace_isolation_failed"}
+               for d in self.diagnostics):
+            return self.simulation_limit
         return len(self.traces)
 
     def binds(
@@ -705,7 +710,8 @@ class SatisfactionEvaluator:
             model_name=model_name,
             satisfied=satisfied,
             checks=tuple(checks),
-            verified_scenarios=batch.simulations_used,
+            verified_scenarios=len(batch.traces),
+            charged_simulations=batch.simulations_used,
             verification=verification,
             assumptions=tuple(
                 dict.fromkeys(

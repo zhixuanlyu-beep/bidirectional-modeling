@@ -62,7 +62,7 @@ def build_demo_report() -> Dict[str, Any]:
     concepts = ConceptLibrary((Concept("position state", "task-relative position equivalence"),))
     for step in refinement.steps:
         if step.accepted_feature and step.closure_report.counterexamples:
-            concepts.refine_from_counterexample("position state", step.closure_report.counterexamples[0])
+            concepts.refine_from_counterexample("position state", step.closure_report.counterexamples[0], source="demo fixture", reason="paired states refute the declared grouping", applicability="fixture explicitly relates this witness to position state")
     refined = concepts.get("position state")
 
     org_context, org_model, hypotheses, experiments, evidence = (
