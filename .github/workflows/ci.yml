@@ -114,7 +114,8 @@ jobs:
           bidirectional-modeling search-benchmark --json > /dev/null
           bidirectional-modeling search-updates-benchmark --json > /dev/null
           python - <<'PYCODE'
-          from bidirectional_modeling import ConstraintQuery, QueryStatus, verify_query_result
+          from bidirectional_modeling import ConstraintQuery, QueryStatus
+          from bidirectional_modeling.search_queries import verify_query_result
           from bidirectional_modeling.search_examples import conflict_search_scenario
           problem, evidence = conflict_search_scenario()
           query = ConstraintQuery(evidence=evidence)
