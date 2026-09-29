@@ -72,8 +72,13 @@ MUTATIONS = (
      'if not support:', 'if False:',
      'test_implication_exploration.ImplicationContracts'),
     ('explanation ignores revoked evidence', 'search_explanations.py',
-     'if not search.validates_conflict(certificate, active_evidence, budget=budget):',
-     'if False:', 'test_search_explanations.ExplanationContracts'),
+     "if not search.validates_conflict(certificate, active_evidence, budget=budget):\n            return 'invalid'",
+     "if False:\n            return 'invalid'",
+     'test_search_explanations.ExplanationContracts'),
+    ('explanation builder drops observation node', 'search_explanations.py',
+     "        nodes.append(DependencyNode(key, 'observation', observation, (prefix + 'protocol',)))",
+     '        pass  # intentionally omit the declared observation node',
+     'test_search_explanations.ExplanationContracts'),
 
 )
 

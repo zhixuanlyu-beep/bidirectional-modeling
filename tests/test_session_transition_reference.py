@@ -96,3 +96,50 @@ class SessionTransitionReference(unittest.TestCase):
                     self.assert_matches(session, state)
                 visited += 1
         self.assertEqual(visited, sum(len(actions) ** n for n in range(4)))
+
+    def test_two_proofs_after_migration_withdrawal_and_second_migration(self):
+        protocol = replace(self.source.protocol, constraints=(
+            ResponseConstraint('C', (0,)), ResponseConstraint('D', (0,))))
+        candidates = tuple(SearchHypothesis(name, 0, 'low', DescriptionLength(), (name,))
+                           for name in ('C', 'D'))
+        source = ExperimentHypothesisSearch(protocol, candidates, 'out')
+        middle = ExperimentHypothesisSearch(replace(protocol, scope='middle'), candidates, 'out')
+        final = ExperimentHypothesisSearch(replace(protocol, scope='final'), candidates, 'out')
+        original = self.evidence('v1')
+        session = SearchSession(source, original,
+            tuple(source.learn_conflict((name,), original) for name in ('C', 'D')))
+        middle_evidence = self.evidence('middle-v1')
+        first = session.migrate_context(middle, identity_transition(protocol, middle.protocol),
+            middle_evidence, tuple(zip(original, middle_evidence)))
+        self.assertEqual((first.status, len(first.session.certificates)), ('completed', 2))
+        for action in ('withdraw', 'replace', 'replace_then_discover'):
+            with self.subTest(action=action):
+                current = SearchSession.from_json(first.session.to_json())
+                if action == 'withdraw':
+                    current.replace_evidence(())
+                    expected_evidence, expected_proofs = (), 0
+                else:
+                    current.replace_evidence(self.evidence('middle-v2'))
+                    if action == 'replace_then_discover':
+                        current.run()
+                    expected_evidence = self.evidence('middle-v2')
+                    expected_proofs = 2 if action == 'replace_then_discover' else 0
+                current = SearchSession.from_json(current.to_json())
+                self.assertEqual(len(current.certificates), expected_proofs)
+                target_evidence = self.evidence('final') if expected_evidence else ()
+                transition = identity_transition(middle.protocol, final.protocol)
+                links = tuple(zip(expected_evidence, target_evidence))
+                before = current.to_json()
+                work = SearchWorkBudget()
+                result = current.migrate_context(final, transition, target_evidence,
+                    links, budget=work)
+                self.assertEqual((result.status, len(result.session.certificates)),
+                                 ('completed', expected_proofs))
+                for limit in range(work.work.total):
+                    pending = current.migrate_context(final, transition,
+                        target_evidence, links, budget=SearchWorkBudget(limit))
+                    self.assertEqual((pending.status, pending.session), ('undecided', None))
+                    self.assertEqual(current.to_json(), before)
+                restored = SearchSession.from_json(result.session.to_json())
+                self.assertEqual(restored.evidence, target_evidence)
+                self.assertEqual(len(restored.certificates), expected_proofs)
