@@ -63,6 +63,7 @@ class ImplicationContracts(unittest.TestCase):
                     for a in complete.assessments}
         self.assertEqual(by_claim[(('a',), 'b')].status, 'verified')
         self.assertEqual(by_claim[(('b',), 'a')].status, 'refuted')
+        self.assertEqual(by_claim[(('c',), 'a')].status, 'undecided')
         limited = explore_implications(ctx, max_premises=1, max_candidates=1)
         self.assertFalse(limited.exhaustive)
         self.assertEqual(limited.candidate_count, 6)
