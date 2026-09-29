@@ -309,7 +309,7 @@ preferred = selector.select(rules, experiments, selection_policy="shortest_descr
 # 必须提供同一编码下的 rule.description_length；选择不改变认证真假。
 ```
 
-概念记忆由调用方从 `bidirectional_modeling.extensions.concepts` 显式加载，独立于引擎和细化过程。`record_judgment(..., source="操作者/记录来源")` 和 `history` 保存判断来源、版本与变更前后的判断事件。异常和预算诊断不能成为概念负例。
+概念记忆由调用方从 `bidirectional_modeling.extensions.concepts` 显式加载，独立于引擎和细化过程。`record_judgment(..., source="操作者/记录来源")` 要求显式来源；`history` 保存每次判断事件，包括未改变概念状态的重复确认。概念版本仅在状态变化时增加。异常和预算诊断不能成为概念负例。
 
 
 对应证书的 `commutes` 是只读派生属性，不接受构造参数，为 True/False/None：只有完整验证通过时为 True，有实际不交换见证时为 False，其余为 None。`passed` 始终为布尔值。对应套件预算不足或未执行的用例同样不能声明交换成立。概念到实验的对应和排除边界见 [概念实验对应](concept_experiments.md)。

@@ -172,6 +172,12 @@ class PolicyBoundaryTests(unittest.TestCase):
         library.record_judgment('c', 'example', False, source='operator B')
         self.assertEqual(tuple(item.source for item in library.history), ('operator A', 'operator B'))
         self.assertEqual(tuple(item.accepted for item in library.history), (True, False))
+        same = library.record_judgment('c', 'example', False, source='operator C')
+        self.assertEqual(same.version, library.history[-2].version)
+        self.assertEqual(tuple(item.source for item in library.history),
+                         ('operator A', 'operator B', 'operator C'))
+        with self.assertRaises(ValueError):
+            library.record_judgment('c', 'example', False, source=' ')
         p = subprocess.run([sys.executable, '-c',
             'import sys; from bidirectional_modeling.engine import BidirectionalModelingEngine; '
             'e=BidirectionalModelingEngine(); '

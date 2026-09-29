@@ -44,8 +44,10 @@ class ConceptLibrary:
         example: str,
         accepted: bool,
         boundary: Optional[str] = None,
-        source: str = "caller judgment",
+        *, source: str,
     ) -> Concept:
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError("judgment source must be explicit")
         concept = self.get(name)
         positives = concept.positive_examples
         negatives = concept.negative_examples
@@ -65,6 +67,8 @@ class ConceptLibrary:
             and negatives == concept.negative_examples
             and boundaries == concept.boundaries
         ):
+            self._history.append(ConceptJudgment(name, concept.version, example,
+                                                 accepted, source, boundary))
             return concept
         updated = replace(
             concept,
@@ -108,6 +112,8 @@ class ConceptLibrary:
             or definitions != concept.candidate_definitions
         )
         if not changed:
+            self._history.append(ConceptJudgment(name, concept.version, example,
+                                                 False, source, boundary, reason, applicability))
             return concept
         updated = replace(
             concept,
@@ -120,4 +126,3 @@ class ConceptLibrary:
         self._concepts[name] = updated
         self._history.append(ConceptJudgment(name, updated.version, example, False, source, boundary, reason, applicability))
         return updated
-
