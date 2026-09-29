@@ -306,7 +306,8 @@ def build_demo_report() -> Dict[str, Any]:
             "upper_scale": correspondence.upper_scale.name,
             "passed": correspondence_certificate.passed,
             "compatibility_passed": correspondence_certificate.compatibility_passed,
-            "independent_holdout": correspondence_certificate.has_independent_holdout,
+            "independent_holdout_declared": correspondence_certificate.has_independent_holdout,
+            "independent_holdout_status": correspondence_certificate.independent_holdout_status,
             "complete": correspondence_certificate.complete,
             "commutes": correspondence_certificate.commutes,
             "correspondence_fingerprint": (
@@ -460,12 +461,9 @@ def _print_human(report: Dict[str, Any]) -> None:
             correspondence["upper_scenarios"],
         )
     )
-    print(
-        "  独立留出复核：%s"
-        % ("通过" if correspondence["independent_holdout"] else "缺失")
-    )
-
     labels = {"verified": "已验证", "refuted": "已反驳", "undecided": "未决", "not_applicable": "不适用"}
+    print("  独立来源声明：%s" % ("有" if correspondence["independent_holdout_declared"] else "无"))
+    print("  留出复核：%s" % dict(labels, missing="缺失")[correspondence["independent_holdout_status"]])
     for case in correspondence["cases"]:
         print("  %s：%s" % (case["name"], labels[case["status"]]))
 

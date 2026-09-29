@@ -24,6 +24,7 @@ from .core import (
     MacroSpec,
     InterpretationObservation,
     InterpretationExclusion,
+    VerificationIssue,
 )
 from .evaluation import SatisfactionEvaluator, TraceBatch
 from ._generation import CandidateStream
@@ -222,6 +223,17 @@ class Interpreter:
         simulations_used = 0
         remaining_simulations = budget.max_simulations
         truncated = False
+        evaluator_diagnostics = []
+
+        def evaluator_failed(error):
+            nonlocal simulations_used, remaining_simulations, truncated
+            reason = '%s: %s' % (type(error).__name__, error)
+            evaluator_diagnostics.append(VerificationIssue('interpretation-evaluator', reason,
+                {'reserved_simulations': remaining_simulations}))
+            simulations_used += remaining_simulations
+            remaining_simulations = 0
+            truncated = True
+            return reason
 
         trace_generator = getattr(hypotheses, "generate_from_traces", None)
         if callable(trace_generator):
@@ -229,12 +241,17 @@ class Interpreter:
             batch_budget = replace(
                 budget, max_simulations=remaining_simulations
             )
-            batch = self.evaluator.collect(model, context, horizon, batch_budget)
-            batches[horizon] = batch
-            simulations_used += batch.simulations_used
-            remaining_simulations -= batch.simulations_used
-            truncated = not batch.complete
-            factory = lambda: trace_generator(batch.traces, batch.complete)
+            try:
+                batch = self.evaluator.collect(model, context, horizon, batch_budget)
+            except Exception as error:
+                evaluator_failed(error)
+                factory = lambda: ()
+            else:
+                batches[horizon] = batch
+                simulations_used += batch.simulations_used
+                remaining_simulations -= batch.simulations_used
+                truncated = not batch.complete
+                factory = lambda: trace_generator(batch.traces, batch.complete)
         elif hasattr(hypotheses, "generate"):
             factory = lambda: hypotheses.generate(model, context)  # type: ignore[union-attr]
         else:
@@ -273,17 +290,25 @@ class Interpreter:
                 batch_budget = replace(
                     budget, max_simulations=remaining_simulations
                 )
-                batch = self.evaluator.collect(
-                    model, context, horizon, batch_budget
-                )
+                try:
+                    batch = self.evaluator.collect(
+                        model, context, horizon, batch_budget
+                    )
+                except Exception as error:
+                    undecided.append((hypothesis.name, (evaluator_failed(error),)))
+                    break
                 batches[horizon] = batch
                 simulations_used += batch.simulations_used
                 remaining_simulations -= batch.simulations_used
             if not batch.complete:
                 truncated = True
-            certificate = self.evaluator.evaluate_batch(
-                model, hypothesis.spec, context, batch, budget
-            )
+            try:
+                certificate = self.evaluator.evaluate_batch(
+                    model, hypothesis.spec, context, batch, budget
+                )
+            except Exception as error:
+                undecided.append((hypothesis.name, (evaluator_failed(error),)))
+                break
             if not certificate.satisfied:
                 if not certificate.complete:
                     reasons = tuple(c.evaluation_error for c in certificate.checks
@@ -323,6 +348,5 @@ class Interpreter:
             rejected=tuple(rejected), undecided=tuple(undecided),
             simulations_used=simulations_used,
             truncated=truncated,
-            diagnostics=tuple(stream.diagnostics),
+            diagnostics=tuple(evaluator_diagnostics) + tuple(stream.diagnostics),
         )
-

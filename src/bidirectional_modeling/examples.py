@@ -429,7 +429,6 @@ def organization_interpretation_scenario():
         Evidence(
             "fraud reviews were introduced after a loss incident",
             "prevent fraud",
-            0.8,
             kind="selection-history",
             source="policy history",
         ),

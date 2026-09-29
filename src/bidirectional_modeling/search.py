@@ -244,6 +244,16 @@ class MacroEvidenceCertificate:
 
 
 @dataclass(frozen=True)
+class MacroIdentifiabilityResult:
+    status: str  # identifiable / non_identifiable / undecided
+    reason: str
+    witness_candidates: tuple = ()
+
+    def __bool__(self):
+        raise TypeError('inspect identifiability.status explicitly')
+
+
+@dataclass(frozen=True)
 class HypothesisSearchReport:
     compatible: Tuple[str, ...]
     pruned: Tuple[str, ...]
@@ -473,23 +483,28 @@ class ExperimentHypothesisSearch:
             groups.setdefault(signature, []).append(h.name)
         return tuple(tuple(group) for group in groups.values())
 
-    def macro_identifiable(self, *, budget=None) -> bool:
+    def macro_identifiable(self, *, budget=None) -> MacroIdentifiabilityResult:
+        """Check finite response classes; an unequal-answer pair is a refuter."""
         budget = budget if budget is not None else SearchWorkBudget()
-        by_name = {h.name: h for h in self.hypotheses}
-        if not by_name:
-            return False
-        for h in self.hypotheses:
-            budget.consume("candidate_checks")
-            if h.world is None:
-                return False
-        for group in self.partition(budget=budget):
-            answers = set()
-            for name in group:
-                budget.consume("candidate_checks")
-                answers.add(by_name[name].macro_answer)
-            if len(answers) != 1:
-                return False
-        return True
+        if not self.hypotheses:
+            return MacroIdentifiabilityResult('undecided', 'empty_catalogue')
+        representatives, unknown = {}, False
+        try:
+            for h in self.hypotheses:
+                budget.consume('candidate_checks')
+                if h.world is None:
+                    unknown = True
+                    continue
+                previous = representatives.get(h.world)
+                if previous is not None and previous.macro_answer != h.macro_answer:
+                    return MacroIdentifiabilityResult('non_identifiable',
+                        'equal_responses_unequal_answers', (previous.name, h.name))
+                representatives[h.world] = h
+        except SearchBudgetExceeded as error:
+            return MacroIdentifiabilityResult('undecided', error.reason)
+        if unknown:
+            return MacroIdentifiabilityResult('undecided', 'unknown_prediction')
+        return MacroIdentifiabilityResult('identifiable', 'finite_response_classes_checked')
 
     def search(self, evidence=(), certificates=(), *, max_replays=None,
                budget=None, learn_conflicts=True) -> HypothesisSearchReport:

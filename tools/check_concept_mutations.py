@@ -12,6 +12,16 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('holdout refutation becomes verified', 'correspondence.py',
+     "for status in ('refuted', 'undecided', 'not_applicable'):",
+     "for status in ('undecided', 'not_applicable'):", 'test_audit_boundaries.AuditBoundaryTests'),
+    ('unknown prediction becomes identifiable', 'search.py',
+     "if unknown:\n            return MacroIdentifiabilityResult('undecided', 'unknown_prediction')",
+     "if False:\n            return MacroIdentifiabilityResult('undecided', 'unknown_prediction')",
+     'test_audit_boundaries.AuditBoundaryTests'),
+    ('interpretation evaluator failure loses reserved allowance', 'interpretation.py',
+     'simulations_used += remaining_simulations', 'simulations_used += 0',
+     'test_audit_boundaries.AuditBoundaryTests'),
     ('minimum replaced by maximum', 'core.py',
      '            return min(values)', '            return max(values)', 'test_concept_contracts.AggregationContracts'),
     ('EACH replaced by FINAL', 'core.py',
@@ -101,7 +111,7 @@ def main():
                    'test_claim_boundaries', 'test_evidence_lifecycle',
                    'test_distinguishing_replay', 'test_search_repairs',
                    'test_implication_exploration', 'test_search_explanations',
-                   'test_context_network'):
+                   'test_context_network', 'test_audit_boundaries'):
         baseline = run(ROOT/'src', module, ROOT)
         if baseline.returncode:
             print(baseline.stderr)

@@ -81,7 +81,7 @@ W(U,\varnothing)\ne\varnothing,\quad W(U,S)=\varnothing.
 
 可靠证书只保证真正相容目录 \(\mathcal V(S)\subseteq\widehat{\mathcal V}(S)\)。`search` 再重放数据，分别返回 `compatible`、`rejected`、`pruned` 与 `undecided`。候选按总描述长度调度；`max_replays` 限制候选重放数，耗尽后不假装模型失败。
 
-`answers` 保留相容与未决候选的目标答案。只有相容集合非空、没有未决且所有相容候选目标一致时才设置 `determined=True`。这个保证相对于完整的**给定目录**，不是对未生成的候选或未声明的实验的结论。`macro_identifiable()` 还检查目标在完整实验等价类上是否恒定；若相同响应对应相反宏观答案，仅增加同域观测也不能解决。
+`answers` 保留相容与未决候选的目标答案。只有相容集合非空、没有未决且所有相容候选目标一致时才设置 `determined=True`。这个保证相对于完整的**给定目录**，不是对未生成的候选或未声明的实验的结论。`macro_identifiable()` 返回带 `status`、`reason` 和 `witness_candidates` 的结果，状态为 `identifiable / non_identifiable / undecided`，不能作为布尔值使用。相同完整响应对应不同宏观答案时，候选对直接反驳可识别性；存在未知预测、空目录或预算中断且尚未找到反驳时保持未决。增加同域观测不能解决已知的同响应异答案冲突。
 
 ## 小证据基
 
