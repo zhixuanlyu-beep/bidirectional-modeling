@@ -90,6 +90,7 @@ jobs:
               "bidirectional_modeling/search_queries.py",
               "bidirectional_modeling/search_lazy.py",
               "bidirectional_modeling/search_repairs.py",
+              "bidirectional_modeling/search_explanations.py",
               "bidirectional_modeling/search_partial.py",
               "bidirectional_modeling/context_network.py",
               "bidirectional_modeling/certificate_transport.py",
@@ -110,7 +111,7 @@ jobs:
       - name: Install built wheel and smoke-test it
         run: |
           python -m pip install dist/*.whl
-          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.25.0'"
+          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.26.0'"
           bidirectional-modeling demo --json > /dev/null
           bidirectional-modeling search-demo --json > /dev/null
           bidirectional-modeling context-demo --json > /dev/null
