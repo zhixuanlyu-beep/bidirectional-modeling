@@ -69,6 +69,8 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 
 概念记忆从 `extensions.concepts` 按需加载，保存人工判断来源，不能作为结构证明。组合规则验证默认保留全部认证候选，最短描述选择须显式启用。
 
+区分见证可通过 `residual.verify_distinguishing_context` 独立重放局部路径；经验冲突的最小承诺撤回由可选 `search_repairs` 枚举和复核；有限属性蕴涵由 `extensions.implications` 探索及反驳。后两者不进入通用查询链。见 [概念实验对应](docs/concept_experiments.md) 的主张与预算边界。
+
 顶层提供常用建模声明、Realizer、Interpreter 和有限查询入口。编排引擎从 `bidirectional_modeling.engine` 导入；对应、闭合、残差、组合、预测适配、会话及证书复核从各自模块导入。概念记忆由调用方显式更新，不参与引擎的验证流程。
 
 网络容器从 `bidirectional_modeling.context_network` 导入；基准从 `bidirectional_modeling.search_benchmark` 导入或通过 CLI 使用。接口迁移见 [变更记录](CHANGELOG.md)。

@@ -1,4 +1,4 @@
-"""Check that distinguishing experiments reject ten explicit semantic mistakes.
+"""Check that distinguishing experiments reject explicit semantic mistakes.
 
 Each mutation runs in a fresh temporary source copy; this is a finite regression
 exercise, not a proof against every possible incorrect implementation.
@@ -62,6 +62,15 @@ MUTATIONS = (
      'self.evidence, self.certificates = evidence, tuple(retained)',
      'self.evidence, self.certificates = evidence, self.certificates',
      'test_evidence_lifecycle.MigrationLifecycleTests'),
+    ('distinction ignores exact source state', 'residual.py',
+     'if _state_key(state) != _state_key(claimed.micro_state):',
+     'if False:', 'test_distinguishing_replay.DistinguishingReplayTests'),
+    ('repair omits another minimum solution', 'search_repairs.py',
+     "return 'valid' if tuple(actual) == proposed else 'invalid'",
+     "return 'valid'", 'test_search_repairs.RepairContracts'),
+    ('unsupported implication becomes proved', 'extensions/implications.py',
+     'if not support:', 'if False:',
+     'test_implication_exploration.ImplicationContracts'),
 
 )
 
@@ -74,7 +83,10 @@ def run(source, target, cwd):
 
 
 def main():
-    for module in ('test_concept_contracts', 'test_execution_contracts', 'test_claim_boundaries', 'test_evidence_lifecycle'):
+    for module in ('test_concept_contracts', 'test_execution_contracts',
+                   'test_claim_boundaries', 'test_evidence_lifecycle',
+                   'test_distinguishing_replay', 'test_search_repairs',
+                   'test_implication_exploration'):
         baseline = run(ROOT/'src', module, ROOT)
         if baseline.returncode:
             print(baseline.stderr)
