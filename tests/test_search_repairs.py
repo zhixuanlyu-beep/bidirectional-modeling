@@ -21,6 +21,25 @@ def fixture():
 
 
 class RepairContracts(unittest.TestCase):
+    def test_minimum_cardinality_is_narrower_than_inclusion_minimal_mcs(self):
+        # E admits 0 and 1; all three commitments also admit 2.
+        # Removing B suffices, while removing both A and C is another
+        # inclusion-minimal correction, but has a larger cardinality.
+        protocol = SearchProtocol('finite', 'code',
+            (SearchExperiment('e', 'read'), SearchExperiment('id', 'disambiguate')),
+            (('x', '0'), ('x', '1'), ('y', '2')),
+            (ResponseConstraint('A', (0, 2)), ResponseConstraint('B', (1, 2)),
+             ResponseConstraint('C', (0, 2))))
+        problem = ExperimentHypothesisSearch(protocol, (), 'out')
+        evidence = (SearchObservation('e', 'x', 'lab'),)
+        result = suggest_consistency_repairs(problem, ('A', 'B', 'C'), evidence)
+        self.assertEqual(result.certificate.retractions, (('B',),))
+        self.assertEqual(verify_consistency_repairs(problem, result.certificate, evidence), 'valid')
+        # A,C is nevertheless inclusion-minimal: neither proper subset repairs.
+        self.assertTrue(problem._worlds(('B',), evidence, budget=SearchWorkBudget()))
+        self.assertFalse(problem._worlds(('A', 'B'), evidence, budget=SearchWorkBudget()))
+        self.assertFalse(problem._worlds(('B', 'C'), evidence, budget=SearchWorkBudget()))
+
     def test_core_and_all_smallest_repairs_are_separate(self):
         problem, evidence = fixture()
         result = suggest_consistency_repairs(problem,

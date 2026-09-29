@@ -87,3 +87,14 @@ CLI 的语义输出测试属于单元测试覆盖；打包后的命令运行与 
 | 有限属性蕴涵 | `extensions.implications.check_implication(context, implication)`；`explore_implications`；`verify_implication_assessment` | 有属性对象可直接反驳；只有存在支持对象、扫描完成且调用方声明有限对象域完整时，才能在该域内验证 | 无支持、域未声明完整或扫描预算不足都未决；`source` 和完整性声明被指纹绑定，但不认证实际世界的来源与完备性 |
 
 `explore_implications.exhaustive` 只指给定属性、前提长度和候选数量下的**提案枚举**是否完成；具体蕴涵的 `verified` 另取决于有限对象域的完整性和支持对象。两种穷尽范围不同，不能互推。上述三个变异实验分别模拟忽略源状态、遗漏另一个最小修复以及把无支持蕴涵误报为已验证。
+
+### 与借鉴项目的对应范围
+
+| 来源机制 | 本项目实际采用的部分 | 不可等同的部分 |
+|---|---|---|
+| [Hypothesis 状态机](https://hypothesis.readthedocs.io/en/latest/stateful.html) | 组合规则、操作后的不变量及失败序列缩减；撤回证据错误可缩减到“替换 → 筛查 → 撤回” | 生成实验不是穷尽证明，也不在运行时引入概率权重 |
+| [AALpy 的 W-method oracle](https://github.com/DES-Lab/AALpy/blob/master/aalpy/oracles/WMethodEqOracle.py) | 从初态前缀重放动作，比较已声明的有限行为见证 | 这里比较同一模型的两状态；没有学习系统与假设机的等价查询，也没有 W-method 的转换覆盖和状态数上界保证 |
+| [PySAT 的 MCS 枚举](https://pysathq.github.io/docs/html/api/examples/mcsls.html) | 把冲突证据与撤回承诺后的可满足性分开，保留多个修复见证 | PySAT 的 MCS 是**包含极小**；本项目只枚举**基数最小**撤回。例：撤回 `{B}` 或 `{A,C}` 都是包含极小，本项目只返回 `{B}`；也没有 SAT 编码或求解器 |
+| [conexp-clj 属性探索](https://github.com/tomhanika/conexp-clj/blob/master/src/main/clojure/conexp/fca/exploration.clj) | 蕴涵须接受具体对象反例，已声明对象域外的事实不自动成立 | 本项目穷举有限提案，不执行专家确认、反例增补、背景知识闭包或典范蕴涵基；对无支持前提保守地标为未决，而形式概念分析允许真空成立的蕴涵 |
+
+因此这些接口分别是本项目任务中的局部方法，不声称移植上述原算法。`tests/test_search_repairs.py` 用基数最小与包含极小的区分实例固定这一边界；`tests/test_implication_exploration.py` 检查即使提案枚举完毕，无支持蕴涵仍未决。
