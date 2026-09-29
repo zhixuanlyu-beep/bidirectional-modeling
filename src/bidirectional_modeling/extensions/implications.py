@@ -75,6 +75,7 @@ class ImplicationAssessment:
     reason: str
     supporting_objects: tuple
     counterexample: object = None
+    # Scan diagnostics; refutation verification certifies only the bound witness.
     checked_objects: int = 0
 
 
@@ -119,6 +120,16 @@ def verify_implication_assessment(context, assessment, *, max_object_checks=None
             or not set(claim.premises).issubset(context.attributes)
             or claim.conclusion not in context.attributes):
         return 'invalid'
+    if assessment.status == 'refuted':
+        witness = assessment.counterexample
+        if (assessment.reason != 'object_counterexample'
+                or not isinstance(witness, AttributeObject)
+                or witness not in context.objects):
+            return 'invalid'
+        if max_object_checks == 0:
+            return 'undecided'
+        return 'valid' if (set(claim.premises).issubset(witness.attributes)
+                           and claim.conclusion not in witness.attributes) else 'invalid'
     support = []
     for checked, obj in enumerate(context.objects):
         if max_object_checks is not None and checked >= max_object_checks:
@@ -126,9 +137,7 @@ def verify_implication_assessment(context, assessment, *, max_object_checks=None
         if all(name in obj.attributes for name in claim.premises):
             support.append(obj.name)
             if claim.conclusion not in obj.attributes:
-                expected = ImplicationAssessment(claim, context.fingerprint, 'refuted',
-                    'object_counterexample', tuple(support), obj, checked + 1)
-                return 'valid' if assessment == expected else 'invalid'
+                return 'invalid'
     reason = 'no_supporting_object' if not support else (
         'complete_declared_domain' if context.complete else 'object_domain_incomplete')
     status = 'undecided' if reason != 'complete_declared_domain' else 'verified'

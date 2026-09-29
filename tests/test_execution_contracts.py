@@ -1,6 +1,8 @@
 """Distinguish claim meaning, interrupted work, and failed prediction promotion."""
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
+import bidirectional_modeling.interpretation as interpretation_module
 
 from bidirectional_modeling import (Aggregation, Context, Interpreter, MacroAlternativeQuery,
     ObservedEffectGenerator, Realizer, ResourceBudget, ResponseConstraint, SatisfactionEvaluator,
@@ -27,7 +29,7 @@ class EffectMeaningTests(unittest.TestCase):
     def test_nonconstant_effects_claim_only_the_declared_terminal_value(self):
         for initial, final in ((0, 1), (2, 1), (False, True)):
             traces = (Trace('sample', 's', 'baseline', ({'x': initial}, {'x': final})),)
-            h = ObservedEffectGenerator().generate_from_traces(traces)[0]
+            h = next(iter(ObservedEffectGenerator().generate_from_traces(traces)))
             self.assertTrue(h.name.startswith('at horizon 1,'))
             self.assertEqual(h.spec.objectives[0].aggregation, Aggregation.FINAL)
             self.assertNotIn('increase', h.name)
@@ -65,6 +67,33 @@ class FailureBudgetTests(unittest.TestCase):
 
 
 class GenerationBoundaryTests(unittest.TestCase):
+    def test_stop_iteration_during_initialization_is_not_exhaustion(self):
+        class FactoryFailure:
+            def generate(self, *args):
+                raise StopIteration('factory failed')
+        class IteratorFailure:
+            def __iter__(self):
+                raise StopIteration('iterator initialization failed')
+        for source in (FactoryFailure(), IteratorFailure()):
+            for interpret in (False, True):
+                result = (Interpreter().interpret(model(), Context(), source) if interpret else
+                          Realizer().realize(spec(), Context(), source))
+                self.assertTrue(result.truncated)
+                self.assertTrue(result.diagnostics)
+                if interpret:
+                    self.assertEqual(result.identification_status, 'undecided')
+
+    def test_effect_hypotheses_are_constructed_only_as_requested(self):
+        candidate = replace(model(), states={'s': {'field_%03d' % i: 1 for i in range(100)}})
+        with patch.object(interpretation_module, 'PurposeHypothesis',
+                          wraps=interpretation_module.PurposeHypothesis) as constructor:
+            result = Interpreter().interpret(candidate, Context(), ObservedEffectGenerator(),
+                                              budget=ResourceBudget(max_candidates=1))
+        self.assertEqual(constructor.call_count, 1)
+        self.assertEqual(len(result.candidates), 1)
+        self.assertTrue(result.truncated)
+        self.assertEqual(result.identification_status, 'undecided')
+
     def test_both_directions_do_not_pull_an_extra_candidate(self):
         for interpret in (False, True):
             produced = []

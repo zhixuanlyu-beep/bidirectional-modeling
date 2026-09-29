@@ -12,6 +12,17 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('initialization StopIteration becomes exhaustion', '_generation.py',
+     '            except Exception as error:\n                self._fail(error)',
+     '            except StopIteration:\n                self._exhausted = True\n                raise\n            except Exception as error:\n                self._fail(error)',
+     'test_execution_contracts.GenerationBoundaryTests'),
+    ('effect generation eagerly materializes every hypothesis', 'interpretation.py',
+     'factory = lambda: trace_generator(batch.traces, batch.complete)',
+     'factory = lambda: tuple(trace_generator(batch.traces, batch.complete))',
+     'test_execution_contracts.GenerationBoundaryTests'),
+    ('implication witness need not violate conclusion', 'extensions/implications.py',
+     'and claim.conclusion not in witness.attributes', 'and True',
+     'test_implication_exploration.ImplicationContracts'),
     ('holdout refutation becomes verified', 'correspondence.py',
      "for status in ('refuted', 'undecided', 'not_applicable'):",
      "for status in ('undecided', 'not_applicable'):", 'test_audit_boundaries.AuditBoundaryTests'),

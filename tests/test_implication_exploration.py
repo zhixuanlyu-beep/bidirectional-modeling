@@ -19,6 +19,20 @@ def context(complete=True):
 
 
 class ImplicationContracts(unittest.TestCase):
+    def test_late_counterexample_is_verified_directly_with_one_object_check(self):
+        ctx = AttributeContext(('a', 'b'), tuple(AttributeObject(str(i), ('a', 'b'))
+            for i in range(100)) + (AttributeObject('refuter', ('a',)),), True)
+        result = check_implication(ctx, Implication(('a',), 'b'))
+        self.assertEqual(result.checked_objects, 101)
+        self.assertEqual(verify_implication_assessment(ctx, result, max_object_checks=1), 'valid')
+        self.assertEqual(verify_implication_assessment(ctx, result, max_object_checks=0), 'undecided')
+        diagnostic_change = replace(result, checked_objects=0, supporting_objects=())
+        self.assertEqual(verify_implication_assessment(ctx, diagnostic_change, max_object_checks=1), 'valid')
+        for witness in (ctx.objects[0], AttributeObject('outsider', ('a',)),
+                        AttributeObject('refuter', ('b',)), None):
+            self.assertEqual(verify_implication_assessment(ctx, replace(result,
+                counterexample=witness), max_object_checks=1), 'invalid')
+
     def test_shared_generator_defect_cannot_validate_a_false_implication(self):
         ctx = context()
         actual = check_implication(ctx, Implication(('b',), 'a'))

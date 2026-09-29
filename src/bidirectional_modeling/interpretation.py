@@ -78,12 +78,11 @@ class ObservedEffectGenerator:
         """Derive effects from one completely enumerated, reusable trace batch."""
 
         if not complete or not traces or any(not trace.snapshots for trace in traces):
-            return ()
+            return
         common_fields = set(traces[0].snapshots[0])
         for trace in traces:
             for snapshot in trace.snapshots:
                 common_fields.intersection_update(snapshot)
-        hypotheses = []
         for field_name in sorted(common_fields):
             final_values = [trace.snapshots[-1][field_name] for trace in traces]
             final_identities = tuple(
@@ -121,15 +120,12 @@ class ObservedEffectGenerator:
                 equivalence=EquivalenceSpec((field_name,)),
                 horizon=self.horizon,
             )
-            hypotheses.append(
-                PurposeHypothesis(
-                    name=label,
-                    level=PurposeLevel.EFFECT,
-                    spec=spec,
-                    explanation="generated from observed task-horizon behavior; this is an effect, not actor intention",
-                )
+            yield PurposeHypothesis(
+                name=label,
+                level=PurposeLevel.EFFECT,
+                spec=spec,
+                explanation="generated from observed task-horizon behavior; this is an effect, not actor intention",
             )
-        return tuple(hypotheses)
 
     def generate(
         self, model: ExecutableModel, context: Context

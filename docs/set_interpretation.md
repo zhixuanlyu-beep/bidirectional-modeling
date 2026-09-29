@@ -95,3 +95,5 @@ result = engine.interpret(
 
 
 宏观往返只报告 `compatibility_passed`；`generation_source` 记录生成路径，`independence_declared` 仅转述调用方声明，二者都不是独立恢复证明。已删除宏观报告的 `passed`。同批轨迹生成并验证效果只是有限域检查，不是留出实验。
+
+效果假设由 `ObservedEffectGenerator.generate_from_traces` 按需产出；达到候选上限后不继续构造剩余字段的假设。轨迹采集与公共字段发现仍有前置成本。工厂创建或迭代器初始化失败属于未决诊断，只有读取下一项时正常结束才能确认目录耗尽。
