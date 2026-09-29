@@ -24,22 +24,28 @@ class CandidateStream:
     def __next__(self):
         if self._stopped or self.complete or self.inspected >= self.limit:
             raise StopIteration
-        try:
-            if self._iterator is None:
+        if self._iterator is None:
+            try:
                 items = self.factory()
                 # Only concrete built-in catalogues establish an exact size.
                 if type(items) in (tuple, list):
                     items = tuple(items)
                     self._count = len(items)
                 self._iterator = iter(items)
+            except Exception as error:
+                self._fail(error)
+        try:
             item = next(self._iterator)
         except StopIteration:
             self._exhausted = True
             raise
         except Exception as error:
-            self.diagnostics.append(VerificationIssue(
-                'candidate-generation', '%s: %s' % (type(error).__name__, error)))
-            self._stopped = True
-            raise StopIteration from None
+            self._fail(error)
         self.inspected += 1
         return item
+
+    def _fail(self, error):
+        self.diagnostics.append(VerificationIssue(
+            'candidate-generation', '%s: %s' % (type(error).__name__, error)))
+        self._stopped = True
+        raise StopIteration from None

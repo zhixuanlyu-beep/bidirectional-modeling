@@ -17,6 +17,19 @@ from test_context_network import identity_transition
 
 
 class ExplanationContracts(unittest.TestCase):
+    def test_malformed_graphs_are_invalid_before_proof_work(self):
+        graph = explain_conflict(self.source, self.certificate, self.evidence)
+        for malformed in (None, replace(graph, nodes=None), replace(graph, nodes=(None,)),
+                          replace(graph, nodes=(replace(graph.nodes[0], depends_on=None),)),
+                          replace(graph, nodes=(replace(graph.nodes[0], key=[]),))):
+            budget = SearchWorkBudget(0)
+            self.assertEqual(verify_conflict_explanation(malformed, self.source,
+                self.certificate, self.evidence, budget=budget), 'invalid')
+            self.assertEqual(verify_transport_explanation(malformed, self.receipt,
+                self.source, self.target, self.transition, self.certificate,
+                self.evidence, self.target_evidence, budget=budget), 'invalid')
+            self.assertEqual(budget.work.total, 0)
+
     def setUp(self):
         protocol = SearchProtocol('original', 'code',
             (SearchExperiment('a', 'read'),), (('0',), ('1',)),

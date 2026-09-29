@@ -68,6 +68,8 @@ def explain_conflict(search, certificate, active_evidence, *, candidate=None, bu
 def verify_conflict_explanation(explanation, search, certificate, active_evidence,
                                 *, candidate=None, budget=None):
     """Check the proof and graph schema without invoking the graph builder."""
+    if not _well_formed_graph(explanation):
+        return 'invalid'
     budget = budget if budget is not None else SearchWorkBudget()
     try:
         if not search.validates_conflict(certificate, active_evidence, budget=budget):
@@ -88,6 +90,18 @@ def verify_conflict_explanation(explanation, search, certificate, active_evidenc
         root = 'exclusion'
     return 'valid' if _complete_graph(explanation, sections, root,
                                      'live_dependency_path') else 'invalid'
+
+
+def _well_formed_graph(explanation):
+    return (isinstance(explanation, DependencyExplanation)
+            and isinstance(explanation.nodes, tuple)
+            and all(isinstance(value, str) for value in
+                    (explanation.status, explanation.reason, explanation.root))
+            and all(isinstance(node, DependencyNode)
+                    and isinstance(node.key, str) and isinstance(node.kind, str)
+                    and isinstance(node.depends_on, tuple)
+                    and all(isinstance(key, str) for key in node.depends_on)
+                    for node in explanation.nodes))
 
 
 def _has_node(explanation, key, kind, subject, dependencies=()):
@@ -182,6 +196,8 @@ def verify_transport_explanation(explanation, receipt, source_search, target_sea
                                  transition, certificate, source_evidence, target_evidence,
                                  *, budget=None):
     """Check target reproof, then validate each dependency edge separately."""
+    if not _well_formed_graph(explanation):
+        return 'invalid'
     verdict = verify_transported_conflict(receipt, source_search, target_search,
         transition, certificate, source_evidence, target_evidence, budget=budget)
     if verdict != 'valid':
