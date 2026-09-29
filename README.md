@@ -112,6 +112,7 @@ python3 tools/check_concept_mutations.py
 bidirectional-modeling search-benchmark --json
 bidirectional-modeling search-updates-benchmark --json
 PYTHONPATH=src python3 benchmarks/review_costs.py
+PYTHONPATH=src python3 benchmarks/evidence_update_costs.py
 ```
 
 CI 在 Python 3.9、3.11 和 3.13 上运行测试、覆盖率门槛、JSON 演示及 wheel 内容检查。许可证为 MIT。

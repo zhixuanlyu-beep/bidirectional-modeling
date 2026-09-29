@@ -36,7 +36,9 @@ jobs:
       - name: Check concept distinguishing experiments
         run: python tools/check_concept_mutations.py
       - name: Check bounded-work regressions
-        run: python benchmarks/review_costs.py > review-costs.json
+        run: |
+          python benchmarks/review_costs.py > review-costs.json
+          python benchmarks/evidence_update_costs.py > evidence-update-costs.json
       - name: Run JSON demo
         run: |
           bidirectional-modeling demo --json > demo.json
@@ -111,7 +113,7 @@ jobs:
       - name: Install built wheel and smoke-test it
         run: |
           python -m pip install dist/*.whl
-          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.28.0'"
+          python -c "import bidirectional_modeling; assert bidirectional_modeling.__version__ == '0.29.0'"
           bidirectional-modeling demo --json > /dev/null
           bidirectional-modeling search-demo --json > /dev/null
           bidirectional-modeling context-demo --json > /dev/null
