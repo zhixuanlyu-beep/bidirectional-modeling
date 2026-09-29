@@ -113,6 +113,106 @@ class DistinguishingContext:
 
 
 @dataclass(frozen=True)
+class DistinctionVerification:
+    status: str  # valid / invalid / undecided
+    reason: str
+    operations_used: int
+
+
+def verify_distinguishing_context(
+    report: "ResidualQuotientReport",
+    witness: DistinguishingContext,
+    model: FiniteStateModel,
+    equivalence: EquivalenceSpec,
+    context: Context,
+    *, max_operations: Optional[int] = None,
+) -> DistinctionVerification:
+    """Replay only this witnessed separation, including its two source paths.
+
+    This proves a local distinction, even when the rest of a quotient is
+    incomplete. It does not certify the full residual partition or minimality.
+    """
+    if max_operations is not None and (type(max_operations) is not int or max_operations < 0):
+        raise ValueError("max_operations must be a non-negative integer or None")
+    used = 0
+
+    def result(status, reason):
+        return DistinctionVerification(status, reason, used)
+
+    if (report.model_name != model.name or not report.binds_context(context)
+            or not report.binds_equivalence(equivalence)
+            or witness not in report.distinguishing_contexts):
+        return result("invalid", "witness_binding_mismatch")
+    if any(type(index) is not int or index < 0 or index >= len(report.quotient.states)
+           for index in (witness.left_state, witness.right_state)):
+        return result("invalid", "state_outside_report")
+    if any(action not in report.quotient.actions for action in witness.actions):
+        return result("invalid", "action_outside_report")
+
+    class ReplayLimit(Exception):
+        pass
+
+    def charge():
+        nonlocal used
+        if max_operations is not None and used >= max_operations:
+            raise ReplayLimit
+        used += 1
+
+    def step(state, action):
+        charge()
+        return model.audited_step(state, action, context)
+
+    def signature(state):
+        charge()
+        return equivalence.signature(model.audited_observe(state, context))
+
+    try:
+        outcomes = []
+        for index in (witness.left_state, witness.right_state):
+            claimed = report.quotient.states[index]
+            if (claimed.source_initial_state not in model.initial_states
+                    or any(action not in report.quotient.actions for action in claimed.actions)):
+                return result("invalid", "source_path_mismatch")
+            state = model.states[claimed.source_initial_state]
+            for action in claimed.actions:
+                try:
+                    state = step(state, action)
+                except UndefinedTransition:
+                    return result("invalid", "source_path_undefined")
+            if _state_key(state) != _state_key(claimed.micro_state):
+                return result("invalid", "source_state_changed")
+            if _freeze(signature(state)) != _freeze(claimed.observation_signature):
+                return result("invalid", "source_observation_changed")
+            defined = True
+            for action in witness.actions:
+                try:
+                    state = step(state, action)
+                except UndefinedTransition:
+                    defined = False
+                    break
+            terminal = signature(state) if defined else ()
+            outcomes.append((defined, terminal))
+        for (defined, observed), expected_defined, expected_signature in zip(
+            outcomes,
+            (witness.left_defined, witness.right_defined),
+            (witness.left_terminal_signature, witness.right_terminal_signature),
+        ):
+            if defined != expected_defined or (defined and _freeze(observed) != _freeze(expected_signature)):
+                return result("invalid", "witness_outcome_changed")
+        if outcomes[0][0] == outcomes[1][0] and (
+            not outcomes[0][0] or _freeze(outcomes[0][1]) == _freeze(outcomes[1][1])
+        ):
+            return result("invalid", "no_separation")
+        return result("valid", "separation_replayed")
+    except ReplayLimit:
+        return result("undecided", "replay_budget_exhausted")
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as error:
+        return result("undecided", "%s: %s" % (type(error).__name__, error))
+
+
+@dataclass(frozen=True)
 class ResidualFiltrationLevel:
     """The observable partition induced by contexts up to one depth."""
 
@@ -815,4 +915,3 @@ class ResidualQuotientAnalyzer:
                 context_basis_reproduces_partition
             ),
         )
-
