@@ -71,6 +71,8 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 
 区分见证可通过 `residual.verify_distinguishing_context` 独立重放局部路径；经验冲突的最小承诺撤回由可选 `search_repairs` 枚举和复核；有限属性蕴涵由 `extensions.implications` 探索及反驳。后两者不进入通用查询链。见 [概念实验对应](docs/concept_experiments.md) 的主张与预算边界。
 
+需要解释一次排除或跨情境迁移时，从 `search_explanations` 显式请求证据依赖路径。它复核活跃证据、承诺和目标重证，再返回可检查的依赖节点；普通搜索不会预先构造说明。独立的小规模关系参照和会话时序模型只用于测试，不改变通用推断语义。
+
 顶层提供常用建模声明、Realizer、Interpreter 和有限查询入口。编排引擎从 `bidirectional_modeling.engine` 导入；对应、闭合、残差、组合、预测适配、会话及证书复核从各自模块导入。概念记忆由调用方显式更新，不参与引擎的验证流程。
 
 网络容器从 `bidirectional_modeling.context_network` 导入；基准从 `bidirectional_modeling.search_benchmark` 导入或通过 CLI 使用。接口迁移见 [变更记录](CHANGELOG.md)。

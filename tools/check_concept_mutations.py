@@ -71,6 +71,9 @@ MUTATIONS = (
     ('unsupported implication becomes proved', 'extensions/implications.py',
      'if not support:', 'if False:',
      'test_implication_exploration.ImplicationContracts'),
+    ('explanation ignores revoked evidence', 'search_explanations.py',
+     'if not search.validates_conflict(certificate, active_evidence, budget=budget):',
+     'if False:', 'test_search_explanations.ExplanationContracts'),
 
 )
 
@@ -86,7 +89,7 @@ def main():
     for module in ('test_concept_contracts', 'test_execution_contracts',
                    'test_claim_boundaries', 'test_evidence_lifecycle',
                    'test_distinguishing_replay', 'test_search_repairs',
-                   'test_implication_exploration'):
+                   'test_implication_exploration', 'test_search_explanations'):
         baseline = run(ROOT/'src', module, ROOT)
         if baseline.returncode:
             print(baseline.stderr)

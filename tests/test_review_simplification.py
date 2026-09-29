@@ -148,7 +148,8 @@ from bidirectional_modeling.engine import BidirectionalModelingEngine
 e = BidirectionalModelingEngine()
 print(json.dumps([root_modules, sorted(sys.modules), package.__all__, sorted(vars(e))]))'''
         root, engine, exports, services = json.loads(subprocess.check_output([sys.executable, '-c', code], text=True))
-        for suffix in ('composition', 'residual', 'refinement', 'search_adapter', 'extensions.concepts'):
+        for suffix in ('composition', 'residual', 'refinement', 'search_adapter',
+                       'search_explanations', 'extensions.concepts'):
             self.assertNotIn('bidirectional_modeling.' + suffix, root)
             self.assertNotIn('bidirectional_modeling.' + suffix, engine)
         self.assertNotIn('CorrespondenceCertificate', exports)

@@ -41,9 +41,9 @@
 
 ## 实验能否发现错误实现
 
-运行 `python tools/check_concept_mutations.py`，脚本先验证原始实验，再在各自临时源码副本中注入十九种错误。其中六种是最小值变最大值、EACH 退化为 FINAL、联合承诺变任意交集、忽略证据撤回、跳过迁移目标重证、无反例即通过；另十三种执行、主张边界、证据流转与下述可选实验的错误见下文。
+运行 `python tools/check_concept_mutations.py`，脚本先验证原始实验，再在各自临时源码副本中注入二十种错误。其中六种是最小值变最大值、EACH 退化为 FINAL、联合承诺变任意交集、忽略证据撤回、跳过迁移目标重证、无反例即通过；另十四种执行、主张边界、证据流转与下述可选实验的错误见下文。
 
-每种错误必须被相应断言检出；测试导入或运行错误不计为检出。源仓库不被改写。这是十九项有限的实验充分性回归，不是通用变异完备性证明。CI 将它与普通覆盖率分开执行。
+每种错误必须被相应断言检出；测试导入或运行错误不计为检出。源仓库不被改写。这是二十项有限的实验充分性回归，不是通用变异完备性证明。CI 将它与普通覆盖率分开执行。
 
 CLI 的语义输出测试属于单元测试覆盖；打包后的命令运行与 JSON 格式验收仍单列。文档中的覆盖率不能替代上述概念主张和实验边界。
 
@@ -98,3 +98,24 @@ CLI 的语义输出测试属于单元测试覆盖；打包后的命令运行与 
 | [conexp-clj 属性探索](https://github.com/tomhanika/conexp-clj/blob/master/src/main/clojure/conexp/fca/exploration.clj) | 蕴涵须接受具体对象反例，已声明对象域外的事实不自动成立 | 本项目穷举有限提案，不执行专家确认、反例增补、背景知识闭包或典范蕴涵基；对无支持前提保守地标为未决，而形式概念分析允许真空成立的蕴涵 |
 
 因此这些接口分别是本项目任务中的局部方法，不声称移植上述原算法。`tests/test_search_repairs.py` 用基数最小与包含极小的区分实例固定这一边界；`tests/test_implication_exploration.py` 检查即使提案枚举完毕，无支持蕴涵仍未决。
+
+## 按需解释与独立参照
+
+`bidirectional_modeling.search_explanations` 在调用时复核现有冲突证书，输出协议、承诺、必要观测、经验冲突与候选排除的依赖节点。`explain_transported_conflict` 先重放源到目标的迁移及目标侧矛盾，再将映射和两侧证明连接起来。`verify_conflict_explanation` 与 `verify_transport_explanation` 可对同一主张独立重放：活跃证据撤回、来源/协议变化或节点篡改返回 `invalid`，预算不足返回 `undecided`。新增一项变异实验强制发现“说明跳过证书活跃性”的错误。来源标签依然只是调用方声明，并未被密码学认证。
+
+例如已有 `search`、`certificate`、`evidence` 时，可显式调用：
+
+```python
+from bidirectional_modeling.search_explanations import (
+    explain_conflict, verify_conflict_explanation,
+)
+
+path = explain_conflict(search, certificate, evidence, candidate='joint')
+assert path.status == 'valid'
+assert verify_conflict_explanation(path, search, certificate, evidence,
+                                   candidate='joint') == 'valid'
+```
+
+节点路径只是对该证书主张的依赖说明，不从缺少路径推导候选相容，也不证明该证书的支持集全局最小。它借鉴 [Soufflé 按需构造证明树](https://souffle-lang.github.io/provenance) 的方向；本项目不引入规则引擎或 Soufflé 的否定元组推导。
+
+`tests/test_finite_relation_reference.py` 借鉴 [Alloy 的有界反例搜索](https://alloytools.org/tutorials/online/)，用独立集合谓词遍历三个响应世界、两条承诺的所有子集和单条观测，逐项对照冲突、排除及基数最小撤回。该测试不是 Alloy 语言模型或 SAT 求解，范围外结论保持未知。`tests/test_session_transition_reference.py` 借鉴 [TLC 的有限状态轨迹](https://docs.tlapl.us/using:tlc:start)，枚举长度至多三的证据替换、撤回、重新发现、迁移与中断序列，和独立抽象状态对照，并复核序列化后的证书。这里运行的是 Python 显式状态测试，不调用 TLC；更长序列或未声明的并发动作不在覆盖范围内。
