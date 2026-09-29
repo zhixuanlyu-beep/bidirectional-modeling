@@ -12,6 +12,13 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('overlapping conflict cores treated as subsuming', 'search.py',
+     'if core.issubset(proposed):', 'if core.intersection(proposed):',
+     'test_search_antichain.AntichainTests'),
+    ('residual refinement ignores future actions', 'residual.py',
+     'signatures.append((current_class, tuple(targets)))',
+     'signatures.append((current_class, ()))',
+     'test_residual_relation_reference.ResidualRelationReference'),
     ('initialization StopIteration becomes exhaustion', '_generation.py',
      '            except Exception as error:\n                self._fail(error)',
      '            except StopIteration:\n                self._exhausted = True\n                raise\n            except Exception as error:\n                self._fail(error)',
@@ -39,8 +46,8 @@ MUTATIONS = (
      'checks = [_compare(value, self.operator, self.expected, self.tolerance) for value in values]',
      'checks = [_compare(values[-1], self.operator, self.expected, self.tolerance)]', 'test_concept_contracts.AggregationContracts'),
     ('joint conflict prunes individual commitments', 'search.py',
-     'if set(c.commitments).issubset(h.commitments):',
-     'if set(c.commitments).intersection(h.commitments):', 'test_concept_contracts.ExclusionConeContracts'),
+     'if core.issubset(h.commitments):',
+     'if core.intersection(h.commitments):', 'test_concept_contracts.ExclusionConeContracts'),
     ('revoked evidence remains applicable', 'search.py',
      'if not set(certificate.evidence).issubset(evidence):',
      'if False:  # intentionally ignore evidence withdrawal', 'test_concept_contracts.ExclusionConeContracts'),

@@ -506,6 +506,19 @@ class ExperimentHypothesisSearch:
             return MacroIdentifiabilityResult('undecided', 'unknown_prediction')
         return MacroIdentifiabilityResult('identifiable', 'finite_response_classes_checked')
 
+    @staticmethod
+    def _add_screening_core(cores, commitments, budget):
+        """Snapshot-only antichain; original certificates remain in the report."""
+        proposed = frozenset(commitments)
+        retained = []
+        for core in cores:
+            budget.consume("certificate_checks")
+            if core.issubset(proposed):
+                return
+            if not proposed.issubset(core):
+                retained.append(core)
+        cores[:] = retained + [proposed]
+
     def search(self, evidence=(), certificates=(), *, max_replays=None,
                budget=None, learn_conflicts=True) -> HypothesisSearchReport:
         budget = budget if budget is not None else SearchWorkBudget()
@@ -515,6 +528,7 @@ class ExperimentHypothesisSearch:
         compatible, pruned, rejected = [], [], []
         reasons = {}
         active = []
+        screening_cores = []
         replay_checks = 0
         full, observed = (), ()
         partition_complete = False
@@ -530,14 +544,15 @@ class ExperimentHypothesisSearch:
             for c in certificates:
                 if self.validates_conflict(c, evidence, budget=budget):
                     active.append(c)
+                    self._add_screening_core(screening_cores, c.commitments, budget)
             possible = self._worlds(evidence=evidence, budget=budget)
             inconsistent = not possible
             for h in sorted(self.hypotheses, key=lambda h: (h.description.total, h.name)):
                 budget.consume("candidate_checks")
                 inherited = False
-                for c in active:
+                for core in screening_cores:
                     budget.consume("certificate_checks")
-                    if set(c.commitments).issubset(h.commitments):
+                    if core.issubset(h.commitments):
                         inherited = True
                         break
                 if inherited:
@@ -557,6 +572,7 @@ class ExperimentHypothesisSearch:
                             c = self.learn_conflict(h.commitments, evidence, budget=budget)
                             if c is not None and c not in active:
                                 active.append(c)
+                                self._add_screening_core(screening_cores, c.commitments, budget)
         except SearchBudgetExceeded as error:
             stopped = error.reason
         classified = set(compatible + pruned + rejected)
