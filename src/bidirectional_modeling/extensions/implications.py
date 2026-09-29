@@ -107,14 +107,34 @@ def check_implication(context, implication, *, max_object_checks=None):
 
 
 def verify_implication_assessment(context, assessment, *, max_object_checks=None):
-    """Replay the exact local claim; a different source or object list unbinds it."""
+    """Independently inspect finite object rows and the exact declared claim."""
+    if not isinstance(context, AttributeContext) or not isinstance(assessment, ImplicationAssessment):
+        return 'invalid'
+    if max_object_checks is not None and (type(max_object_checks) is not int or max_object_checks < 0):
+        raise ValueError('max_object_checks must be nonnegative or None')
     if assessment.context_fingerprint != context.fingerprint:
         return 'invalid'
-    replay = check_implication(context, assessment.implication,
-                               max_object_checks=max_object_checks)
-    if replay.status == 'undecided' and replay.reason == 'object_budget_exhausted':
-        return 'undecided'
-    return 'valid' if replay == assessment else 'invalid'
+    claim = assessment.implication
+    if (not isinstance(claim, Implication)
+            or not set(claim.premises).issubset(context.attributes)
+            or claim.conclusion not in context.attributes):
+        return 'invalid'
+    support = []
+    for checked, obj in enumerate(context.objects):
+        if max_object_checks is not None and checked >= max_object_checks:
+            return 'undecided'
+        if all(name in obj.attributes for name in claim.premises):
+            support.append(obj.name)
+            if claim.conclusion not in obj.attributes:
+                expected = ImplicationAssessment(claim, context.fingerprint, 'refuted',
+                    'object_counterexample', tuple(support), obj, checked + 1)
+                return 'valid' if assessment == expected else 'invalid'
+    reason = 'no_supporting_object' if not support else (
+        'complete_declared_domain' if context.complete else 'object_domain_incomplete')
+    status = 'undecided' if reason != 'complete_declared_domain' else 'verified'
+    expected = ImplicationAssessment(claim, context.fingerprint, status, reason,
+                                     tuple(support), None, len(context.objects))
+    return 'valid' if assessment == expected else 'invalid'
 
 
 @dataclass(frozen=True)

@@ -106,13 +106,16 @@ class ContextTransitionReport:
     split_source_worlds: int = 0
     unrepresented_source_worlds: int = 0
     unmatched_target_worlds: int = 0
+    # Properties actually checked; kind is the caller's proposed classification.
+    checked_properties: tuple = ()
 
 
 def _prepare_context_transition(transition, *, budget=None):
     budget = budget if budget is not None else SearchWorkBudget()
     relation = []
-    def result(status, reason, *counts):
-        return ContextTransitionReport(transition.fingerprint, status, reason, *counts), tuple(relation)
+    def result(status, reason, *counts, properties=()):
+        return ContextTransitionReport(transition.fingerprint, status, reason,
+                                       *counts, checked_properties=properties), tuple(relation)
     source_names = {e.name for e in transition.source.protocol.experiments}
     target_names = {e.name for e in transition.target.protocol.experiments}
     mapped_source = {a for a, _ in transition.experiments}
@@ -121,6 +124,8 @@ def _prepare_context_transition(transition, *, budget=None):
         return result('invalid', 'source_experiments_not_covered')
     if transition.kind is ContextChange.RESTRICTION and mapped_target != target_names:
         return result('invalid', 'target_experiments_not_covered')
+    if not transition.experiments:
+        return result('undecided', 'no_shared_experiment_mapping')
     counts = [0] * len(transition.source.protocol.worlds)
     unmatched = 0
     try:
@@ -153,8 +158,17 @@ def _prepare_context_transition(transition, *, budget=None):
             return result('invalid', 'restriction_loses_source_behavior')
         # Without complete source coordinates, a match need not be a refinement.
         split = sum(n > 1 for n in counts) if mapped_source == source_names else 0
+        properties = ['mapped_responses_checked']
+        if mapped_source == source_names:
+            properties.append('source_experiments_covered')
+        if mapped_target == target_names:
+            properties.append('target_experiments_covered')
+        if not unmatched:
+            properties.append('target_worlds_represented')
+        if all(counts):
+            properties.append('source_worlds_represented')
         return result('valid', 'finite_response_relation_checked', split,
-                      sum(n == 0 for n in counts), unmatched)
+                      sum(n == 0 for n in counts), unmatched, properties=tuple(properties))
     except SearchBudgetExceeded as error:
         return result('undecided', error.reason)
     except ValueError as error:

@@ -623,8 +623,10 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(
             library.refine_from_counterexample("c", counterexample, source="explicit caller review", reason="paired states refute the declared grouping", applicability="reviewed relation to the named concept").version, 2
         )
+        self.assertEqual(len(library.history), 2)
+        self.assertEqual(tuple(event.version for event in library.history), (2, 2))
         switched = library.record_judgment(
-            "c", refined.negative_examples[0], accepted=True
+            "c", refined.negative_examples[0], accepted=True, source="explicit caller review"
         )
         self.assertIn(refined.negative_examples[0], switched.positive_examples)
         self.assertNotIn(refined.negative_examples[0], switched.negative_examples)
@@ -1040,4 +1042,3 @@ class RegressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

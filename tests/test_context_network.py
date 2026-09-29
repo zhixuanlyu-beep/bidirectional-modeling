@@ -38,6 +38,8 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(result.status, 'valid')
         self.assertEqual(result.split_source_worlds, 2)
         self.assertEqual(result.unrepresented_source_worlds, 0)
+        self.assertIn('source_worlds_represented', result.checked_properties)
+        self.assertIn('target_worlds_represented', result.checked_properties)
         network = ContextNetwork()
         self.assertEqual(network.add_transition(transition), result)
         self.assertEqual(len(network.transitions), 1)
@@ -50,8 +52,28 @@ class ContextTests(unittest.TestCase):
         q = replace(p, scope='new', worlds=(('0',),))
         t = identity_transition(p, q, ContextChange.RESTRICTION)
         self.assertEqual(validate_context_transition(t).reason, 'restriction_loses_source_behavior')
-        self.assertEqual(validate_context_transition(replace(t, kind=ContextChange.REFINEMENT)).status, 'valid')
+        for kind in (ContextChange.REFINEMENT, ContextChange.EXTENSION):
+            report = validate_context_transition(replace(t, kind=kind))
+            self.assertEqual(report.status, 'valid')
+            self.assertEqual(report.unrepresented_source_worlds, 1)
+            self.assertNotIn('source_worlds_represented', report.checked_properties)
+            self.assertIn('target_worlds_represented', report.checked_properties)
         self.assertEqual(validate_context_transition(replace(t, experiments=(), responses=())).status, 'invalid')
+
+    def test_unrelated_contexts_cannot_certify_a_vacuous_relation(self):
+        source = SearchProtocol('old', 'code', (SearchExperiment('a', 'read a'),),
+                                (('0',), ('1',)))
+        target = SearchProtocol('new', 'other', (SearchExperiment('b', 'read b'),),
+                                (('red',), ('blue',)))
+        transition = ContextTransition(context('old', source), context('new', target),
+                                       ContextChange.RECONSTRUCTION)
+        report = validate_context_transition(transition)
+        self.assertEqual((report.status, report.reason),
+                         ('undecided', 'no_shared_experiment_mapping'))
+        self.assertEqual(report.checked_properties, ())
+        network = ContextNetwork()
+        self.assertEqual(network.add_transition(transition), report)
+        self.assertFalse(network.contexts or network.transitions)
 
     def test_binding_and_missing_translation_fail_closed(self):
         p = additive_protocol()

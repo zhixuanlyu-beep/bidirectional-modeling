@@ -35,9 +35,9 @@ bidirectional-modeling context-demo --json
 - `responses`：`(源实验名, 目标响应, 源响应)`，必须显式声明，包括恒等翻译；
 - `commitments`：`(源约束名, 目标约束名)`，只声明待验证的对应，不自动证明蕴含。
 
-响应翻译方向为“目标响应回译到源响应”。细化与扩展必须覆盖全部源实验，每个目标响应行回译后必须能在源响应域中表示。限制必须覆盖目标实验，并保留所有源响应在该限制下的表示。重构可以引入源域中没有对应的目标行为；报告会计数，但不会自动继承任何证书。
+响应翻译方向为“目标响应回译到源响应”。细化与扩展目前检查相同的响应条件：必须覆盖全部源实验，每个目标响应行回译后必须能在源响应域中表示；类别名称是调用方提议，不单独证明结构细化或扩展。限制必须覆盖目标实验，并保留所有源响应在该限制下的表示。重构可以引入源域中没有对应的目标行为；但没有任何共享实验映射时只返回 `undecided`，不会把空对应记为有效关系。报告会计数，但不会自动继承任何证书。
 
-`validate_context_transition` 返回 `valid / invalid / undecided`。`split_source_worlds`、`unrepresented_source_worlds`、`unmatched_target_worlds` 统计的是声明的响应行，不能称为结构候选被淘汰的数量。只有覆盖完整源实验时才报告拆分类数。
+`validate_context_transition` 返回 `valid / invalid / undecided`。`checked_properties` 列出实际检查通过的实验覆盖和响应行表示性质；`split_source_worlds`、`unrepresented_source_worlds`、`unmatched_target_worlds` 统计的是声明的响应行，不能称为结构候选被淘汰的数量。只有覆盖完整源实验时才报告拆分类数。
 
 `bidirectional_modeling.context_network.ContextNetwork` 是可选的直接边容器，保存通过验证的直接转换，公开只读映射。名称相同而定义变化的节点被拒绝，应使用新的版本名。多条边不自动组成端到端证明；不同节点可以拥有独立响应域。
 

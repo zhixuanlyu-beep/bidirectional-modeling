@@ -137,7 +137,7 @@ class ReviewImprovementTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             lazy.predict_experiments('c0', ('a',))
 
-    def test_indexed_relations_match_independent_scan_including_dense_projection(self):
+    def test_indexed_relations_match_independent_scan_and_reject_empty_projection(self):
         for size in (1, 10, 100):
             t = transition(size)
             budget = SearchWorkBudget()
@@ -148,15 +148,14 @@ class ReviewImprovementTests(unittest.TestCase):
             stopped, _ = _prepare_context_transition(t, budget=SearchWorkBudget(0))
             self.assertEqual(stopped.status, 'undecided')
         t = transition(5)
-        for experiments in (t.experiments, ()):
-            t = replace(t, kind=ContextChange.RECONSTRUCTION, experiments=experiments,
-                        responses=t.responses if experiments else ())
-            report, relation = _prepare_context_transition(t)
-            reference = tuple(matching_source_worlds(t, row, SearchWorkBudget())
-                              for row in t.target.protocol.worlds)
-            self.assertEqual(report.status, 'valid')
-            self.assertEqual(relation, reference)
-        # Relation output itself is quadratic for an empty projection, and charged.
-        report, relation = _prepare_context_transition(t, budget=SearchWorkBudget(20))
+        t = replace(t, kind=ContextChange.RECONSTRUCTION)
+        report, relation = _prepare_context_transition(t)
+        reference = tuple(matching_source_worlds(t, row, SearchWorkBudget())
+                          for row in t.target.protocol.worlds)
+        self.assertEqual(report.status, 'valid')
+        self.assertEqual(relation, reference)
+        empty = replace(t, experiments=(), responses=())
+        report, relation = _prepare_context_transition(empty, budget=SearchWorkBudget(20))
         self.assertEqual(report.status, 'undecided')
-        self.assertLess(len(relation), 5)
+        self.assertEqual(report.reason, 'no_shared_experiment_mapping')
+        self.assertEqual(relation, ())

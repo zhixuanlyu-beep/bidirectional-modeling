@@ -1,6 +1,8 @@
 """A declaration, a refuting object, and an unexamined domain are distinct."""
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
+import bidirectional_modeling.extensions.implications as implication_module
 
 from bidirectional_modeling.extensions.implications import (
     AttributeContext, AttributeObject, Implication, check_implication,
@@ -17,6 +19,14 @@ def context(complete=True):
 
 
 class ImplicationContracts(unittest.TestCase):
+    def test_shared_generator_defect_cannot_validate_a_false_implication(self):
+        ctx = context()
+        actual = check_implication(ctx, Implication(('b',), 'a'))
+        forged = replace(actual, status='verified', reason='complete_declared_domain',
+                         counterexample=None)
+        with patch.object(implication_module, 'check_implication', return_value=forged):
+            self.assertEqual(verify_implication_assessment(ctx, forged), 'invalid')
+
     def test_refutation_identifies_object_and_its_exact_attribute_row(self):
         ctx = context(False)
         result = check_implication(ctx, Implication(('b',), 'a'))
