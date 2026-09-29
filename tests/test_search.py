@@ -82,10 +82,10 @@ class SearchTests(unittest.TestCase):
         search = ExperimentHypothesisSearch(search.protocol, search.hypotheses+(h,), search.target)
         self.assertEqual(search.partition(('00',)), (('x','z','xz','different-structure'),))
         self.assertEqual(search.partition()[-1], ('xz','different-structure'))
-        self.assertTrue(search.macro_identifiable())
+        self.assertEqual(search.macro_identifiable().status, 'identifiable')
         contrary = replace(h, name='contrary', macro_answer='different answer')
         other = ExperimentHypothesisSearch(search.protocol, search.hypotheses+(contrary,), search.target)
-        self.assertFalse(other.macro_identifiable())
+        self.assertEqual(other.macro_identifiable().status, 'non_identifiable')
         self.assertFalse(other.search(evidence).determined)
         self.assertIsNone(other.next_experiment(evidence))
 
@@ -120,7 +120,7 @@ class SearchTests(unittest.TestCase):
         h = SearchHypothesis('timeout',None,'other',DescriptionLength())
         other = ExperimentHypothesisSearch(search.protocol,search.hypotheses+(h,),search.target)
         self.assertFalse(other.search(evidence).determined)
-        self.assertFalse(other.macro_identifiable())
+        self.assertEqual(other.macro_identifiable().status, 'undecided')
         self.assertIn(('timeout',),other.partition())
         with self.assertRaises(ValueError):
             other.compress_evidence(evidence)
@@ -133,7 +133,7 @@ class SearchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             search.compress_evidence(data)
         empty = ExperimentHypothesisSearch(search.protocol,(),search.target)
-        self.assertFalse(empty.macro_identifiable())
+        self.assertEqual(empty.macro_identifiable().reason, 'empty_catalogue')
         self.assertFalse(empty.search().determined)
 
     def test_targeted_experiment_and_cost(self):

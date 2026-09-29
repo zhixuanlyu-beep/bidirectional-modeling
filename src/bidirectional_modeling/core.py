@@ -68,13 +68,16 @@ class Evidence:
 
     statement: str
     hypothesis: str
-    strength: float
     kind: str = "observation"
     source: str = "unspecified"
+    annotation: str = ""
 
     def __post_init__(self) -> None:
-        if not -1.0 <= self.strength <= 1.0:
-            raise ValueError("evidence strength must be in [-1, 1]")
+        if any(not isinstance(value, str) or not value.strip()
+               for value in (self.statement, self.hypothesis, self.kind, self.source)):
+            raise ValueError("evidence declarations must be nonempty text")
+        if not isinstance(self.annotation, str):
+            raise TypeError("evidence annotation must be text")
 
 
 @dataclass(frozen=True)
@@ -161,7 +164,7 @@ class Context:
                 (
                     item.statement,
                     item.hypothesis,
-                    item.strength,
+                    item.annotation,
                     item.kind,
                     item.source,
                 )

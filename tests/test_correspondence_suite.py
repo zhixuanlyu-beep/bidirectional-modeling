@@ -23,6 +23,7 @@ class CorrespondenceSuiteTests(unittest.TestCase):
         self.assertTrue(certificate.compatibility_passed)
         self.assertTrue(certificate.has_independent_holdout)
         self.assertTrue(certificate.complete)
+        self.assertEqual(certificate.independent_holdout_status, 'verified')
         self.assertTrue(certificate.commutes)
         self.assertEqual(certificate.simulations_used, 6)
         self.assertEqual(len(certificate.cases), 2)
@@ -79,6 +80,7 @@ class CorrespondenceSuiteTests(unittest.TestCase):
         self.assertTrue(certificate.compatibility_passed)
         self.assertFalse(certificate.has_independent_holdout)
         self.assertFalse(certificate.passed)
+        self.assertEqual(certificate.independent_holdout_status, 'missing')
         self.assertFalse(
             self.engine.scale_graph.has_certified_direct("micro", "macro")
         )
@@ -111,6 +113,7 @@ class CorrespondenceSuiteTests(unittest.TestCase):
         self.assertFalse(certificate.compatibility_passed)
         self.assertTrue(certificate.has_independent_holdout)
         self.assertTrue(certificate.cases[0].certificate.passed)
+        self.assertEqual(certificate.independent_holdout_status, 'refuted')
         self.assertFalse(certificate.cases[1].certificate.commutes)
         self.assertIn(
             "non-commuting-step",
@@ -132,6 +135,7 @@ class CorrespondenceSuiteTests(unittest.TestCase):
         self.assertEqual(certificate.simulations_used, 3)
         self.assertTrue(certificate.cases[0].certificate.passed)
         self.assertFalse(certificate.cases[1].certificate.complete)
+        self.assertEqual(certificate.independent_holdout_status, 'undecided')
         self.assertTrue(
             any(
                 "suite simulation budget" in item
@@ -192,4 +196,3 @@ class CorrespondenceSuiteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

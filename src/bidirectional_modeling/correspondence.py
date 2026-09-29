@@ -493,6 +493,17 @@ class CorrespondenceSuiteCertificate:
         )
 
     @property
+    def independent_holdout_status(self) -> str:
+        statuses = tuple(item.certificate.status for item in self.cases
+                         if item.role == CorrespondenceCaseRole.HOLDOUT and item.independent)
+        if not statuses:
+            return 'missing'
+        for status in ('refuted', 'undecided', 'not_applicable'):
+            if status in statuses:
+                return status
+        return 'verified'
+
+    @property
     def passed(self) -> bool:
         return self.has_independent_holdout and self.compatibility_passed
 
@@ -1159,4 +1170,3 @@ class ScaleGraph:
         return tuple(
             sorted(paths, key=lambda item: (len(item.correspondences), item.correspondences))
         )
-

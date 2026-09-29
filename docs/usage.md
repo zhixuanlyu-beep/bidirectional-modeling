@@ -213,6 +213,7 @@ correspondence, cases = scale_correspondence_suite()
 suite = engine.verify_correspondence_suite(correspondence, cases)
 print(suite.compatibility_passed)       # 所有已声明用例相容
 print(suite.has_independent_holdout)    # 至少一个独立留出声明
+print(suite.independent_holdout_status) # verified / refuted / undecided / not_applicable / missing
 print(suite.passed)                     # 两者同时成立
 for result in suite.cases:
     print(

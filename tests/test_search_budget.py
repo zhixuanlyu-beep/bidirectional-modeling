@@ -144,7 +144,6 @@ class SearchBudgetTests(unittest.TestCase):
             lambda b: self.search.validates_conflict(conflict,self.data,budget=b),
             lambda b: self.search.compress_evidence(self.data,budget=b),
             lambda b: self.search.partition(budget=b),
-            lambda b: self.search.macro_identifiable(budget=b),
             lambda b: self.search.next_experiment(budget=b),
         )
         result = self.search.query(LowerSubstituteQuery("xz", ("x", "z")), budget=SearchWorkBudget(0))

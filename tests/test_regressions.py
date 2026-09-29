@@ -884,7 +884,7 @@ class RegressionTests(unittest.TestCase):
         self.assertFalse(result.rejected)
         self.assertTrue(result.truncated)
 
-    def test_set_selection_does_not_depend_on_evidence_strength(self):
+    def test_set_selection_does_not_depend_on_evidence_annotation(self):
         model = TupleTraceModel(
             "information-source",
             (Trace("information-source", "s", "baseline", ({"x": 0}, {"x": 1})),),
@@ -911,7 +911,7 @@ class RegressionTests(unittest.TestCase):
             model,
             context,
             hypotheses,
-            evidence=(Evidence("extra support", "A", 1.0),),
+            evidence=(Evidence("extra support", "A", annotation="caller support"),),
             experiments=(experiment,),
         )
 
@@ -1008,13 +1008,13 @@ class RegressionTests(unittest.TestCase):
         weak = Evidence(
             "a vague recollection",
             "preserve central control",
-            0.1,
+            annotation="a vague recollection",
             kind="statement",
         )
         strong = Evidence(
             "the process owner explicitly selected central control",
             "preserve central control",
-            0.8,
+            annotation="explicit selection recalled by caller",
             kind="statement",
         )
         engine = BidirectionalModelingEngine()
