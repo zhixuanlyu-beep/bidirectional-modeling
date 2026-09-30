@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from fractions import Fraction
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
 
 from .structural import (
     callable_fingerprint,

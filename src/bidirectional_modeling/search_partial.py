@@ -76,7 +76,7 @@ def collect_partial_prediction(protocol, candidate, cases, experiments, *,
         budget.consume('query_checks')
     except SearchBudgetExceeded as error:
         return PartialPredictionResult(None, 0, error.reason)
-    indexes = tuple(names.index(n) for n in selected)
+    indexes = tuple(i for i, n in enumerate(names) if n in selected)
     matrix = _collect_response_matrix(candidate, tuple(cases[i] for i in indexes),
         max_simulations=max_simulations, evaluator=evaluator)
     if _binding(protocol, candidate, cases) != digest:
@@ -220,10 +220,11 @@ def verify_candidate_exclusion(protocol, candidate, cases, certificate, evidence
     budget = budget if budget is not None else SearchWorkBudget()
     if observation.experiment not in names:
         return PartialPredictionVerification('invalid', 'observation_outside_domain', 0)
+    column = names.index(observation.experiment)
     try:
         for row in protocol.worlds:
             budget.consume('response_checks')
-            if row[names.index(observation.experiment)] == observation.response:
+            if row[column] == observation.response:
                 break
         else:
             return PartialPredictionVerification('invalid', 'observation_outside_domain', 0)

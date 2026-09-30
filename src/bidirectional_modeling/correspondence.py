@@ -25,7 +25,6 @@ from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_re
 from .provenance import (
     context_fingerprint,
     safe_context_fingerprint,
-    observed_model_fingerprint as _model_evidence_fingerprint,
     safe_observed_model_fingerprint as _safe_model_evidence_fingerprint,
 )
 from .structural import (

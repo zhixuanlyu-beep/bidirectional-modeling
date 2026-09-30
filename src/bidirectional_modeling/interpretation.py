@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import replace
-from typing import Iterable, Mapping, Optional, Protocol, Sequence, Tuple, Union
+from typing import Iterable, Optional, Protocol, Sequence, Union
 
 from .core import (
     Aggregation,
