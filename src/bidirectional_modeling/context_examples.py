@@ -48,7 +48,7 @@ def build_context_demo_report():
     equal, unequal = (('0', '0'), ('1', '1')), (('0', '1'), ('1', '0'))
     gluing = solve_gluing(GluingProblem(tuple((n, ('0', '1')) for n in ('x', 'y', 'z')), (
         LocalDescription('xy', ('x', 'y'), equal), LocalDescription('yz', ('y', 'z'), equal),
-        LocalDescription('xz', ('x', 'z'), unequal))))
+        LocalDescription('xz', ('x', 'z'), unequal))), check_overlap=True, minimize_core=True)
 
     x, z = BooleanExpression(('var', 'x')), BooleanExpression(('var', 'z'))
     interaction = BooleanExpression(('and', x.tree, z.tree))

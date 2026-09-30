@@ -16,7 +16,7 @@ def triangle():
 class GluingTests(unittest.TestCase):
     def test_pairwise_overlap_does_not_guarantee_global_assignment(self):
         p = triangle()
-        r = solve_gluing(p)
+        r = solve_gluing(p, check_overlap=True, minimize_core=True)
         self.assertTrue(r.overlap_consistent)
         self.assertEqual(r.status, 'absent')
         self.assertEqual(r.conflict_core, ('xy', 'yz', 'xz'))
@@ -43,10 +43,10 @@ class GluingTests(unittest.TestCase):
         p = triangle()
         q = replace(p, locals=(LocalDescription('one', ('x',), (('0',),)),
                                 LocalDescription('two', ('x',), (('1',),))))
-        r = solve_gluing(q)
+        r = solve_gluing(q, check_overlap=True)
         self.assertFalse(r.overlap_consistent)
         self.assertEqual(r.status, 'absent')
-        r = solve_gluing(replace(p, global_assignments=()))
+        r = solve_gluing(replace(p, global_assignments=()), minimize_core=True)
         self.assertEqual(r.conflict_core, ())
         self.assertEqual(r.status, 'absent')
 

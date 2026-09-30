@@ -119,19 +119,23 @@ def _witness(problem, selected, budget):
     return None
 
 
-def solve_gluing(problem, *, minimize_core=True, budget=None):
+def solve_gluing(problem, *, check_overlap=False, minimize_core=False, budget=None):
+    """Prove existence/absence first; additional properties are explicit requests."""
+    if type(check_overlap) is not bool or type(minimize_core) is not bool:
+        raise ValueError('gluing options must be booleans')
     budget = budget if budget is not None else SearchWorkBudget()
-    overlap, absent = None, False
+    overlap, absent, witness = None, False, None
     core = problem.locals
-    def result(status, reason, row=None, minimal=False):
-        return GluingReport(problem.fingerprint, overlap, status, reason, row,
+    def result(status, reason, minimal=False):
+        return GluingReport(problem.fingerprint, overlap, status, reason, witness,
                             tuple(p.name for p in core) if absent else (), minimal)
     try:
-        overlap = _overlap_consistent(problem, budget)
-        row = _witness(problem, core, budget)
-        if row is not None:
-            return result('found', 'global_assignment_found', row)
-        absent = True
+        witness = _witness(problem, core, budget)
+        absent = witness is None
+        if check_overlap:
+            overlap = _overlap_consistent(problem, budget)
+        if witness is not None:
+            return result('found', 'global_assignment_found')
         if minimize_core:
             for patch in tuple(core):
                 trial = tuple(p for p in core if p != patch)
@@ -139,12 +143,27 @@ def solve_gluing(problem, *, minimize_core=True, budget=None):
                     core = trial
         return result('absent', 'declared_global_class_exhausted', minimal=minimize_core)
     except SearchBudgetExceeded as error:
-        return result('absent' if absent else 'unknown', error.reason)
+        return result('found' if witness is not None else 'absent' if absent else 'unknown',
+                      error.reason)
+
+
+def _well_formed_report(receipt):
+    return (isinstance(receipt, GluingReport)
+            and all(isinstance(value, str) for value in
+                    (receipt.problem_fingerprint, receipt.status, receipt.reason))
+            and (receipt.overlap_consistent is None or type(receipt.overlap_consistent) is bool)
+            and type(receipt.core_minimal) is bool
+            and isinstance(receipt.conflict_core, tuple)
+            and all(isinstance(name, str) for name in receipt.conflict_core)
+            and (receipt.witness is None or (isinstance(receipt.witness, tuple)
+                 and all(isinstance(value, str) for value in receipt.witness))))
 
 
 def verify_gluing_report(problem, receipt, *, budget=None):
     """Check the supplied witness/core without repeating the original search."""
     budget = budget if budget is not None else SearchWorkBudget()
+    if not _well_formed_report(receipt):
+        return 'invalid'
     if receipt.problem_fingerprint != problem.fingerprint:
         return 'invalid'
     if receipt.status == 'unknown':
@@ -154,7 +173,8 @@ def verify_gluing_report(problem, receipt, *, budget=None):
     patches = {p.name: p for p in problem.locals}
     try:
         budget.consume('certificate_checks')
-        if _overlap_consistent(problem, budget) != receipt.overlap_consistent:
+        if (receipt.overlap_consistent is not None
+                and _overlap_consistent(problem, budget) != receipt.overlap_consistent):
             return 'invalid'
         if receipt.status == 'found':
             row = receipt.witness

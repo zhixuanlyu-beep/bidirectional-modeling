@@ -214,6 +214,15 @@ def verify_query_result(problem, query, receipt, *, budget=None):
     def verdict(status,reason):
         return QueryVerification(status,reason,budget.work)
     expected_scope=_query_scope(problem,query)
+    if (not isinstance(receipt, QueryResult)
+            or not all(isinstance(value, str) for value in
+                       (receipt.query_fingerprint, receipt.scope, receipt.reason))
+            or not isinstance(receipt.work, SearchWork)
+            or (receipt.witness_world is not None and type(receipt.witness_world) is not int)
+            or (receipt.witness_candidate is not None and not isinstance(receipt.witness_candidate, str))
+            or (receipt.compatible_catalogue_nonempty is not None
+                and type(receipt.compatible_catalogue_nonempty) is not bool)):
+        return verdict('invalid', 'malformed_receipt')
     if receipt.query_fingerprint != query_fingerprint(problem,query):
         return verdict('invalid','binding_mismatch')
     if not isinstance(receipt.status,QueryStatus):

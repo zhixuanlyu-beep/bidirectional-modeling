@@ -83,15 +83,15 @@ problem = GluingProblem(
      LocalDescription('yz', ('y', 'z'), same),
      LocalDescription('xz', ('x', 'z'), different)),
 )
-report = solve_gluing(problem)
+report = solve_gluing(problem, check_overlap=True, minimize_core=True)
 assert report.overlap_consistent and report.status == 'absent'
 ```
 
-`found` 携带整体赋值；`absent` 表示穷尽声明的整体类后没有赋值；`unknown` 保留预算未决。`overlap_consistent` 在未完成检查时为 `None`。重叠不一致与不存在整体赋值是两个不同检查，报告不会把它们混同。
+`solve_gluing` 默认只检查整体存在性；`check_overlap=True` 请求重叠一致性，`minimize_core=True` 请求核极小化。整体检查先执行。`found` 携带整体赋值；`absent` 表示穷尽声明的整体类后没有赋值；`unknown` 保留预算未决。`overlap_consistent` 在未完成检查时为 `None`。重叠不一致与不存在整体赋值是两个不同检查，报告不会把它们混同。
 
 存在性复核直接检查给定整体赋值的域、整体类成员资格和局部关系，不重新求解整个问题。不存在性复核检查所给冲突核；仅在声明极小时才逐项检查删除后的可满足性。
 
-冲突核为包含意义下极小，不声称最小基数。核最小化中断时，已证明的 `absent` 仍成立，但 `core_minimal=False`。`verify_gluing_report` 重验实际核心和所声称的极小性，不信任外部标志。显式空整体类会返回空核心，表示失败来自整体类自身的限制。
+冲突核为包含意义下极小，不声称最小基数。重叠或核最小化中断时，已证明的 `found` 或 `absent` 仍成立；未完成重叠检查为 `None`，未完成极小化为 `core_minimal=False`。`verify_gluing_report` 重验实际核心和所声称的极小性，不信任外部标志。请求核极小化时，显式空整体类会返回空核心，表示失败来自整体类自身的限制。
 
 此版本验证有限赋值关系；没有实现一般概率边缘分布的线性规划可行性求解。给局部支持附加均匀概率时，演示中的支持矛盾同样阻止联合分布，但一般的概率拼接还需要额外约束求解。
 

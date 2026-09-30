@@ -5,6 +5,7 @@ are excluded. Counts describe this synthetic workload, not universal speedups.
 """
 import json
 from dataclasses import asdict
+from unittest.mock import patch
 
 from bidirectional_modeling import (DescriptionLength, ExperimentHypothesisSearch,
     ResponseConstraint, SearchExperiment, SearchHypothesis, SearchObservation,
@@ -45,6 +46,35 @@ def run():
             retained_after_one_source_withdrawal=len(session.certificates),
             update_work=asdict(update.work), full_screen_work=asdict(full.work),
             representative_screen_work=asdict(representative.work)))
+    for shape in ('incomparable', 'mixed'):
+        for candidate_count in (1, 4, 64):
+            size = 64
+            protocol = SearchProtocol('fallback-costs', 'finite table',
+                (SearchExperiment('a', 'read'),), (('0',), ('1',)),
+                tuple(ResponseConstraint('c%d' % i, (0,)) for i in range(size)))
+            candidates = tuple(SearchHypothesis('h%d' % i, 1, 'yes', DescriptionLength())
+                               for i in range(candidate_count))
+            search = ExperimentHypothesisSearch(protocol, candidates, 'out')
+            evidence = (SearchObservation('a', '1', 'lab'),)
+            certificates = tuple(ConflictCertificate(protocol.fingerprint,
+                ('c0', 'c%d' % i) if shape == 'mixed' and 0 < i < size // 2
+                else ('c%d' % i,), evidence) for i in range(size))
+            search.fingerprint
+            optimized = search.search(evidence, certificates, learn_conflicts=False)
+            # Reference cost path: retain every core, with no antichain comparisons.
+            def plain(cores, commitments, budget, allowance):
+                cores.append(frozenset(commitments))
+                return True
+            with patch.object(ExperimentHypothesisSearch, '_add_screening_core', staticmethod(plain)):
+                direct = search.search(evidence, certificates, learn_conflicts=False)
+            assert optimized.compatible == direct.compatible
+            assert optimized.conflicts == direct.conflicts == certificates
+            assert optimized.work.total <= direct.work.total + max(0, candidate_count - 1)
+            bounded = search.search(evidence, certificates, learn_conflicts=False,
+                budget=SearchWorkBudget(direct.work.total + max(0, candidate_count - 1)))
+            assert bounded.stop_reason != 'work_budget_exhausted'
+            rows.append(dict(shape=shape, certificates=size, candidates=candidate_count,
+                direct_screen_work=asdict(direct.work), full_screen_work=asdict(optimized.work)))
     return dict(constructor_and_discovery_cost_included=False,
         representative_is_snapshot_only=True, results=rows)
 
