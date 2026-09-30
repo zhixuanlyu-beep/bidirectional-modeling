@@ -120,7 +120,8 @@ class LazyExecutableSearch:
             self._invalidated = True
             raise ValueError('partial response changed; create a new instance')
         known = next(h for h in self._search.hypotheses if h.name == candidate)
-        if known.world is not None and any(self._protocol.worlds[known.world][names.index(n)] != r
+        columns = {n: i for i, n in enumerate(names)}
+        if known.world is not None and any(self._protocol.worlds[known.world][columns[n]] != r
                                           for n, r in values.items()):
             self._invalidated = True
             raise ValueError('partial response changed; create a new instance')
@@ -156,7 +157,7 @@ class LazyExecutableSearch:
         try:
             evidence = self._search._evidence(evidence, budget)
             # Inconsistent data is not a candidate-specific experimental failure.
-            if not self._search._worlds(evidence=evidence, budget=budget):
+            if not self._search._has_world(evidence=evidence, budget=budget):
                 reason = 'inconsistent_evidence'
             else:
                 costs = {e.name: e.cost for e in self._protocol.experiments}
@@ -220,6 +221,7 @@ class LazyExecutableSearch:
             order = tuple(c.model.name for c in self._candidates)
         candidates = {c.model.name: c for c in self._candidates}
         hypotheses = {h.name: h for h in self._search.hypotheses}
+        columns = {e.name: i for i, e in enumerate(self._protocol.experiments)}
         new_bindings = []
         # Filter evidence once. Completed candidates are tested individually;
         # only the initial and final receipts scan the whole catalogue.
@@ -252,9 +254,8 @@ class LazyExecutableSearch:
             hypothesis = prepared.search.hypotheses[0]
             if hypothesis.world is not None:
                 partial = self._partial.get(name)
-                names = tuple(e.name for e in self._protocol.experiments)
                 if partial is not None and any(
-                        self._protocol.worlds[hypothesis.world][names.index(n)] != r
+                        self._protocol.worlds[hypothesis.world][columns[n]] != r
                         for n, r in zip(partial.experiments, partial.responses)):
                     self._invalidated = True
                     raise ValueError('partial response changed; create a new instance')
@@ -294,4 +295,3 @@ class LazyExecutableSearch:
             receipt = self._search.query(query, budget=budget)
         return LazyQueryResult(self._search, receipt, used, tuple(resolved),
                                self._bindings, tuple(diagnostics), self._declaration)
-

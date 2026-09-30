@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Deque, Dict, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from ._exploration import Edge as _Edge, explore_reachable
 
@@ -30,7 +30,6 @@ from .structural import (
     FrozenValue,
     fingerprint_value,
     freeze_value,
-    isolated_mapping,
     validate_fingerprint,
 )
 

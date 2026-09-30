@@ -59,10 +59,10 @@ def certify_macro_sufficiency(problem, evidence, *, read_costs=None, budget=None
             _natural(value)
             if not value:
                 raise ValueError('evidence read costs must be positive')
-        names = tuple(e.name for e in problem.protocol.experiments)
+        indices = {e.name: i for i, e in enumerate(problem.protocol.experiments)}
         def disagrees(h, o):
             budget.consume('response_checks')
-            return problem.protocol.worlds[h.world][names.index(o.experiment)] != o.response
+            return problem.protocol.worlds[h.world][indices[o.experiment]] != o.response
         witness = next(h.name for h in problem.hypotheses if h.macro_answer == answer
                        and not any(disagrees(h, o) for o in evidence))
         uncovered = {h.name: h for h in problem.hypotheses if h.macro_answer != answer}
@@ -120,13 +120,11 @@ def verify_macro_sufficiency(problem, certificate, evidence, *, budget=None):
         witness = by_name.get(certificate.witness_candidate)
         if witness is None or witness.macro_answer != certificate.answer:
             return 'invalid'
-        names = tuple(e.name for e in problem.protocol.experiments)
+        indices = {e.name: i for i, e in enumerate(problem.protocol.experiments)}
         def disagrees(h, o):
             budget.consume('response_checks')
-            return problem.protocol.worlds[h.world][names.index(o.experiment)] != o.response
+            return problem.protocol.worlds[h.world][indices[o.experiment]] != o.response
         if any(disagrees(witness, o) for o in certificate.evidence):
-            return 'invalid'
-        if any(len(row) != 2 for row in certificate.exclusions):
             return 'invalid'
         excluded = dict(certificate.exclusions)
         expected = {h.name for h in problem.hypotheses if h.macro_answer != certificate.answer}

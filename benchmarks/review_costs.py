@@ -1,16 +1,17 @@
 """Small deterministic workloads; counters are gates, timings are diagnostics.
 
 Run: PYTHONPATH=src python benchmarks/review_costs.py
-Constructors are outside measured calls. Screening includes declaration checks
-and simulation; its declaration counter covers catalogue-boundary hashes only.
+Semantic work excludes constructors; selected workloads count them separately.
+Screening includes declaration checks and simulation; its declaration counter
+covers catalogue-boundary hashes only.
 """
 import json
 from time import perf_counter
 from unittest.mock import patch
 
-from bidirectional_modeling import (ConstraintQuery, Context, DescriptionLength, ExperimentHypothesisSearch, ScenarioKey, SearchExperiment, SearchObservation, SearchProtocol, SearchWorkBudget)
+from bidirectional_modeling import (ConstraintQuery, Context, DescriptionLength, ExperimentHypothesisSearch, ResponseConstraint, ScenarioKey, SearchExperiment, SearchObservation, SearchProtocol, SearchWorkBudget)
 from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
-from bidirectional_modeling.search_adapter import (ModelSearchCandidate, ModelSearchCase)
+from bidirectional_modeling.search_adapter import (ExecutableSearchAdapter, ModelSearchCandidate, ModelSearchCase)
 from bidirectional_modeling.search_queries import (verify_query_result)
 from bidirectional_modeling.context_network import (
     ContextChange, ContextTransition, ModelingContext, validate_context_transition,
@@ -52,6 +53,38 @@ def run():
         assert report.status == 'valid' and budget.work.total <= 4*size
         rows.append(dict(kind='relation', worlds=size, preparation_operations=budget.work.total,
                          seconds=perf_counter()-started))
+    size = 1000
+    p = SearchProtocol('scope', 'code', (SearchExperiment('a', 'read'),),
+        tuple((str(i),) for i in range(size)),
+        (ResponseConstraint('all', tuple(range(size))), ResponseConstraint('first', (0,))))
+    problem = ExperimentHypothesisSearch(p, (), 'out')
+    budget = SearchWorkBudget()
+    assert problem.learn_conflict(('all',), (SearchObservation('a', '0', 'lab'),),
+                                  budget=budget) is None
+    assert budget.work.total <= 20
+    rows.append(dict(kind='consistent_conflict', worlds=size, operations=budget.work.total))
+    data = (SearchObservation('a', '1', 'lab'),)
+    certificate = problem.learn_conflict(('first',), data)
+    budget = SearchWorkBudget()
+    assert problem.validates_conflict(certificate, data, budget=budget)
+    assert budget.work.total <= 2020
+    rows.append(dict(kind='conflict_verification', worlds=size, operations=budget.work.total))
+    query = ConstraintQuery(('first',), data)
+    receipt = problem.query(query)
+    original = ExperimentHypothesisSearch.__init__
+    with patch.object(ExperimentHypothesisSearch, '__init__', autospec=True,
+                      side_effect=original) as calls:
+        assert verify_query_result(problem, query, receipt).status == 'valid'
+    assert calls.call_count == 0
+    rows.append(dict(kind='absence_verification', worlds=size, search_constructions=calls.call_count))
+    candidate = ModelSearchCandidate(BooleanExpression(('false',)).to_model('zero'), DescriptionLength())
+    cases = (ModelSearchCase('a', Context(), ScenarioKey('s', 'baseline'), 'y'),)
+    with patch.object(ExperimentHypothesisSearch, '__init__', autospec=True,
+                      side_effect=original) as calls:
+        prepared = ExecutableSearchAdapter().prepare(protocol(2), (candidate,), cases,
+            target='out', world_answers=('no', 'yes'))
+    assert prepared.search.hypotheses[0].world == 0 and calls.call_count == 2
+    rows.append(dict(kind='adapter', candidates=1, search_constructions=calls.call_count))
     for size in (4, 8, 16):
         p = protocol(2)
         candidates = tuple(ModelSearchCandidate(BooleanExpression(('false',)).to_model(str(i)),
@@ -70,7 +103,8 @@ def run():
                 rows.append(dict(kind='screen', candidates=size, cache=cache,
                     simulations=report.simulations_used, catalogue_declaration_hashes=calls.call_count,
                     seconds=seconds))
-    return dict(constructor_cost_included=False, timing_is_diagnostic=True, results=rows)
+    return dict(constructor_cost_included=False, constructors_counted_separately=True,
+                timing_is_diagnostic=True, results=rows)
 
 
 if __name__ == '__main__':

@@ -74,12 +74,13 @@ class PredictionDomainError(ValueError):
 
 def _promote_prediction(problem, candidate, responses):
     """Validate the complete row and commitments before publishing a hypothesis."""
-    if responses not in problem.protocol.worlds:
-        raise PredictionDomainError('prediction_outside_response_universe')
-    world = problem.protocol.worlds.index(responses)
+    try:
+        world = problem.protocol.worlds.index(responses)
+    except ValueError:
+        raise PredictionDomainError('prediction_outside_response_universe') from None
     proposed = SearchHypothesis(candidate.model.name, world, problem.world_answers[world],
         candidate.description, candidate.commitments, candidate.materials)
-    problem.with_hypotheses((proposed,))
+    problem._validate_hypothesis(proposed)
     return proposed
 
 

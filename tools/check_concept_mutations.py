@@ -12,6 +12,19 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('boolean judgment enumerates the whole response domain', 'search.py',
+     'return receipt.status is QueryStatus.FOUND',
+     'return bool(self._worlds(commitments, evidence, budget=budget))',
+     'test_redundancy_costs.BooleanWorkBoundaries'),
+    ('interrupted existence becomes absence', 'search.py',
+     'raise SearchBudgetExceeded(receipt.reason, receipt.work)', 'return False',
+     'test_redundancy_costs.BooleanWorkBoundaries'),
+    ('absence replay trusts the response index', 'search_queries.py',
+     'budget=budget,force_scan=True)', 'budget=budget,force_scan=False)',
+     'test_redundancy_costs.AbsenceWorkBoundaries'),
+    ('prediction promotion constructs a temporary catalogue', 'search_adapter.py',
+     'problem._validate_hypothesis(proposed)', 'problem.with_hypotheses((proposed,))',
+     'test_redundancy_costs.PromotionWorkBoundaries'),
     ('composition trusts an unbound residual receipt', 'composition.py',
      'or residual_report.model_name != model.name',
      'or False',

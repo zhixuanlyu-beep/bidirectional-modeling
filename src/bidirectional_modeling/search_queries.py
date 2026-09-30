@@ -132,11 +132,15 @@ class FiniteSearchQueryBackend:
     """Use the problem's scan/indexed exact filter with shared work accounting."""
 
     def execute(self, problem, query, *, budget=None):
+        return self._execute(problem, query, budget=budget)
+
+    def _execute(self, problem, query, *, budget=None, force_scan=False):
+        # Verification reads the original declarations without rebuilding the
+        # validated problem or trusting a cached response index.
         budget=budget if budget is not None else SearchWorkBudget()
         digest=query_fingerprint(problem,query)
         nonempty=None
         scope=_query_scope(problem,query)
-        by_name={h.name:h for h in problem.hypotheses}
 
         def result(status,reason,world=None,candidate=None):
             return QueryResult(status,digest,scope,reason,budget.work,world,candidate,nonempty)
@@ -144,8 +148,8 @@ class FiniteSearchQueryBackend:
         try:
             budget.consume('query_checks')
             if isinstance(query,ConstraintQuery):
-                evidence=problem._evidence(query.evidence,budget)
-                if problem.backend == 'indexed':
+                evidence=problem._evidence(query.evidence,budget,use_index=not force_scan)
+                if problem.backend == 'indexed' and not force_scan:
                     possible = problem._worlds(query.commitments, evidence, budget=budget)
                     world = next(iter(possible), None)
                     if world is not None:
@@ -160,7 +164,7 @@ class FiniteSearchQueryBackend:
                 return result(QueryStatus.ABSENT,'finite_domain_exhausted')
 
             if isinstance(query,MacroAlternativeQuery):
-                evidence=problem._evidence(query.evidence,budget)
+                evidence=problem._evidence(query.evidence,budget,use_index=not force_scan)
                 matches = _world_matcher(problem, (), evidence, budget)
                 unknown=False
                 for h in problem.hypotheses:
@@ -180,6 +184,7 @@ class FiniteSearchQueryBackend:
 
             if not query.lower_names:
                 return result(QueryStatus.UNKNOWN,'empty_reference_class')
+            by_name={h.name:h for h in problem.hypotheses}
             target=by_name[query.candidate]
             if target.world is None:
                 return result(QueryStatus.UNKNOWN,'unknown_target_prediction')
@@ -267,9 +272,7 @@ def verify_query_result(problem, query, receipt, *, budget=None):
             return verdict('valid','witness_checked')
         if receipt.witness_world is not None or receipt.witness_candidate is not None:
             return verdict('invalid','absent_with_witness')
-        oracle = ExperimentHypothesisSearch(problem.protocol, problem.hypotheses, problem.target,
-                                          world_answers=problem.world_answers)
-        replay=FiniteSearchQueryBackend().execute(oracle,query,budget=budget)
+        replay=FiniteSearchQueryBackend()._execute(problem,query,budget=budget,force_scan=True)
         if replay.status is QueryStatus.UNKNOWN:
             return verdict('undecided',replay.reason)
         if (replay.status is not QueryStatus.ABSENT

@@ -76,12 +76,21 @@ class ContextTransition:
             raise ValueError('unknown mapped experiment')
         if len({b for _, b in self.experiments}) != len(self.experiments):
             raise ValueError('experiment translation must be injective')
-        if any(a not in dict(self.experiments) for a, _, _ in self.responses):
+        mapped_source = {a for a, _ in self.experiments}
+        if any(a not in mapped_source for a, _, _ in self.responses):
             raise ValueError('response translation needs a mapped experiment')
         old_constraints = {c.name for c in self.source.protocol.constraints}
         new_constraints = {c.name for c in self.target.protocol.constraints}
         if any(a not in old_constraints or b not in new_constraints for a, b in self.commitments):
             raise ValueError('unknown mapped commitment')
+        # Derived from immutable declaration rows; excluded from dataclass JSON.
+        object.__setattr__(self, '_response_lookup',
+                           MappingProxyType({(a, b): c for a, b, c in self.responses}))
+
+    def __reduce__(self):
+        # Copy/pickle the declaration; reconstruct the read-only derived lookup.
+        return type(self), (self.source, self.target, self.kind, self.experiments,
+                            self.responses, self.commitments)
 
     @property
     def fingerprint(self):
@@ -89,11 +98,11 @@ class ContextTransition:
             self.target.fingerprint, self.kind.value, self.experiments, self.responses, self.commitments))
 
     def translate_response(self, experiment, value):
-        translations = {(a, b): c for a, b, c in self.responses}
         # Identity is explicit too: missing translations never guess semantics.
-        if (experiment, value) not in translations:
-            raise ValueError('unmapped target response')
-        return translations[experiment, value]
+        try:
+            return self._response_lookup[experiment, value]
+        except KeyError:
+            raise ValueError('unmapped target response') from None
 
 
 
@@ -132,7 +141,7 @@ def _prepare_context_transition(transition, *, budget=None):
         old_names = {e.name: i for i, e in enumerate(transition.source.protocol.experiments)}
         new_names = {e.name: i for i, e in enumerate(transition.target.protocol.experiments)}
         columns = tuple((old_names[a], new_names[b], a) for a, b in transition.experiments)
-        translations = {(a, b): c for a, b, c in transition.responses}
+        translations = transition._response_lookup
         source_index = {}
         for i, row in enumerate(transition.source.protocol.worlds):
             budget.consume('index_entries')

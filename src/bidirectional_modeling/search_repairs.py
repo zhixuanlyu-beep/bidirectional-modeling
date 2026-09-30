@@ -44,12 +44,12 @@ def suggest_consistency_repairs(problem, commitments, evidence, *,
     checked, feasible, core = 0, [], None
     try:
         evidence = problem._evidence(evidence, budget)
-        if not problem._worlds(evidence=evidence, budget=budget):
-            return ConsistencyRepairResult('not_applicable', 'evidence_inconsistent')
-        if not problem._worlds(names, budget=budget):
-            return ConsistencyRepairResult('not_applicable', 'commitments_inconsistent_alone')
         core = problem.learn_conflict(names, evidence, budget=budget)
         if core is None:
+            if not problem._has_world(evidence=evidence, budget=budget):
+                return ConsistencyRepairResult('not_applicable', 'evidence_inconsistent')
+            if not problem._has_world(names, budget=budget):
+                return ConsistencyRepairResult('not_applicable', 'commitments_inconsistent_alone')
             return ConsistencyRepairResult('already_consistent', 'no_empirical_conflict')
         for size in range(1, len(names) + 1):
             feasible = []
@@ -60,7 +60,7 @@ def suggest_consistency_repairs(problem, commitments, evidence, *,
                 budget.consume('subset_checks')
                 checked += 1
                 survivors = tuple(name for name in names if name not in removed)
-                if problem._worlds(survivors, evidence, budget=budget):
+                if problem._has_world(survivors, evidence, budget=budget):
                     feasible.append(removed)
             if feasible:
                 certificate = ConsistencyRepairCertificate(problem.fingerprint,
@@ -97,8 +97,8 @@ def verify_consistency_repairs(problem, certificate, evidence, *, budget=None):
         if (not names or len(set(names)) != len(names)
                 or any(name not in {r.name for r in problem.protocol.constraints}
                        for name in names)
-                or not problem._worlds(evidence=active, budget=budget)
-                or not problem._worlds(names, budget=budget)
+                or not problem._has_world(evidence=active, budget=budget)
+                or not problem._has_world(names, budget=budget)
                 or not problem.validates_conflict(certificate.core, active, budget=budget)
                 or not set(certificate.core.commitments).issubset(names)):
             return 'invalid'
@@ -113,7 +113,7 @@ def verify_consistency_repairs(problem, certificate, evidence, *, budget=None):
             for removed in combinations(names, k):
                 budget.consume('subset_checks')
                 survivors = tuple(name for name in names if name not in removed)
-                if problem._worlds(survivors, active, budget=budget):
+                if problem._has_world(survivors, active, budget=budget):
                     if k < size:
                         return 'invalid'
                     actual.append(removed)

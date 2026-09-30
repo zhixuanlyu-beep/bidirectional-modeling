@@ -345,17 +345,24 @@ class ExperimentHypothesisSearch:
             raise ValueError("duplicate hypothesis name")
         constraints = {c.name: set(c.worlds) for c in protocol.constraints}
         for h in self.hypotheses:
-            if not isinstance(h.description, DescriptionLength):
-                raise TypeError("hypothesis needs a complete DescriptionLength")
-            if any(c not in constraints for c in h.commitments):
-                raise ValueError("unknown commitment")
-            if h.world is not None:
-                if h.world >= len(protocol.worlds):
-                    raise ValueError("hypothesis references an unknown world")
-                if self.world_answers is not None and h.macro_answer != self.world_answers[h.world]:
-                    raise ValueError("macro answer violates the authoritative target mapping")
-                if any(h.world not in constraints[c] for c in h.commitments):
-                    raise ValueError("prediction violates a declared commitment")
+            self._validate_hypothesis(h, constraints)
+
+    def _validate_hypothesis(self, hypothesis, constraints=None):
+        """One authority for candidate declarations, including full promotion."""
+        if constraints is None:
+            constraints = {c.name: set(c.worlds) for c in self.protocol.constraints}
+        h = hypothesis
+        if not isinstance(h.description, DescriptionLength):
+            raise TypeError("hypothesis needs a complete DescriptionLength")
+        if any(c not in constraints for c in h.commitments):
+            raise ValueError("unknown commitment")
+        if h.world is not None:
+            if h.world >= len(self.protocol.worlds):
+                raise ValueError("hypothesis references an unknown world")
+            if self.world_answers is not None and h.macro_answer != self.world_answers[h.world]:
+                raise ValueError("macro answer violates the authoritative target mapping")
+            if any(h.world not in constraints[c] for c in h.commitments):
+                raise ValueError("prediction violates a declared commitment")
 
     @property
     def fingerprint(self) -> str:
@@ -382,13 +389,13 @@ class ExperimentHypothesisSearch:
             self._response_index = ResponseIndex(self.protocol, budget)
         return self._response_index
 
-    def _evidence(self, evidence, budget):
+    def _evidence(self, evidence, budget, *, use_index=True):
         evidence = tuple(evidence)
         names = {e.name: i for i, e in enumerate(self.protocol.experiments)}
         for observation in evidence:
             if observation.experiment not in names:
                 raise ValueError("evidence lies outside the allowed experiment domain")
-            if self.backend == "indexed":
+            if use_index and self.backend == "indexed":
                 if not self._index(budget).allows(observation,budget):
                     raise ValueError("observed response lies outside the declared universe")
                 continue
@@ -424,6 +431,14 @@ class ExperimentHypothesisSearch:
             possible = retained
         return possible
 
+    def _has_world(self, commitments=(), evidence=(), *, budget):
+        """Boolean constraint judgment delegates to the bounded query authority."""
+        from .search_queries import ConstraintQuery, QueryStatus
+        receipt = self.query(ConstraintQuery(commitments, evidence), budget=budget)
+        if receipt.status is QueryStatus.UNKNOWN:
+            raise SearchBudgetExceeded(receipt.reason, receipt.work)
+        return receipt.status is QueryStatus.FOUND
+
     def learn_conflict(self, commitments, evidence, *, budget=None) -> Optional[ConflictCertificate]:
         """Extract an inclusion-minimal joint core, not blame for each member.
 
@@ -437,17 +452,17 @@ class ExperimentHypothesisSearch:
         known = {c.name for c in self.protocol.constraints}
         if any(c not in known for c in core):
             raise ValueError("unknown commitment")
-        if (not core or not self._worlds(evidence=evidence, budget=budget)
-                or not self._worlds(core, budget=budget) or self._worlds(core, evidence, budget=budget)):
+        if (not core or not self._has_world(evidence=evidence, budget=budget)
+                or not self._has_world(core, budget=budget) or self._has_world(core, evidence, budget=budget)):
             return None
         for name in tuple(core):
             trial = tuple(c for c in core if c != name)
-            if not self._worlds(trial, evidence, budget=budget):
+            if not self._has_world(trial, evidence, budget=budget):
                 core = trial
         support = evidence
         for observation in evidence:
             trial = tuple(o for o in support if o != observation)
-            if not self._worlds(core, trial, budget=budget):
+            if not self._has_world(core, trial, budget=budget):
                 support = trial
         return ConflictCertificate(self.protocol.fingerprint, core, support)
 
@@ -467,9 +482,9 @@ class ExperimentHypothesisSearch:
             for c in certificate.commitments
         ):
             return False
-        return bool(self._worlds(evidence=certificate.evidence, budget=budget)
-                    and self._worlds(certificate.commitments, budget=budget)
-                    and not self._worlds(certificate.commitments, certificate.evidence, budget=budget))
+        return bool(self._has_world(evidence=certificate.evidence, budget=budget)
+                    and self._has_world(certificate.commitments, budget=budget)
+                    and not self._has_world(certificate.commitments, certificate.evidence, budget=budget))
 
     def partition(self, experiments=None, *, budget=None) -> Tuple[Tuple[str, ...], ...]:
         """Full E gives theoretical equivalence; a subset gives provisional groups.

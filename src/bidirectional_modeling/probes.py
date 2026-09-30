@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Optional
 
 from .core import VerificationIssue, Context, Counterexample, ExecutableModel, MacroSpec, ProbeOutcome, ResourceBudget
 from .evaluation import SatisfactionEvaluator
@@ -57,4 +56,3 @@ class HorizonExtensionProbe:
             ),
             certificate,
         )
-
