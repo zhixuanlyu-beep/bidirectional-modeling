@@ -52,3 +52,35 @@ class AntichainTests(unittest.TestCase):
             self.assertLessEqual(set(report.pruned), set(full.pruned))
             self.assertLessEqual(set(report.compatible), set(full.compatible))
             self.assertEqual(report.rejected, ())
+
+
+class AntichainCostTests(unittest.TestCase):
+    def test_incomparable_mixed_and_small_catalogues_have_bounded_extra_work(self):
+        from importlib.util import spec_from_file_location, module_from_spec
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[1] / 'benchmarks' / 'evidence_update_costs.py'
+        spec = spec_from_file_location('evidence_costs', path)
+        benchmark = module_from_spec(spec)
+        spec.loader.exec_module(benchmark)
+        rows = benchmark.run()['results']
+        for row in rows:
+            if row.get('shape') == 'incomparable' and row['candidates'] == 1:
+                self.assertEqual(row['full_screen_work']['certificate_checks'], 128)
+                self.assertEqual(row['full_screen_work'], row['direct_screen_work'])
+        self.assertEqual({r['shape'] for r in rows if 'shape' in r}, {'incomparable', 'mixed'})
+
+
+    def test_fallback_keeps_late_live_exclusion_and_withdrawal(self):
+        protocol = SearchProtocol('fallback', 'table', (SearchExperiment('a', 'read'),),
+            (('0',), ('1',)), tuple(ResponseConstraint('c%d' % i, (0,)) for i in range(64)))
+        candidate = SearchHypothesis('last', 0, 'answer', DescriptionLength(), ('c63',))
+        problem = ExperimentHypothesisSearch(protocol, (candidate,), 'out')
+        evidence = tuple(SearchObservation('a', '1', str(i)) for i in range(64))
+        certificates = tuple(ConflictCertificate(protocol.fingerprint, ('c%d' % i,), (evidence[i],))
+                             for i in range(64))
+        report = problem.search(evidence, certificates, learn_conflicts=False)
+        self.assertEqual(report.pruned, ('last',))
+        self.assertEqual(report.conflicts, certificates)
+        withdrawn = problem.search(evidence[:-1], certificates, learn_conflicts=False)
+        self.assertEqual(withdrawn.pruned, ())
+        self.assertEqual(withdrawn.rejected, ('last',))

@@ -65,7 +65,7 @@ from bidirectional_modeling.extensions.boolean import BooleanExpression, Boolean
 from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 ```
 
-通用包导入和查询链不加载这两个领域模块。布尔搜索找到替代即停止；布尔与拼接的存在性证书直接验证见证。不存在及极小性主张仍需相应的穷尽检查。
+通用包导入和查询链不加载这两个领域模块。布尔搜索找到替代即停止；布尔与拼接的存在性证书直接验证见证。拼接默认仅请求整体存在性，重叠检查和核极小化须分别显式启用。不存在及极小性主张仍需相应的穷尽检查。
 
 概念记忆从 `extensions.concepts` 按需加载，保存人工判断来源，不能作为结构证明。组合规则验证默认保留全部认证候选，最短描述选择须显式启用。
 

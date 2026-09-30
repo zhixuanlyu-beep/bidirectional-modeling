@@ -6,7 +6,7 @@ needs retained evidence and the bound catalogue, not the entire history.
 from dataclasses import dataclass
 from fractions import Fraction
 
-from .search import SearchBudgetExceeded, SearchWorkBudget, _name, _natural
+from .search import SearchBudgetExceeded, SearchWorkBudget, SearchObservation, _name, _natural
 
 
 @dataclass(frozen=True)
@@ -86,6 +86,18 @@ def certify_macro_sufficiency(problem, evidence, *, read_costs=None, budget=None
         return pending(error.reason)
 
 
+def _well_formed_certificate(certificate):
+    return (isinstance(certificate, MacroSufficiencyCertificate)
+            and all(isinstance(value, str) and value.strip() for value in
+                    (certificate.problem_fingerprint, certificate.answer, certificate.witness_candidate))
+            and isinstance(certificate.evidence, tuple)
+            and all(isinstance(o, SearchObservation) for o in certificate.evidence)
+            and isinstance(certificate.exclusions, tuple)
+            and all(isinstance(row, tuple) and len(row) == 2
+                    and isinstance(row[0], str) and isinstance(row[1], SearchObservation)
+                    for row in certificate.exclusions))
+
+
 def verify_macro_sufficiency(problem, certificate, evidence, *, budget=None):
     """Validate witnesses; evidence may consist only of the retained live records.
 
@@ -93,6 +105,8 @@ def verify_macro_sufficiency(problem, certificate, evidence, *, budget=None):
     provenance and must check it before supplying the retained records here.
     """
     budget = budget if budget is not None else SearchWorkBudget()
+    if not _well_formed_certificate(certificate):
+        return 'invalid'
     if certificate.problem_fingerprint != problem.fingerprint:
         return 'invalid'
     try:

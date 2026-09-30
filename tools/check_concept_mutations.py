@@ -12,6 +12,12 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('antichain construction ignores its local allowance', 'search.py',
+     'if allowance[0] == 0:', 'if False:',
+     'test_search_antichain.AntichainCostTests'),
+    ('gluing existence performs unrequested overlap checks', 'extensions/gluing.py',
+     'if check_overlap:', 'if True:',
+     'test_review_cost_boundaries.GluingClaimBoundaries'),
     ('overlapping conflict cores treated as subsuming', 'search.py',
      'if core.issubset(proposed):', 'if core.intersection(proposed):',
      'test_search_antichain.AntichainTests'),
@@ -125,13 +131,10 @@ def run(source, target, cwd):
 
 
 def main():
-    for module in ('test_concept_contracts', 'test_execution_contracts',
-                   'test_claim_boundaries', 'test_evidence_lifecycle',
-                   'test_distinguishing_replay', 'test_search_repairs',
-                   'test_implication_exploration', 'test_search_explanations',
-                   'test_context_network', 'test_audit_boundaries'):
-        baseline = run(ROOT/'src', module, ROOT)
+    for target in dict.fromkeys(mutation[4] for mutation in MUTATIONS):
+        baseline = run(ROOT/'src', target, ROOT)
         if baseline.returncode:
+            print('BASELINE FAILED: ' + target)
             print(baseline.stderr)
             return 1
     passed = True

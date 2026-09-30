@@ -507,17 +507,21 @@ class ExperimentHypothesisSearch:
         return MacroIdentifiabilityResult('identifiable', 'finite_response_classes_checked')
 
     @staticmethod
-    def _add_screening_core(cores, commitments, budget):
+    def _add_screening_core(cores, commitments, budget, allowance):
         """Snapshot-only antichain; original certificates remain in the report."""
         proposed = frozenset(commitments)
         retained = []
         for core in cores:
+            if allowance[0] == 0:
+                return False
+            allowance[0] -= 1
             budget.consume("certificate_checks")
             if core.issubset(proposed):
-                return
+                return True
             if not proposed.issubset(core):
                 retained.append(core)
         cores[:] = retained + [proposed]
+        return True
 
     def search(self, evidence=(), certificates=(), *, max_replays=None,
                budget=None, learn_conflicts=True) -> HypothesisSearchReport:
@@ -529,6 +533,9 @@ class ExperimentHypothesisSearch:
         reasons = {}
         active = []
         screening_cores = []
+        # At most one extra inclusion comparison per declared candidate.
+        # Exhausting this local allowance falls back, not to UNKNOWN.
+        screening_allowance = [max(0, len(self.hypotheses) - 1)]
         replay_checks = 0
         full, observed = (), ()
         partition_complete = False
@@ -544,13 +551,17 @@ class ExperimentHypothesisSearch:
             for c in certificates:
                 if self.validates_conflict(c, evidence, budget=budget):
                     active.append(c)
-                    self._add_screening_core(screening_cores, c.commitments, budget)
+                    if screening_cores is not None and not self._add_screening_core(
+                            screening_cores, c.commitments, budget, screening_allowance):
+                        screening_cores = None
             possible = self._worlds(evidence=evidence, budget=budget)
             inconsistent = not possible
             for h in sorted(self.hypotheses, key=lambda h: (h.description.total, h.name)):
                 budget.consume("candidate_checks")
                 inherited = False
-                for core in screening_cores:
+                cores = screening_cores if screening_cores is not None else (
+                    frozenset(c.commitments) for c in active)
+                for core in cores:
                     budget.consume("certificate_checks")
                     if core.issubset(h.commitments):
                         inherited = True
@@ -572,7 +583,9 @@ class ExperimentHypothesisSearch:
                             c = self.learn_conflict(h.commitments, evidence, budget=budget)
                             if c is not None and c not in active:
                                 active.append(c)
-                                self._add_screening_core(screening_cores, c.commitments, budget)
+                                if screening_cores is not None and not self._add_screening_core(
+                                        screening_cores, c.commitments, budget, screening_allowance):
+                                    screening_cores = None
         except SearchBudgetExceeded as error:
             stopped = error.reason
         classified = set(compatible + pruned + rejected)
