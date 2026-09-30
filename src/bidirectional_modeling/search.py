@@ -232,6 +232,16 @@ class ConflictCertificate:
         object.__setattr__(self, "evidence", tuple(self.evidence))
 
 
+def _well_formed_conflict(certificate):
+    return (isinstance(certificate, ConflictCertificate)
+            and isinstance(certificate.protocol_fingerprint, str)
+            and isinstance(certificate.commitments, tuple)
+            and all(isinstance(name, str) for name in certificate.commitments)
+            and len(set(certificate.commitments)) == len(certificate.commitments)
+            and isinstance(certificate.evidence, tuple)
+            and all(isinstance(o, SearchObservation) for o in certificate.evidence))
+
+
 @dataclass(frozen=True)
 class MacroEvidenceCertificate:
     problem_fingerprint: str
@@ -444,6 +454,8 @@ class ExperimentHypothesisSearch:
     def validates_conflict(self, certificate: ConflictCertificate, evidence, *, budget=None) -> bool:
         """Recheck binding, live evidence dependencies, and the actual contradiction."""
         budget = budget if budget is not None else SearchWorkBudget()
+        if not _well_formed_conflict(certificate):
+            return False
         budget.consume("certificate_checks")
         evidence = self._evidence(evidence, budget)
         if certificate.protocol_fingerprint != self.protocol.fingerprint:
@@ -660,6 +672,16 @@ class ExperimentHypothesisSearch:
         _natural(max_subsets)
         budget = budget if budget is not None else SearchWorkBudget()
         sufficient, minimality, checked = "undecided", "not_checked", 0
+        if (not isinstance(certificate, MacroEvidenceCertificate)
+                or not isinstance(certificate.problem_fingerprint, str)
+                or any(not isinstance(getattr(certificate, field), tuple)
+                       or any(not isinstance(o, SearchObservation) for o in getattr(certificate, field))
+                       for field in ('full_evidence', 'retained_evidence'))
+                or not isinstance(certificate.answers, tuple)
+                or any(not isinstance(answer, str) for answer in certificate.answers)
+                or type(certificate.determined) is not bool
+                or type(certificate.minimum_cardinality) is not bool):
+            return MacroValidationReport("invalid", minimality, "malformed_certificate", checked, budget.work)
         try:
             budget.consume("certificate_checks")
             evidence = self._evidence(evidence, budget)

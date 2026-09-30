@@ -64,7 +64,7 @@ if receipt.status == 'verified':
 
 `source_session.migrate_context(target_search, transition, target_evidence, evidence_links)` 创建新会话，保持源会话不变。未决时不发布新会话；已验证证书进入新会话，不适用的证书留在迁移记录中。新会话继续使用 schema 2，保存迁移来源事件；恢复时重验目标冲突证书。事件历史不是签名，独立重验跨情境迁移仍需提供原协议、转换和源证据。
 
-会话迁移由 `search_session` 负责，一次迁移内只准备一次转换关系并供各证书使用；独立复核仍重新验证转换。函数式入口从 `search_session` 导入；`certificate_transport` 不再提供会话接口别名。
+会话迁移由 `search_session` 负责，一次迁移内只准备一次转换关系并供各证书使用；独立复核重新验证转换、源证书、证据链接、承诺含义及目标经验矛盾，不调用迁移生成入口。函数式入口从 `search_session` 导入；`certificate_transport` 不再提供会话接口别名。
 
 数据来源标签与 evidence_links 都是调用方声明，不提供实验真实性或身份认证。转换也不会替代对实际校准条件的外部确认。
 

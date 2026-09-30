@@ -293,6 +293,10 @@ def reconstruct_boolean(parent, replacement, path, language, rule, *, name, prot
 def verify_boolean_substitute(target, language, inputs, receipt, *, budget=None):
     """Check FOUND witnesses directly; only absence requires language exhaustion."""
     budget = budget if budget is not None else SearchWorkBudget()
+    if (not isinstance(receipt, BooleanSubstituteReport)
+            or any(not isinstance(getattr(receipt, field), str) for field in
+                   ('language_fingerprint', 'target_fingerprint', 'experiment_fingerprint', 'status', 'reason'))):
+        return 'invalid'
     try:
         inputs = _validated_inputs(target, language, inputs)
     except (TypeError, ValueError):

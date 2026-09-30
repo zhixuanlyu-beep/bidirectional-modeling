@@ -119,6 +119,16 @@ class TraceBatch:
         return not _trace_batch_binding_errors(self, model, context, horizon)
 
 
+def _checked_evaluator_result(result, expected_type, max_simulations):
+    """Validate callback output before trusting its execution accounting."""
+    if not isinstance(result, expected_type):
+        raise TypeError('evaluator returned an invalid result type')
+    used = result.simulations_used
+    if type(used) is not int or used < 0 or used > max_simulations:
+        raise ValueError('evaluator consumption exceeds its execution allowance')
+    return result
+
+
 def _trace_batch_binding_errors(
     batch: TraceBatch,
     model: ExecutableModel,
