@@ -139,6 +139,15 @@ def verify_distinguishing_context(
     def result(status, reason):
         return DistinctionVerification(status, reason, used)
 
+    if (not isinstance(report, ResidualQuotientReport)
+            or not isinstance(witness, DistinguishingContext)
+            or not isinstance(report.quotient, ResidualQuotient)
+            or not isinstance(report.quotient.states, tuple)
+            or not isinstance(report.distinguishing_contexts, tuple)
+            or not isinstance(witness.actions, tuple)
+            or any(not isinstance(action, str) for action in witness.actions)
+            or type(witness.left_defined) is not bool or type(witness.right_defined) is not bool):
+        return result("invalid", "malformed_witness")
     if (report.model_name != model.name or not report.binds_context(context)
             or not report.binds_equivalence(equivalence)
             or witness not in report.distinguishing_contexts):
@@ -148,6 +157,15 @@ def verify_distinguishing_context(
         return result("invalid", "state_outside_report")
     if any(action not in report.quotient.actions for action in witness.actions):
         return result("invalid", "action_outside_report")
+
+    for index in (witness.left_state, witness.right_state):
+        state = report.quotient.states[index]
+        if (not isinstance(state, ResidualState)
+                or not isinstance(state.source_initial_state, str)
+                or not isinstance(state.micro_state, Mapping)
+                or not isinstance(state.actions, tuple)
+                or any(not isinstance(action, str) for action in state.actions)):
+            return result("invalid", "malformed_source_state")
 
     class ReplayLimit(Exception):
         pass

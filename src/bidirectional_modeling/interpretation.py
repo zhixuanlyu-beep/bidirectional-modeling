@@ -25,8 +25,9 @@ from .core import (
     InterpretationObservation,
     InterpretationExclusion,
     VerificationIssue,
+    SatisfactionCertificate,
 )
-from .evaluation import SatisfactionEvaluator, TraceBatch
+from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_result
 from ._generation import CandidateStream
 from .structural import freeze_value
 from .provenance import safe_macro_spec_fingerprint, safe_context_fingerprint
@@ -68,7 +69,7 @@ class ObservedEffectGenerator:
     independence_declared = False
 
     def __init__(self, horizon: int = 1) -> None:
-        if horizon < 1:
+        if type(horizon) is not int or horizon < 1:
             raise ValueError("horizon must be at least one")
         self.horizon = horizon
 
@@ -233,12 +234,15 @@ class Interpreter:
 
         trace_generator = getattr(hypotheses, "generate_from_traces", None)
         if callable(trace_generator):
-            horizon = int(getattr(hypotheses, "horizon"))
+            horizon = getattr(hypotheses, "horizon")
+            if type(horizon) is not int or horizon < 1:
+                raise ValueError("generator horizon must be a positive integer")
             batch_budget = replace(
                 budget, max_simulations=remaining_simulations
             )
             try:
                 batch = self.evaluator.collect(model, context, horizon, batch_budget)
+                batch = _checked_evaluator_result(batch, TraceBatch, remaining_simulations)
             except Exception as error:
                 evaluator_failed(error)
                 factory = lambda: ()
@@ -290,6 +294,7 @@ class Interpreter:
                     batch = self.evaluator.collect(
                         model, context, horizon, batch_budget
                     )
+                    batch = _checked_evaluator_result(batch, TraceBatch, remaining_simulations)
                 except Exception as error:
                     undecided.append((hypothesis.name, (evaluator_failed(error),)))
                     break
@@ -302,6 +307,8 @@ class Interpreter:
                 certificate = self.evaluator.evaluate_batch(
                     model, hypothesis.spec, context, batch, budget
                 )
+                certificate = _checked_evaluator_result(certificate, SatisfactionCertificate,
+                                                        budget.max_simulations)
             except Exception as error:
                 undecided.append((hypothesis.name, (evaluator_failed(error),)))
                 break

@@ -6,9 +6,9 @@ from dataclasses import asdict, dataclass, replace
 from typing import Optional, Tuple
 
 from .core import ResourceBudget
-from .evaluation import SatisfactionEvaluator
+from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_result
 from .provenance import trace_batch_protocol_fingerprint
-from .search import SearchBudgetExceeded, SearchWorkBudget, _natural
+from .search import SearchBudgetExceeded, SearchWorkBudget, SearchObservation, _natural
 from .search_adapter import _collect_response_matrix, model_declaration_fingerprint
 from .structural import fingerprint_value, isolated_copy
 
@@ -115,6 +115,7 @@ class _BoundedReplayEvaluator:
         try:
             batch = self.evaluator.collect(model, context, horizon,
                                           ResourceBudget(max_simulations=cap))
+            batch = _checked_evaluator_result(batch, TraceBatch, cap)
         except Exception:
             self.used = self.limit
             raise
@@ -134,11 +135,26 @@ class _BoundedReplayEvaluator:
         return batch
 
 
+def _well_formed_prediction(prediction):
+    return (isinstance(prediction, PartialPrediction)
+            and isinstance(prediction.input_fingerprint, str)
+            and isinstance(prediction.candidate, str)
+            and all(isinstance(getattr(prediction, field), tuple)
+                    and all(isinstance(value, str) for value in getattr(prediction, field))
+                    for field in ('experiments', 'responses'))
+            and isinstance(prediction.batch_bindings, tuple)
+            and all(isinstance(row, tuple) and len(row) == 5
+                    and all(isinstance(value, str) for value in row)
+                    for row in prediction.batch_bindings))
+
+
 def verify_partial_prediction(protocol, candidate, cases, prediction, *,
                               max_simulations=10000, budget=None, evaluator=None):
     """Independently rerun the selected matrix; fingerprint equality alone is insufficient."""
     _natural(max_simulations)
     cases = tuple(cases)
+    if not _well_formed_prediction(prediction):
+        return PartialPredictionVerification('invalid', 'malformed_prediction', 0)
     if prediction.input_fingerprint != _binding(protocol, candidate, cases):
         return PartialPredictionVerification('invalid', 'binding_mismatch', 0)
     names = tuple(e.name for e in protocol.experiments)
@@ -188,6 +204,11 @@ class EvidenceScreeningResult:
 
 def verify_candidate_exclusion(protocol, candidate, cases, certificate, evidence, *,
                                max_simulations=10000, budget=None, evaluator=None):
+    _natural(max_simulations)
+    if (not isinstance(certificate, CandidateExclusionCertificate)
+            or not isinstance(certificate.observation, SearchObservation)
+            or not _well_formed_prediction(certificate.prediction)):
+        return PartialPredictionVerification('invalid', 'malformed_exclusion', 0)
     observation = certificate.observation
     prediction = certificate.prediction
     if observation not in evidence:

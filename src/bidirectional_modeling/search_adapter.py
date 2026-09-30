@@ -3,7 +3,7 @@ from dataclasses import dataclass, replace
 from typing import Optional, Tuple
 
 from .core import Context, ExecutableModel, FiniteStateModel, ResourceBudget, ScenarioKey
-from .evaluation import SatisfactionEvaluator
+from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_result
 from .provenance import context_fingerprint
 from .search import (DescriptionLength, ExperimentHypothesisSearch, SearchHypothesis,
                      SearchProtocol, _name, _natural)
@@ -109,6 +109,7 @@ def _collect_response_matrix(candidate, cases, *, max_simulations, evaluator=Non
                 try:
                     batch = evaluator.collect(model, isolated_copy(case.context), case.horizon,
                         ResourceBudget(max_simulations=max_simulations-used))
+                    batch = _checked_evaluator_result(batch, TraceBatch, max_simulations-used)
                 except Exception:
                     used = max_simulations
                     raise

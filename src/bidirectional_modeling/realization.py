@@ -16,8 +16,9 @@ from .core import (
     ProbeOutcome,
     RealizationResult,
     ResourceBudget,
+    SatisfactionCertificate,
 )
-from .evaluation import SatisfactionEvaluator
+from .evaluation import SatisfactionEvaluator, _checked_evaluator_result
 from ._generation import CandidateStream
 
 
@@ -143,8 +144,10 @@ class Realizer:
                 certificate = self.evaluator.evaluate(
                     model, spec, context, candidate_budget
                 )
+                certificate = _checked_evaluator_result(certificate, SatisfactionCertificate,
+                                                        remaining_simulations)
             except Exception as error:
-                certificate = self.evaluator.failure_certificate(
+                certificate = SatisfactionEvaluator().failure_certificate(
                     model, spec, context, str(error), candidate_budget
                 )
                 # No reliable accounting survived this evaluator failure.
@@ -181,6 +184,15 @@ class Realizer:
                         outcome = probe.probe(
                             model, spec, context, self.evaluator, probe_budget
                         )
+                        if (not isinstance(outcome, ProbeOutcome)
+                                or (outcome.certificate is not None
+                                    and not isinstance(outcome.certificate, SatisfactionCertificate))
+                                or (outcome.counterexample is not None
+                                    and not isinstance(outcome.counterexample, Counterexample))
+                                or not isinstance(outcome.diagnostics, tuple)
+                                or any(not isinstance(d, VerificationIssue) for d in outcome.diagnostics)):
+                            raise TypeError('probe returned a malformed outcome')
+                        outcome = _checked_evaluator_result(outcome, ProbeOutcome, remaining_simulations)
                     except Exception as error:
                         diagnostics.append(VerificationIssue(
                             "probe-execution", str(error), {"probe": type(probe).__name__}))

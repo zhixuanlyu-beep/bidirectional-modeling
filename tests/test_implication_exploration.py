@@ -70,7 +70,7 @@ class ImplicationContracts(unittest.TestCase):
         pending = check_implication(ctx, claim, max_object_checks=1)
         self.assertEqual(pending.status, 'undecided')
         self.assertEqual(pending.reason, 'object_budget_exhausted')
-        assert verify_implication_assessment(ctx, pending) == 'invalid'
+        self.assertEqual(verify_implication_assessment(ctx, pending), 'undecided')
         endorsed = check_implication(ctx, claim)
         changed = replace(ctx, source='new protocol')
         self.assertEqual(verify_implication_assessment(changed, endorsed), 'invalid')

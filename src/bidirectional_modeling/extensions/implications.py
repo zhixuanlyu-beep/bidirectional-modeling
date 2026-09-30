@@ -113,6 +113,8 @@ def verify_implication_assessment(context, assessment, *, max_object_checks=None
         return 'invalid'
     if max_object_checks is not None and (type(max_object_checks) is not int or max_object_checks < 0):
         raise ValueError('max_object_checks must be nonnegative or None')
+    if assessment.status not in ('verified', 'refuted', 'undecided'):
+        return 'invalid'
     if assessment.context_fingerprint != context.fingerprint:
         return 'invalid'
     claim = assessment.implication
@@ -130,6 +132,8 @@ def verify_implication_assessment(context, assessment, *, max_object_checks=None
             return 'undecided'
         return 'valid' if (set(claim.premises).issubset(witness.attributes)
                            and claim.conclusion not in witness.attributes) else 'invalid'
+    if assessment.status == 'undecided' and assessment.reason == 'object_budget_exhausted':
+        return 'undecided' if assessment.counterexample is None else 'invalid'
     support = []
     for checked, obj in enumerate(context.objects):
         if max_object_checks is not None and checked >= max_object_checks:
@@ -156,6 +160,10 @@ class ImplicationExploration:
 def explore_implications(context, *, max_premises=2, max_candidates=256,
                          max_object_checks=None):
     """Enumerate a bounded finite proposal set, including refuted proposals."""
+    if not isinstance(context, AttributeContext):
+        raise TypeError('supply a declared context')
+    if max_object_checks is not None and (type(max_object_checks) is not int or max_object_checks < 0):
+        raise ValueError('max_object_checks must be nonnegative or None')
     if type(max_premises) is not int or max_premises < 1:
         raise ValueError('max_premises must be positive')
     if type(max_candidates) is not int or max_candidates < 0:

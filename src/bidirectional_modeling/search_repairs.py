@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from itertools import combinations
 
-from .search import SearchBudgetExceeded, SearchWorkBudget, _natural
+from .search import SearchBudgetExceeded, SearchWorkBudget, SearchObservation, _well_formed_conflict, _natural
 
 
 @dataclass(frozen=True)
@@ -76,6 +76,17 @@ def suggest_consistency_repairs(problem, commitments, evidence, *,
 def verify_consistency_repairs(problem, certificate, evidence, *, budget=None):
     """Independently verify scope, conflict, sufficiency and exact minimum set."""
     budget = budget if budget is not None else SearchWorkBudget()
+    if (not isinstance(certificate, ConsistencyRepairCertificate)
+            or not isinstance(certificate.problem_fingerprint, str)
+            or not _well_formed_conflict(certificate.core)
+            or not isinstance(certificate.commitments, tuple)
+            or any(not isinstance(name, str) for name in certificate.commitments)
+            or not isinstance(certificate.evidence, tuple)
+            or any(not isinstance(o, SearchObservation) for o in certificate.evidence)
+            or not isinstance(certificate.retractions, tuple)
+            or any(not isinstance(row, tuple) or any(not isinstance(name, str) for name in row)
+                   for row in certificate.retractions)):
+        return 'invalid'
     try:
         budget.consume('certificate_checks')
         active = problem._evidence(evidence, budget)

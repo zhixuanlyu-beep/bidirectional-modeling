@@ -12,6 +12,16 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('malformed replay result becomes free work', 'search_partial.py',
+     'self.used = self.limit', 'self.used = 0',
+     'test_audit_execution_boundaries.ExecutionOutputBoundaries'),
+    ('malformed adapter result becomes free work', 'search_adapter.py',
+     'used = max_simulations', 'used = 0',
+     'test_audit_execution_boundaries.ExecutionOutputBoundaries'),
+    ('transport verifier skips independent target proof', 'certificate_transport.py',
+     "return 'valid' if target_search.validates_conflict(\n            receipt.certificate, active, budget=budget) else 'invalid'",
+     "return 'valid'",
+     'test_audit_execution_boundaries.IndependentTransportBoundaries'),
     ('antichain construction ignores its local allowance', 'search.py',
      'if allowance[0] == 0:', 'if False:',
      'test_search_antichain.AntichainCostTests'),

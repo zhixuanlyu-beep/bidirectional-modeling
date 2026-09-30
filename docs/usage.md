@@ -354,3 +354,6 @@ ObservedEffectGenerator 生成的“maintain”目标用 EACH 检查整个声明
 延时探针默认只报告扩展规范的实验结果，失败或未决不撤销原目标的通过。只有显式配置 `HorizonExtensionProbe(blocking=True)`，才把额外规范纳入验收；两个规范的身份保存在见证中。
 
 均值聚合保留精确有理数。`Fraction` 的分子和分母可以用于无损 JSON 展示；不得先转换成浮点数再决定证书真假。
+
+
+自定义评估器必须返回 `TraceBatch` 或 `SatisfactionCertificate`，自定义探针必须返回 `ProbeOutcome`，并在调用给定额度内准确声明消耗。返回类型、探针结构或消耗无效时，执行入口按未知工作预留剩余额度、保留未决诊断并停止使用该额度。`evaluate_batch` 只能评估已有批次，不额外执行模拟；其证书中的模拟次数属于已有批次。框架检查输出约定，不监控任意 Python 回调的真实执行副作用。解释生成器的 horizon 必须是正整数，与规范的时间范围约定一致。
