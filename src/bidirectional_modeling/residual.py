@@ -453,6 +453,11 @@ class ResidualQuotientReport:
     context_basis_reproduces_partition: bool = False
 
     def __post_init__(self) -> None:
+        if (not isinstance(self.quotient, ResidualQuotient)
+                or any(type(value) is not bool for value in
+                       (self.complete, self.stable, self.congruent,
+                        self.context_basis_reproduces_partition))):
+            raise TypeError("residual report requires a quotient and boolean proof flags")
         if not self.model_name:
             raise ValueError("residual report model name must be non-empty")
         if self.exploration_depth < 0 or self.transition_evaluations < 0:
@@ -545,13 +550,13 @@ class ResidualQuotientAnalyzer:
         max_context_depth: Optional[int] = None,
         max_context_tests: int = 256,
     ) -> ResidualQuotientReport:
-        if max_states < 1:
+        if type(max_states) is not int or max_states < 1:
             raise ValueError("max_states must be positive")
-        if max_reachability_depth is not None and max_reachability_depth < 0:
+        if max_reachability_depth is not None and (type(max_reachability_depth) is not int or max_reachability_depth < 0):
             raise ValueError("max_reachability_depth must be non-negative")
-        if max_context_depth is not None and max_context_depth < 0:
+        if max_context_depth is not None and (type(max_context_depth) is not int or max_context_depth < 0):
             raise ValueError("max_context_depth must be non-negative")
-        if max_context_tests < 1:
+        if type(max_context_tests) is not int or max_context_tests < 1:
             raise ValueError("max_context_tests must be positive")
 
         boundaries = []

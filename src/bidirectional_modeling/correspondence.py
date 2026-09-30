@@ -21,9 +21,10 @@ from .core import (
     Snapshot,
     Trace,
 )
-from .evaluation import SatisfactionEvaluator, TraceBatch
+from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_result
 from .provenance import (
     context_fingerprint,
+    safe_context_fingerprint,
     observed_model_fingerprint as _model_evidence_fingerprint,
     safe_observed_model_fingerprint as _safe_model_evidence_fingerprint,
 )
@@ -312,7 +313,7 @@ class CorrespondenceCertificate:
             )
         ):
             raise ValueError("correspondence certificate identities must be non-empty")
-        if self.horizon < 1:
+        if type(self.horizon) is not int or self.horizon < 1:
             raise ValueError("correspondence horizon must be at least one")
         counts = (
             self.lower_scenarios,
@@ -385,8 +386,10 @@ class CorrespondenceValidationCase:
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("correspondence validation case name must be non-empty")
-        if self.horizon < 1:
+        if type(self.horizon) is not int or self.horizon < 1:
             raise ValueError("correspondence validation horizon must be at least one")
+        if not isinstance(self.role, CorrespondenceCaseRole) or type(self.independent) is not bool:
+            raise TypeError("declare a CorrespondenceCaseRole and boolean independence")
         if self.independent and self.role != CorrespondenceCaseRole.HOLDOUT:
             raise ValueError("only a holdout case may claim independent provenance")
 
@@ -405,6 +408,8 @@ class CorrespondenceCaseResult:
     def __post_init__(self) -> None:
         if not self.case_name:
             raise ValueError("correspondence case result name must be non-empty")
+        if not isinstance(self.role, CorrespondenceCaseRole) or type(self.independent) is not bool:
+            raise TypeError("declare a CorrespondenceCaseRole and boolean independence")
         if self.independent and self.role != CorrespondenceCaseRole.HOLDOUT:
             raise ValueError("only a holdout result may claim independent provenance")
 
@@ -546,7 +551,7 @@ class CorrespondenceValidator:
     ) -> CorrespondenceCertificate:
         """Check an entire commuting diagram under one shared simulation budget."""
 
-        if horizon < 1:
+        if type(horizon) is not int or horizon < 1:
             raise ValueError("correspondence horizon must be at least one")
         upper_context = upper_context or lower_context
         budget = budget or ResourceBudget()
@@ -554,30 +559,31 @@ class CorrespondenceValidator:
         lower_context_digest = context_fingerprint(lower_context)
         upper_context_digest = context_fingerprint(upper_context)
 
-        lower_batch = self.evaluator.collect(
-            lower_model,
-            lower_context,
-            horizon,
-            budget,
-        )
-        simulations_used = lower_batch.simulations_used
-        remaining = max(0, budget.max_simulations - simulations_used)
-        if remaining:
-            upper_batch = self.evaluator.collect(
-                upper_model,
-                upper_context,
-                horizon,
-                replace(budget, max_simulations=remaining),
-            )
-            simulations_used += upper_batch.simulations_used
-        else:
-            upper_batch = self.evaluator.unstarted_batch(
-                upper_model,
-                upper_context,
-                horizon,
-                "upper-scale simulation was not started because the shared "
-                "simulation budget was exhausted",
-            )
+        def collect(model, context, allowance, label):
+            if allowance <= 0:
+                return SatisfactionEvaluator().unstarted_batch(model, context, horizon,
+                    label + "-scale simulation was not started because the shared "
+                    "simulation budget was exhausted"), 0
+            try:
+                batch = self.evaluator.collect(model, context, horizon,
+                    replace(budget, max_simulations=allowance))
+                batch = _checked_evaluator_result(batch, TraceBatch, allowance)
+                if not batch.binds(model, context, horizon):
+                    raise ValueError("collected batch does not bind this model, context and horizon")
+                return batch, batch.simulations_used
+            except Exception as error:
+                # A failed callback may have used any portion of its allowance.
+                # The default diagnostic constructor cannot be replaced by it.
+                batch = SatisfactionEvaluator().unstarted_batch(model, context, horizon,
+                    label + "-scale collection failed; remaining simulation budget reserved: "
+                    + type(error).__name__ + ": " + str(error))
+                return batch, allowance
+
+        lower_batch, simulations_used = collect(lower_model, lower_context,
+                                               budget.max_simulations, "lower")
+        remaining = budget.max_simulations - simulations_used
+        upper_batch, upper_used = collect(upper_model, upper_context, remaining, "upper")
+        simulations_used += upper_used
 
         boundaries = list(
             "lower: %s" % item for item in lower_batch.boundaries
@@ -780,6 +786,13 @@ class CorrespondenceValidator:
             )
         )
         binding_complete = True
+        for label, model, context, batch in (
+                ("lower", lower_model, lower_context, lower_batch),
+                ("upper", upper_model, upper_context, upper_batch)):
+            if not batch.binds(model, context, horizon):
+                binding_complete = False
+                findings.append(CorrespondenceIssue("model-binding-failed",
+                    label + ": batch binding changed during correspondence verification"))
         for label, error in (
             ("lower", lower_fingerprint_error),
             ("upper", upper_fingerprint_error),
@@ -871,6 +884,13 @@ class CorrespondenceValidator:
 
         budget = budget or ResourceBudget()
         correspondence_digest = correspondence_fingerprint(correspondence)
+        def input_binding(case):
+            return (safe_context_fingerprint(case.lower_context),
+                    safe_context_fingerprint(case.resolved_upper_context),
+                    _safe_model_evidence_fingerprint(case.lower_model, (), case.horizon),
+                    _safe_model_evidence_fingerprint(case.upper_model, (), case.horizon))
+
+        input_bindings = tuple(input_binding(case) for case in cases)
         remaining = budget.max_simulations
         simulations_used = 0
         truncated = False
@@ -988,6 +1008,11 @@ class CorrespondenceValidator:
             if binding_error not in suite_boundaries:
                 suite_boundaries.append(binding_error)
 
+        for case, binding in zip(cases, input_bindings):
+            if input_binding(case) != binding:
+                truncated = True
+                suite_boundaries.append("validation case %r input binding changed during the suite" % case.name)
+
         suite_protocol_digest = fingerprint_value(
             (
                 "correspondence-suite-validator-v1",
@@ -1088,7 +1113,6 @@ class ScaleGraph:
             existing = self._scales.get(scale.name)
             if existing is not None and existing != scale:
                 raise ValueError("scale %r has conflicting definitions" % scale.name)
-            self._scales[scale.name] = scale
 
         existing_correspondence = self._correspondences.get(correspondence.name)
         existing_certificate = self._certificates.get(correspondence.name)
@@ -1112,6 +1136,8 @@ class ScaleGraph:
                     "correspondence %r already has different certified evidence"
                     % correspondence.name
                 )
+        for scale in (correspondence.lower_scale, correspondence.upper_scale):
+            self._scales[scale.name] = scale
         self._correspondences[correspondence.name] = correspondence
         self._certificates[correspondence.name] = certificate
 
@@ -1131,7 +1157,7 @@ class ScaleGraph:
         upper_scale: str,
         max_hops: int = 8,
     ) -> Tuple[ScalePath, ...]:
-        if max_hops < 1:
+        if type(max_hops) is not int or max_hops < 1:
             raise ValueError("max_hops must be positive")
         if lower_scale not in self._scales:
             raise KeyError(lower_scale)
