@@ -29,10 +29,10 @@ class ClosureAnalyzer:
         max_depth: Optional[int] = None,
         max_states: int = 1_000,
     ) -> ClosureReport:
-        if max_states < 1:
+        if type(max_states) is not int or max_states < 1:
             raise ValueError("max_states must be positive")
         depth_limit = spec.horizon if max_depth is None else max_depth
-        if depth_limit < 0:
+        if type(depth_limit) is not int or depth_limit < 0:
             raise ValueError("max_depth must be non-negative")
 
         analysis_errors = []

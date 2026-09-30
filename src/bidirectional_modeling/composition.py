@@ -40,7 +40,7 @@ class CompositionRule:
     applicable: Optional[Applicability] = None
 
     def __post_init__(self) -> None:
-        if not self.name:
+        if not isinstance(self.name, str) or not self.name:
             raise ValueError("composition rule name must be non-empty")
         if not callable(self.transition):
             raise TypeError("composition rule transition must be callable")
@@ -67,9 +67,12 @@ class CompositionTest:
     expected_observation: Optional[Mapping[str, Any]] = None
 
     def __post_init__(self) -> None:
-        if not self.name:
+        if type(self.expected_defined) is not bool:
+            raise TypeError("composition test support must be a boolean")
+        object.__setattr__(self, "actions", tuple(self.actions))
+        if not isinstance(self.name, str) or not self.name:
             raise ValueError("composition test name must be non-empty")
-        if not self.initial_state:
+        if not isinstance(self.initial_state, str) or not self.initial_state:
             raise ValueError("composition test initial_state must be non-empty")
         if self.expected_defined and self.expected_observation is None:
             raise ValueError(
@@ -95,7 +98,7 @@ class CompositionExperiment:
     context: Context = field(default_factory=Context)
 
     def __post_init__(self) -> None:
-        if not self.name:
+        if not isinstance(self.name, str) or not self.name:
             raise ValueError("composition experiment name must be non-empty")
         if not self.initial_states:
             raise ValueError(
@@ -134,7 +137,8 @@ class CompositionExperiment:
                     % (test.name, sorted(unknown_actions))
                 )
             if test.expected_defined:
-                self.equivalence.signature(test.expected_observation)
+                freeze_value(self.equivalence.signature(test.expected_observation),
+                             purpose="composition expected observation identity")
 
 
 @dataclass(frozen=True)
@@ -430,13 +434,13 @@ class CompositionRuleSelector:
             raise ValueError("at least one composition rule is required")
         if not experiments:
             raise ValueError("at least one composition experiment is required")
-        if max_states < 1:
+        if type(max_states) is not int or max_states < 1:
             raise ValueError("max_states must be positive")
-        if max_reachability_depth is not None and max_reachability_depth < 0:
+        if max_reachability_depth is not None and (type(max_reachability_depth) is not int or max_reachability_depth < 0):
             raise ValueError("max_reachability_depth must be non-negative")
-        if max_context_depth is not None and max_context_depth < 0:
+        if max_context_depth is not None and (type(max_context_depth) is not int or max_context_depth < 0):
             raise ValueError("max_context_depth must be non-negative")
-        if max_context_tests < 1:
+        if type(max_context_tests) is not int or max_context_tests < 1:
             raise ValueError("max_context_tests must be positive")
         rule_names = tuple(rule.name for rule in rules)
         if len(rule_names) != len(set(rule_names)):
@@ -476,11 +480,14 @@ class CompositionRuleSelector:
                     test_results.append(result)
                     if counterexample is not None:
                         counterexamples.append(counterexample)
+                        if not full_diagnostics:
+                            break
 
+                operational_refuted = bool(counterexamples)
                 analysis_error = None
                 residual_report = None
                 # A reliable operational witness already decides rejection.
-                if not counterexamples or full_diagnostics:
+                if not operational_refuted or full_diagnostics:
                     try:
                         residual_report = self.residual_analyzer.analyze(
                             model,
@@ -491,6 +498,14 @@ class CompositionRuleSelector:
                             max_context_depth=max_context_depth,
                             max_context_tests=max_context_tests,
                         )
+                        if (not isinstance(residual_report, ResidualQuotientReport)
+                                or residual_report.model_name != model.name
+                                or not residual_report.binds_context(experiment.context)
+                                or not residual_report.binds_equivalence(experiment.equivalence)
+                                or (residual_report.max_reachability_depth, residual_report.max_states,
+                                    residual_report.max_context_depth, residual_report.max_context_tests)
+                                != (max_reachability_depth, max_states, max_context_depth, max_context_tests)):
+                            raise ValueError("residual report does not bind this composition analysis")
                     except Exception as error:
                         residual_report = None
                         analysis_error = "%s: %s" % (type(error).__name__, error)
@@ -516,6 +531,8 @@ class CompositionRuleSelector:
                         analysis_error=analysis_error,
                     )
                 )
+                if operational_refuted and not full_diagnostics:
+                    break
             evaluations.append(
                 CompositionRuleEvaluation(rule=rule, cases=tuple(cases))
             )
