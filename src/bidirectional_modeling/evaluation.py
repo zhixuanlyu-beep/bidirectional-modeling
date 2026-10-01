@@ -52,6 +52,8 @@ class TraceBatch:
     coverage_authority: str = "none"
 
     def __post_init__(self) -> None:
+        if type(self.complete) is not bool:
+            raise TypeError('trace completeness must be an explicit boolean')
         if type(self.traces) is not tuple or any(
             not isinstance(item, Trace) for item in self.traces
         ):
@@ -128,6 +130,31 @@ def _checked_evaluator_result(result, expected_type, max_simulations):
     if type(used) is not int or used < 0 or used > max_simulations:
         raise ValueError('evaluator consumption exceeds its execution allowance')
     return result
+
+
+def _checked_trace_batch(batch, model, context, horizon, max_simulations):
+    batch = _checked_evaluator_result(batch, TraceBatch, max_simulations)
+    if not batch.binds(model, context, horizon):
+        raise ValueError('collected trace batch does not bind the requested evaluation')
+    return batch
+
+
+def _checked_satisfaction_result(certificate, model, spec, context, budget, batch=None):
+    certificate = _checked_evaluator_result(certificate, SatisfactionCertificate,
+                                            budget.max_simulations)
+    # An unresolved native result can carry unavailable-provenance diagnostics.
+    # Only a complete verdict may accept or refute the current declaration.
+    if certificate.complete:
+        if (certificate.model_name != model.name
+                or not certificate.binds_context(context)
+                or certificate.max_cost != budget.max_cost):
+            raise ValueError('satisfaction certificate does not bind the requested model, context or cost limit')
+        if spec is not None and (certificate.horizon != spec.horizon
+                                or not certificate.binds_specification(spec)):
+            raise ValueError('satisfaction certificate does not bind the requested specification')
+        if batch is not None and not certificate.binds_trace_batch(batch):
+            raise ValueError('satisfaction certificate does not bind the evaluated trace batch')
+    return certificate
 
 
 def _trace_batch_binding_errors(
@@ -680,12 +707,8 @@ class SatisfactionEvaluator:
                 if item not in initial_binding_errors
             )
 
-        requirements_passed = bool(batch.traces) and all(
-            check.passed for check in checks
-        )
         complete = (batch.complete and provenance_complete
                     and not any(check.evaluation_error is not None for check in checks))
-        satisfied = complete and requirements_passed
         verification = VerificationMeasures(
             coverage=batch.coverage if provenance_complete else 0.0,
         )
@@ -721,7 +744,6 @@ class SatisfactionEvaluator:
         return SatisfactionCertificate(
             spec_name=spec.name,
             model_name=model_name,
-            satisfied=satisfied,
             checks=tuple(checks),
             verified_scenarios=len(batch.traces),
             charged_simulations=batch.simulations_used,
@@ -742,7 +764,6 @@ class SatisfactionEvaluator:
             protocol_fingerprint=protocol_digest,
             max_cost=budget.max_cost,
             complete=complete,
-            requirements_passed=requirements_passed,
             coverage_authority=batch.coverage_authority,
         )
 
@@ -799,7 +820,6 @@ class SatisfactionEvaluator:
         return SatisfactionCertificate(
             spec_name=spec.name,
             model_name=model_name,
-            satisfied=False,
             checks=(check,),
             verified_scenarios=0,
             verification=VerificationMeasures(0.0),
@@ -813,7 +833,6 @@ class SatisfactionEvaluator:
             protocol_fingerprint=protocol_digest,
             max_cost=budget.max_cost,
             complete=False,
-            requirements_passed=False,
             coverage_authority="none",
         )
 

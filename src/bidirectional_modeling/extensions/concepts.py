@@ -2,6 +2,7 @@
 from dataclasses import dataclass, replace
 from typing import Iterable, Optional, Tuple
 from ..core import Concept, Counterexample
+from ..structural import ordered_tuple, deterministic_repr
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,9 @@ class ConceptLibrary:
     """Small in-memory concept store; persistence can be supplied by an adapter."""
 
     def __init__(self, concepts: Iterable[Concept] = ()) -> None:
-        self._concepts = {concept.name: concept for concept in concepts}
+        self._concepts = {}
+        for concept in ordered_tuple(concepts):
+            self.add(concept)
         self._history = []
 
     @property
@@ -46,6 +49,8 @@ class ConceptLibrary:
         boundary: Optional[str] = None,
         *, source: str,
     ) -> Concept:
+        if type(accepted) is not bool:
+            raise TypeError('concept judgment must be an explicit boolean')
         if not isinstance(source, str) or not source.strip():
             raise ValueError("judgment source must be explicit")
         concept = self.get(name)
@@ -93,7 +98,7 @@ class ConceptLibrary:
             raise ValueError("source, reason and applicability must be explicit")
         concept = self.get(name)
         boundary = counterexample.summary
-        example = repr(dict(counterexample.witness))
+        example = deterministic_repr(dict(counterexample.witness))
         positives = tuple(item for item in concept.positive_examples if item != example)
         negatives = concept.negative_examples
         if example not in negatives:

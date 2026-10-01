@@ -261,6 +261,8 @@ class CheckResult:
     tolerance: float = 0.0
 
     def __post_init__(self) -> None:
+        if type(self.passed) is not bool:
+            raise TypeError('check verdict must be an explicit boolean')
         if self.evaluation_error is not None and self.passed:
             raise ValueError("an unresolved check cannot pass")
 
@@ -707,7 +709,10 @@ class FiniteStateModel:
         callback_context = isolated_copy(
             context, purpose="applicability input context"
         )
-        return bool(self.applicable(isolated, action, callback_context))
+        supported = self.applicable(isolated, action, callback_context)
+        if type(supported) is not bool:
+            raise TypeError('action applicability must return an explicit boolean')
+        return supported
 
     def step(self, state: State, action: str, context: Context) -> State:
         if action != "noop" and action not in self.actions:
@@ -871,7 +876,6 @@ class VerificationMeasures:
 class SatisfactionCertificate:
     spec_name: str
     model_name: str
-    satisfied: bool
     checks: Tuple[CheckResult, ...]
     verified_scenarios: int
     verification: VerificationMeasures
@@ -885,15 +889,27 @@ class SatisfactionCertificate:
     protocol_fingerprint: str
     max_cost: float
     complete: bool = True
-    requirements_passed: bool = True
     coverage_authority: str = "candidate-enumeration"
     charged_simulations: Optional[int] = None
+
+    @property
+    def requirements_passed(self) -> bool:
+        return self.verified_scenarios > 0 and all(check.passed for check in self.checks)
+
+    @property
+    def satisfied(self) -> bool:
+        return self.complete and self.requirements_passed
 
     @property
     def simulations_used(self) -> int:
         return self.verified_scenarios if self.charged_simulations is None else self.charged_simulations
 
     def __post_init__(self) -> None:
+        if type(self.complete) is not bool:
+            raise TypeError('certificate completeness must be an explicit boolean')
+        object.__setattr__(self, 'checks', ordered_tuple(self.checks))
+        if any(not isinstance(check, CheckResult) for check in self.checks):
+            raise TypeError('certificate checks must be CheckResult instances')
         if not self.spec_name or not self.model_name:
             raise ValueError("satisfaction certificate identities must be non-empty")
         if not isinstance(self.horizon, int) or isinstance(self.horizon, bool):
@@ -914,10 +930,6 @@ class SatisfactionCertificate:
             raise ValueError("charged simulations must cover verified scenarios")
         if self.complete and any(c.evaluation_error is not None for c in self.checks):
             raise ValueError("a complete certificate cannot contain unresolved checks")
-        if self.satisfied and (not self.complete or not self.requirements_passed):
-            raise ValueError(
-                "a satisfied certificate must be complete and pass its requirements"
-            )
         for label, fingerprint in (
             ("macro specification fingerprint", self.spec_fingerprint),
             ("model evidence fingerprint", self.model_fingerprint),

@@ -27,7 +27,9 @@ from .core import (
     PurposeHypothesis,
     RealizationResult,
     ResourceBudget,
+    VerificationIssue,
 )
+from .evaluation import _checked_trace_batch
 from .interpretation import HypothesisSource, Interpreter
 from .realization import CandidateSource, Realizer
 
@@ -60,10 +62,11 @@ class MicroRoundTripReport:
     simulations_used: int = 0
     truncated: bool = False
     selected_hypothesis: Optional[str] = None
+    diagnostics: Tuple[VerificationIssue, ...] = ()
 
     @property
     def passed(self) -> bool:
-        return not self.truncated and bool(self.behaviorally_equivalent_models)
+        return not (self.truncated or self.diagnostics) and bool(self.behaviorally_equivalent_models)
 
 
 @dataclass(frozen=True)
@@ -140,6 +143,17 @@ def _batches_behaviorally_equivalent(left, right, left_batch, right_batch, spec,
     return _traces_behaviorally_equivalent(left_batch.traces, right_batch.traces, spec)
 
 
+def _collect_comparison_batch(evaluator, model, context, spec, budget):
+    try:
+        batch = evaluator.collect(model, context, spec.horizon, budget)
+        batch = _checked_trace_batch(batch, model, context, spec.horizon, budget.max_simulations)
+        return batch, batch.simulations_used, None
+    except Exception as error:
+        issue = VerificationIssue('round-trip-comparison', '%s: %s' % (type(error).__name__, error),
+                                  {'reserved_simulations': budget.max_simulations})
+        return None, budget.max_simulations, issue
+
+
 def behaviorally_equivalent(
     left: ExecutableModel,
     right: ExecutableModel,
@@ -151,13 +165,18 @@ def behaviorally_equivalent(
     from .evaluation import SatisfactionEvaluator
     evaluator = evaluator or SatisfactionEvaluator()
     budget = budget or ResourceBudget()
-    left_batch = evaluator.collect(left, context, spec.horizon, budget)
-    remaining = budget.max_simulations - left_batch.simulations_used
-    if not left_batch.complete or remaining <= 0:
+    left_batch, used, _ = _collect_comparison_batch(evaluator, left, context, spec, budget)
+    remaining = budget.max_simulations - used
+    if left_batch is None or not left_batch.complete or remaining <= 0:
         return None
-    right_batch = evaluator.collect(right, context, spec.horizon,
-                                    replace(budget, max_simulations=remaining))
-    return _batches_behaviorally_equivalent(left, right, left_batch, right_batch, spec, context)
+    right_batch, _, _ = _collect_comparison_batch(evaluator, right, context, spec,
+                                               replace(budget, max_simulations=remaining))
+    if right_batch is None:
+        return None
+    try:
+        return _batches_behaviorally_equivalent(left, right, left_batch, right_batch, spec, context)
+    except Exception:
+        return None
 
 
 class BidirectionalModelingEngine:
@@ -362,6 +381,7 @@ class BidirectionalModelingEngine:
 
         budget = budget or ResourceBudget()
         experiments, observations = ordered_tuple(experiments), ordered_tuple(observations)
+        evidence = ordered_tuple(evidence)
         realization = self.realize(spec, context, source, budget)
         interpretations = []
         preservation = []
@@ -415,6 +435,9 @@ class BidirectionalModelingEngine:
             preservation.append(
                 not result.undecided and not result.truncated and any(
                     item.hypothesis.spec.semantically_equivalent(spec)
+                    and candidate.certificate.binds_specification(spec)
+                    and candidate.certificate.binds_context(context)
+                    and candidate.certificate.model_fingerprint == item.certificate.model_fingerprint
                     for item in result.candidates
                 )
             )
@@ -490,17 +513,20 @@ class BidirectionalModelingEngine:
             if allow_identity or item.model is not model
         )
         equivalent = []
+        diagnostics = []
         original_batch = None
         if satisfying and remaining_simulations > 0:
             trace_budget = replace(
                 budget, max_simulations=remaining_simulations
             )
-            original_batch = self.realizer.evaluator.collect(
-                model, context, selected_spec.horizon, trace_budget
+            original_batch, used, issue = _collect_comparison_batch(
+                self.realizer.evaluator, model, context, selected_spec, trace_budget
             )
-            simulations_used += original_batch.simulations_used
-            remaining_simulations -= original_batch.simulations_used
-            if not original_batch.complete:
+            simulations_used += used
+            remaining_simulations -= used
+            if issue is not None:
+                diagnostics.append(issue)
+            if original_batch is None or not original_batch.complete:
                 truncated = True
 
         compared = 0
@@ -515,17 +541,30 @@ class BidirectionalModelingEngine:
                     trace_budget = replace(
                         budget, max_simulations=remaining_simulations
                     )
-                    candidate_batch = self.realizer.evaluator.collect(
-                        item.model, context, selected_spec.horizon, trace_budget
+                    candidate_batch, used, issue = _collect_comparison_batch(
+                        self.realizer.evaluator, item.model, context, selected_spec, trace_budget
                     )
-                    simulations_used += candidate_batch.simulations_used
-                    remaining_simulations -= candidate_batch.simulations_used
+                    simulations_used += used
+                    remaining_simulations -= used
+                    if issue is not None:
+                        diagnostics.append(issue)
                 compared += 1
-                if not candidate_batch.complete:
+                if candidate_batch is None or not candidate_batch.complete:
                     truncated = True
                     continue
-                comparison = _batches_behaviorally_equivalent(
-                    model, item.model, original_batch, candidate_batch, selected_spec, context)
+                try:
+                    if not (chosen.certificate.binds_specification(selected_spec)
+                            and chosen.certificate.binds_context(context)
+                            and chosen.certificate.binds_evidence(model, original_batch.traces)
+                            and item.certificate.binds_specification(selected_spec)
+                            and item.certificate.binds_context(context)
+                            and item.certificate.binds_evidence(item.model, candidate_batch.traces)):
+                        raise ValueError('round-trip satisfaction evidence changed before behavioral comparison')
+                    comparison = _batches_behaviorally_equivalent(
+                        model, item.model, original_batch, candidate_batch, selected_spec, context)
+                except Exception as error:
+                    diagnostics.append(VerificationIssue('round-trip-binding', str(error)))
+                    comparison = None
                 if comparison is None:
                     truncated = True
                 elif comparison:
@@ -539,5 +578,5 @@ class BidirectionalModelingEngine:
             simulations_used,
             truncated,
             chosen.hypothesis.name,
+            tuple(diagnostics),
         )
-

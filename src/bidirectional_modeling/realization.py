@@ -19,7 +19,7 @@ from .core import (
     ResourceBudget,
     SatisfactionCertificate,
 )
-from .evaluation import SatisfactionEvaluator, _checked_evaluator_result
+from .evaluation import SatisfactionEvaluator, _checked_evaluator_result, _checked_satisfaction_result
 from ._generation import CandidateStream
 
 
@@ -145,8 +145,8 @@ class Realizer:
                 certificate = self.evaluator.evaluate(
                     model, spec, context, candidate_budget
                 )
-                certificate = _checked_evaluator_result(certificate, SatisfactionCertificate,
-                                                        remaining_simulations)
+                certificate = _checked_satisfaction_result(certificate, model, spec, context,
+                                                           candidate_budget)
             except Exception as error:
                 certificate = SatisfactionEvaluator().failure_certificate(
                     model, spec, context, str(error), candidate_budget
@@ -194,6 +194,9 @@ class Realizer:
                                 or any(not isinstance(d, VerificationIssue) for d in outcome.diagnostics)):
                             raise TypeError('probe returned a malformed outcome')
                         outcome = _checked_evaluator_result(outcome, ProbeOutcome, remaining_simulations)
+                        if outcome.certificate is not None:
+                            _checked_satisfaction_result(outcome.certificate, model, None, context,
+                                                         probe_budget)
                     except Exception as error:
                         diagnostics.append(VerificationIssue(
                             "probe-execution", str(error), {"probe": type(probe).__name__}))

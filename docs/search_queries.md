@@ -1,6 +1,6 @@
 # 有限查询接口
 
-统一接口为未来惰性预测和符号后端提供扩展边界。目前实现仍要求显式有限响应全集及候选目录，不包含 SMT/SAT 求解器。
+统一接口支持有限扫描、响应索引和按候选执行的惰性预测，并为其他后端提供扩展边界。目前实现仍要求显式有限响应全集及候选目录，不包含 SMT/SAT 求解器。
 
 ```python
 from bidirectional_modeling import (ConstraintQuery, MacroAlternativeQuery, LowerSubstituteQuery, QueryStatus, SearchWorkBudget)
@@ -46,7 +46,7 @@ assert verification.status == 'valid'
 
 测试穷举双实验二值响应全集、全部 16 种约束子集和观测子集，对照直接真值表，并验证扫描/索引一致性。另覆盖所有预算截断点、取消、未知预测、空候选集、候选变化及伪造回执。
 
-下一阶段可在此协议上增加惰性预测后端；需要继续保持未知状态、完整问题绑定和独立见证检查。符号无解证书的格式及验证器仍需另行设计。
+惰性预测后端见 [按候选执行与缓存](search_lazy.md)，保持未知状态、完整问题绑定和独立见证检查。符号无解证书的格式及验证器仍需另行设计。
 
 
 

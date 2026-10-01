@@ -7,7 +7,7 @@
 - 候选组合规则不能自行选择验收判据：`CompositionExperiment` 固定初态、动作、读出、等价关系与操作测试，所有规则在同一域中竞争；规则描述长度必须来自同一编码约定。
 - `MacroSpec G` 明确可观测量、目标、等价关系、不变量、约束、误差与时间范围。
 - 向下推断搜索满足 `M |=Γ G` 的模型，返回成本、复杂度和风险上的帕累托候选，而非虚构唯一实现。
-- 向上推断严格区分效果、功能和意图。仅凭结构通常只能支持效果；功能依赖环境，意图还需要足够强的主体、设计或选择证据。
+- 向上推断严格区分效果、功能和意图。结构行为可支持有限域内的效果相容性；功能依赖环境，意图还需要明确的主体、设计或选择证据。这些记录是来源声明，相容性和目录唯一性都不证明真实意图。
 - 解释保留相容候选并按名称展示；未知响应保留整个声明结果域。实验按最坏结果下可排除的响应类数及成本选择，见 [集合解释](set_interpretation.md)。
 - 模拟预算在候选、红队探测、目的解释、效果生成和双向往返的各阶段全局共享；结果同时报告 `simulations_used` 与 `truncated`。
 - `FiniteStateModel` 深度复制进入和离开 `applicable`、`transition`、`readout` 的状态和上下文，避免候选通过嵌套可变对象污染实验或其他候选；满足性 requirement 也分别接收隔离的轨迹与上下文。残差与闭合证明会重放同一输入，结果或动作支撑不一致时按未知行为失败关闭。
@@ -118,6 +118,8 @@ print(report.model_fingerprint, report.protocol_fingerprint)
 第 0 层只按当前 `signal` 观察分组；深度 1 加入 `probe` 上下文后，未来结果不同的隐藏状态被拆开，而仅有无关 `copy` 字段不同的两个状态保持合并。`max_reachability_depth`、`max_states` 或 `max_context_depth` 截断时，报告会保留有界分区，但 `minimal` 必为假。
 
 局部支撑通过 `FiniteStateModel.applicable` 声明。若一个残差类上的 `consume` 全部无定义，其商转移是良定义的偏转移；若同一类中只有部分状态支持它，该类会被继续拆分：
+
+适用性回调必须明确返回 `True` 或 `False`。`None`、整数或字符串不能代替支撑判断；错误返回进入未决诊断，不能作为已经证明的无定义转移。需求检查的 `CheckResult.passed` 同样要求显式布尔值。
 
 ```python
 from bidirectional_modeling import (UndefinedTransition)
