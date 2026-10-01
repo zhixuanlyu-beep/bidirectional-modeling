@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from .core import VerificationIssue, Context, Counterexample, ExecutableModel, MacroSpec, ProbeOutcome, ResourceBudget
-from .evaluation import SatisfactionEvaluator
+from .evaluation import SatisfactionEvaluator, _checked_satisfaction_result
 from .provenance import macro_spec_fingerprint
 
 
@@ -28,6 +28,7 @@ class HorizonExtensionProbe:
     ) -> ProbeOutcome:
         extended = replace(spec, name=spec.name + " [extended horizon]", horizon=spec.horizon + self.extra_steps)
         certificate = evaluator.evaluate(model, extended, context, budget)
+        certificate = _checked_satisfaction_result(certificate, model, extended, context, budget)
         if not certificate.complete:
             return ProbeOutcome(None, certificate, (
                 VerificationIssue("extended-horizon", "extended-horizon verification incomplete",

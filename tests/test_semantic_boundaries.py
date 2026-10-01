@@ -86,7 +86,7 @@ class UnknownBoundaryTests(unittest.TestCase):
         class Probe:
             def probe(self, m, s, c, evaluator, budget):
                 certificate = evaluator.evaluate(m, s, c, budget)
-                return ProbeOutcome(None, replace(certificate, complete=False, satisfied=False))
+                return ProbeOutcome(None, replace(certificate, complete=False))
         result = Realizer(probes=(Probe(),)).realize(spec(), Context(), (model(),))
         self.assertFalse(result.candidates or result.rejected)
         self.assertEqual(len(result.undecided), 1)

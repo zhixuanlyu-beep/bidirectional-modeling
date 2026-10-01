@@ -25,9 +25,8 @@ from .core import (
     InterpretationObservation,
     InterpretationExclusion,
     VerificationIssue,
-    SatisfactionCertificate,
 )
-from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_result
+from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_trace_batch, _checked_satisfaction_result
 from ._generation import CandidateStream
 from .structural import freeze_value, ordered_tuple, deterministic_repr
 from .provenance import safe_macro_spec_fingerprint, safe_context_fingerprint
@@ -243,7 +242,7 @@ class Interpreter:
             )
             try:
                 batch = self.evaluator.collect(model, context, horizon, batch_budget)
-                batch = _checked_evaluator_result(batch, TraceBatch, remaining_simulations)
+                batch = _checked_trace_batch(batch, model, context, horizon, remaining_simulations)
             except Exception as error:
                 evaluator_failed(error)
                 factory = lambda: ()
@@ -295,7 +294,7 @@ class Interpreter:
                     batch = self.evaluator.collect(
                         model, context, horizon, batch_budget
                     )
-                    batch = _checked_evaluator_result(batch, TraceBatch, remaining_simulations)
+                    batch = _checked_trace_batch(batch, model, context, horizon, remaining_simulations)
                 except Exception as error:
                     undecided.append((hypothesis.name, (evaluator_failed(error),)))
                     break
@@ -308,8 +307,8 @@ class Interpreter:
                 certificate = self.evaluator.evaluate_batch(
                     model, hypothesis.spec, context, batch, budget
                 )
-                certificate = _checked_evaluator_result(certificate, SatisfactionCertificate,
-                                                        budget.max_simulations)
+                certificate = _checked_satisfaction_result(certificate, model, hypothesis.spec,
+                                                           context, budget, batch)
             except Exception as error:
                 undecided.append((hypothesis.name, (evaluator_failed(error),)))
                 break

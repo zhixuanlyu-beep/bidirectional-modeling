@@ -55,6 +55,8 @@ result = engine.interpret(
 
 候选按名字稳定展示，不按信念程度排序。证书提供 `verification.coverage` 场景覆盖率；探测证书的最小覆盖率可通过 `CandidateEvaluation.verification` 获取。具体数值要求的 `CheckResult.margin` 和 `tolerance` 保留原单位，不跨要求合成为稳健度或可信度评分。
 
+`SatisfactionCertificate.requirements_passed` 从非空已验证场景和全部检查结果派生，`satisfied` 再要求 `complete`；这两个属性不能通过构造或 `dataclasses.replace` 单独赋值。完整证书进入实现或解释链前须匹配当前规范、模型名称、情境及成本上限；解释还核对具体轨迹批次。该检查约束回执的适用范围，不认证任意自定义评估器的内部算法。
+
 `Realizer` 的默认帕累托比较仅使用显式 `ModelMetrics`，不使用声明可靠度或验证分数。指标语义仍由任务方负责；例如 risk 不应隐含为未经声明的概率。
 
 解释结果另列规范要求数、原始证据和直接主体/设计类证据。`Evidence` 保存声明、目标假设、类型、来源及可选文字 `annotation`，不要求数值强度。注记不参与候选排序，但属于上下文历史声明并被指纹绑定，因为模型回调可读取历史。空候选空间或预算截断都保持不可识别。
@@ -84,6 +86,8 @@ result = engine.interpret(
 `micro_round_trip(..., selected_hypothesis="A", observations=(observation,))` 显式选择已验证相容候选。省略目标仅在解释为 `unique` 时有效；歧义或未决时抛出 ValueError，不能用名字排序决定验证哪项任务。报告的 `selected_hypothesis` 记录目标。
 
 显式选择时，往返通过只表示所选规范下的任务成功；其他候选仍可能未决，不因此宣称目录唯一。`macro_round_trip(..., observations=...)` 同样传入观测；预算截断或存在未决候选时，不报告语义恢复成功。
+
+宏观往返快照本次证据序列，所有实现候选使用同一声明；恢复相容性还要求实现阶段与解释阶段的观测模型指纹一致。微观往返在行为比较前重查原解释和返回实现的满足性证据。跨阶段声明或观测发生变化时须重证，不能把新行为等价当作旧任务已经通过。比较回调抛异常、畸形返回或超额报告时，保守预留剩余额度；`MicroRoundTripReport.diagnostics` 保存原因，报告不发布通过。
 
 ## 复制与审计导出
 
