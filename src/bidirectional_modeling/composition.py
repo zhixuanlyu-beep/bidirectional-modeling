@@ -27,7 +27,7 @@ from .core import (
     UndefinedTransition,
 )
 from .residual import ResidualQuotientAnalyzer, ResidualQuotientReport
-from .structural import freeze_value
+from .structural import freeze_value, ordered_tuple
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ class CompositionTest:
     def __post_init__(self) -> None:
         if type(self.expected_defined) is not bool:
             raise TypeError("composition test support must be a boolean")
-        object.__setattr__(self, "actions", tuple(self.actions))
+        object.__setattr__(self, "actions", ordered_tuple(self.actions))
         if not isinstance(self.name, str) or not self.name:
             raise ValueError("composition test name must be non-empty")
         if not isinstance(self.initial_state, str) or not self.initial_state:
@@ -98,6 +98,8 @@ class CompositionExperiment:
     context: Context = field(default_factory=Context)
 
     def __post_init__(self) -> None:
+        for name in ('initial_states', 'actions', 'tests'):
+            object.__setattr__(self, name, ordered_tuple(getattr(self, name)))
         if not isinstance(self.name, str) or not self.name:
             raise ValueError("composition experiment name must be non-empty")
         if not self.initial_states:
@@ -428,8 +430,8 @@ class CompositionRuleSelector:
     ) -> CompositionSelectionReport:
         """Verify all rules; apply a preference only when explicitly requested."""
 
-        rules = tuple(rules)
-        experiments = tuple(experiments)
+        rules = ordered_tuple(rules)
+        experiments = ordered_tuple(experiments)
         if not rules:
             raise ValueError("at least one composition rule is required")
         if not experiments:
@@ -572,4 +574,3 @@ class CompositionRuleSelector:
             selection_policy=selection_policy,
             boundaries=tuple(boundaries),
         )
-

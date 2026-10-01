@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from math import comb
 
-from ..structural import fingerprint_value
+from ..structural import fingerprint_value, ordered_tuple
 
 
 @dataclass(frozen=True)
@@ -12,7 +12,7 @@ class AttributeObject:
     attributes: tuple
 
     def __post_init__(self):
-        attributes = tuple(self.attributes)
+        attributes = ordered_tuple(self.attributes)
         if type(self.name) is not str or not self.name.strip():
             raise ValueError('object name must be a nonempty string')
         if any(type(value) is not str or not value.strip() for value in attributes):
@@ -31,7 +31,7 @@ class AttributeContext:
     source: str = 'caller declaration'
 
     def __post_init__(self):
-        attributes, objects = tuple(self.attributes), tuple(self.objects)
+        attributes, objects = ordered_tuple(self.attributes), ordered_tuple(self.objects)
         if (not attributes or len(set(attributes)) != len(attributes)
                 or any(type(value) is not str or not value.strip() for value in attributes)):
             raise ValueError('declare distinct nonempty attribute names')
@@ -58,7 +58,7 @@ class Implication:
     conclusion: str
 
     def __post_init__(self):
-        premises = tuple(self.premises)
+        premises = ordered_tuple(self.premises)
         if (not premises or len(set(premises)) != len(premises)
                 or any(type(value) is not str or not value.strip() for value in premises)
                 or type(self.conclusion) is not str or not self.conclusion.strip()

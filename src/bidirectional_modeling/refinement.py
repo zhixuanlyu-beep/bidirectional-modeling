@@ -44,7 +44,7 @@ class ClosureAnalyzer:
                 type(error).__module__,
                 type(error).__qualname__,
                 str(error),
-                tuple(sorted((name, repr(value)) for name, value in witness.items())),
+                freeze_value(witness, purpose='closure diagnostic witness'),
             )
             if key in error_keys:
                 return
@@ -230,4 +230,3 @@ class ClosureAnalyzer:
             explored_states=len(reachable),
             diagnostics=tuple(analysis_errors),
         )
-

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .structural import ordered_tuple
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from typing import Callable, Dict, Iterable, Optional, Sequence, Tuple
@@ -360,7 +361,7 @@ class BidirectionalModelingEngine:
         """Check catalogue-relative recovery compatibility and report generation provenance."""
 
         budget = budget or ResourceBudget()
-        experiments, observations = tuple(experiments), tuple(observations)
+        experiments, observations = ordered_tuple(experiments), ordered_tuple(observations)
         realization = self.realize(spec, context, source, budget)
         interpretations = []
         preservation = []

@@ -3,7 +3,7 @@ from dataclasses import asdict, dataclass
 
 from .context_network import _prepare_context_transition
 from .search import ConflictCertificate, SearchBudgetExceeded, SearchWorkBudget, SearchObservation, _well_formed_conflict
-from .structural import fingerprint_value
+from .structural import fingerprint_value, ordered_tuple
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ def _transport_conflict(source_search, target_search, transition, certificate,
     Target scope/calibration is part of its new protocol, never inherited by hash.
     """
     budget = budget if budget is not None else SearchWorkBudget()
-    links = tuple(tuple(pair) for pair in evidence_links)
+    links = tuple(ordered_tuple(pair) for pair in ordered_tuple(evidence_links))
     digest = fingerprint_value(asdict(certificate))
     def result(status, reason, proof=None):
         return TransportedConflict(status, reason, digest, transition.fingerprint, proof, links)

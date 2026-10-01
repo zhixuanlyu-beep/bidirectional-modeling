@@ -12,7 +12,7 @@ from fractions import Fraction
 from functools import cached_property
 from typing import Callable, Optional, Tuple
 
-from .structural import fingerprint_value
+from .structural import fingerprint_value, ordered_tuple
 
 
 def _name(value: str) -> None:
@@ -143,7 +143,7 @@ class ResponseConstraint:
 
     def __post_init__(self) -> None:
         _name(self.name)
-        object.__setattr__(self, "worlds", tuple(self.worlds))
+        object.__setattr__(self, "worlds", ordered_tuple(self.worlds))
         for index in self.worlds:
             _natural(index)
         if len(set(self.worlds)) != len(self.worlds):
@@ -161,9 +161,9 @@ class SearchProtocol:
     def __post_init__(self) -> None:
         _name(self.scope)
         _name(self.coding)
-        object.__setattr__(self, "experiments", tuple(self.experiments))
-        object.__setattr__(self, "worlds", tuple(tuple(w) for w in self.worlds))
-        object.__setattr__(self, "constraints", tuple(self.constraints))
+        object.__setattr__(self, "experiments", ordered_tuple(self.experiments))
+        object.__setattr__(self, "worlds", tuple(ordered_tuple(w) for w in ordered_tuple(self.worlds)))
+        object.__setattr__(self, "constraints", ordered_tuple(self.constraints))
         if not self.experiments or not self.worlds:
             raise ValueError("protocol needs a nonempty experiment domain and response universe")
         for items in (self.experiments, self.constraints):
@@ -215,7 +215,7 @@ class SearchHypothesis:
         if self.world is not None:
             _natural(self.world)
         for field in ("commitments", "materials"):
-            values = tuple(getattr(self, field))
+            values = ordered_tuple(getattr(self, field))
             for value in values:
                 _name(value)
             object.__setattr__(self, field, values)
@@ -228,8 +228,8 @@ class ConflictCertificate:
     evidence: Tuple[SearchObservation, ...]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "commitments", tuple(self.commitments))
-        object.__setattr__(self, "evidence", tuple(self.evidence))
+        object.__setattr__(self, "commitments", ordered_tuple(self.commitments))
+        object.__setattr__(self, "evidence", ordered_tuple(self.evidence))
 
 
 def _well_formed_conflict(certificate):
@@ -333,9 +333,9 @@ class ExperimentHypothesisSearch:
         self._response_index = None
         self._fingerprint = None
         self._protocol = protocol
-        self._hypotheses = tuple(hypotheses)
+        self._hypotheses = ordered_tuple(hypotheses)
         self._target = target
-        self._world_answers = None if world_answers is None else tuple(world_answers)
+        self._world_answers = None if world_answers is None else ordered_tuple(world_answers)
         if self.world_answers is not None:
             if len(self.world_answers) != len(protocol.worlds):
                 raise ValueError("target mapping must cover the response universe")
@@ -390,7 +390,7 @@ class ExperimentHypothesisSearch:
         return self._response_index
 
     def _evidence(self, evidence, budget, *, use_index=True):
-        evidence = tuple(evidence)
+        evidence = ordered_tuple(evidence)
         names = {e.name: i for i, e in enumerate(self.protocol.experiments)}
         for observation in evidence:
             if observation.experiment not in names:
@@ -448,7 +448,7 @@ class ExperimentHypothesisSearch:
         budget = budget if budget is not None else SearchWorkBudget()
         budget.consume("certificate_checks")
         evidence = self._evidence(evidence, budget)
-        core = tuple(dict.fromkeys(commitments))
+        core = tuple(dict.fromkeys(ordered_tuple(commitments)))
         known = {c.name for c in self.protocol.constraints}
         if any(c not in known for c in core):
             raise ValueError("unknown commitment")
@@ -494,7 +494,7 @@ class ExperimentHypothesisSearch:
         """
         budget = budget if budget is not None else SearchWorkBudget()
         names = tuple(e.name for e in self.protocol.experiments)
-        selected = names if experiments is None else tuple(experiments)
+        selected = names if experiments is None else ordered_tuple(experiments)
         if any(name not in names for name in selected):
             raise ValueError("unknown experiment")
         indices = tuple(names.index(name) for name in selected)
@@ -555,7 +555,7 @@ class ExperimentHypothesisSearch:
         budget = budget if budget is not None else SearchWorkBudget()
         if max_replays is not None:
             _natural(max_replays)
-        evidence = tuple(evidence)
+        evidence = ordered_tuple(evidence)
         compatible, pruned, rejected = [], [], []
         reasons = {}
         active = []
@@ -755,4 +755,3 @@ class ExperimentHypothesisSearch:
             if covered:
                 ranked.append((Fraction(covered, experiment.cost), -experiment.cost, -i, experiment))
         return max(ranked, key=lambda item: item[:3])[3] if ranked else None
-

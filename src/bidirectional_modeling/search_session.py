@@ -8,7 +8,7 @@ from pathlib import Path
 from .search import (ConflictCertificate, DescriptionLength, ExperimentHypothesisSearch,
                      ResponseConstraint, SearchExperiment, SearchHypothesis,
                      SearchObservation, SearchProtocol, SearchWorkBudget, SearchBudgetExceeded)
-from .structural import fingerprint_value, validate_fingerprint
+from .structural import fingerprint_value, validate_fingerprint, ordered_tuple
 
 
 class SearchSession:
@@ -16,10 +16,10 @@ class SearchSession:
                  model_bindings=(), prepared_problem_fingerprint=None):
         self.search = search
         self.evidence = search._evidence(evidence, budget if budget is not None else SearchWorkBudget())
-        self.certificates = tuple(certificates)
+        self.certificates = ordered_tuple(certificates)
         self.revision = 0
         self.events = []
-        self.model_bindings = tuple(tuple(row) for row in model_bindings)
+        self.model_bindings = tuple(ordered_tuple(row) for row in ordered_tuple(model_bindings))
         self.prepared_problem_fingerprint = prepared_problem_fingerprint
         if prepared_problem_fingerprint is not None:
             validate_fingerprint(prepared_problem_fingerprint)
@@ -184,7 +184,7 @@ def migrate_session(session, target_search, transition, target_evidence, evidenc
     from .certificate_transport import _transport_conflict
     from .context_network import _prepare_context_transition
     budget = budget if budget is not None else SearchWorkBudget()
-    target_evidence, evidence_links = tuple(target_evidence), tuple(evidence_links)
+    target_evidence, evidence_links = ordered_tuple(target_evidence), ordered_tuple(evidence_links)
     if (session.search.protocol.fingerprint != transition.source.protocol.fingerprint or
             target_search.protocol.fingerprint != transition.target.protocol.fingerprint):
         return ContextMigrationResult('not_applicable', 'protocol_binding_mismatch')

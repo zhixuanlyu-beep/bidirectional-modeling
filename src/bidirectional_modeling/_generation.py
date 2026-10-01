@@ -1,4 +1,5 @@
 """Bounded candidate enumeration shared by realization and interpretation."""
+from collections.abc import Set as AbstractSet
 from .core import VerificationIssue
 
 
@@ -27,6 +28,8 @@ class CandidateStream:
         if self._iterator is None:
             try:
                 items = self.factory()
+                if isinstance(items, AbstractSet):
+                    raise TypeError('candidate generation cannot return an unordered set')
                 # Only concrete built-in catalogues establish an exact size.
                 if type(items) in (tuple, list):
                     items = tuple(items)

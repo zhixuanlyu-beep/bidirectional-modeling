@@ -1,4 +1,5 @@
 """Controlled repeated-data benchmark; reports overhead rather than promising speedup."""
+from .structural import ordered_tuple
 from dataclasses import asdict, dataclass, replace
 from statistics import median
 from time import perf_counter
@@ -14,7 +15,7 @@ def benchmark_search(search, evidence, *, rounds=5, max_operations=1_000_000):
         raise ValueError('rounds must be positive')
     if tracemalloc.is_tracing():
         raise RuntimeError('benchmark needs exclusive tracemalloc ownership')
-    evidence = tuple(evidence)
+    evidence = ordered_tuple(evidence)
     if any(h.world is None for h in search.hypotheses):
         raise ValueError('benchmark requires fully known candidate responses')
     reference = ExperimentHypothesisSearch(search.protocol,search.hypotheses,search.target,
@@ -75,8 +76,8 @@ class SearchBenchmarkStep:
     def __post_init__(self):
         from .search import _name
         _name(self.name)
-        object.__setattr__(self,'evidence',tuple(self.evidence))
-        object.__setattr__(self,'additions',tuple(self.additions))
+        object.__setattr__(self,'evidence',ordered_tuple(self.evidence))
+        object.__setattr__(self,'additions',ordered_tuple(self.additions))
 
 
 def benchmark_search_updates(search, steps, *, repetitions=3, max_operations=1_000_000):
@@ -91,7 +92,7 @@ def benchmark_search_updates(search, steps, *, repetitions=3, max_operations=1_0
         raise ValueError('repetitions must be positive')
     if tracemalloc.is_tracing():
         raise RuntimeError('benchmark needs exclusive tracemalloc ownership')
-    steps=tuple(steps)
+    steps=ordered_tuple(steps)
     if not steps:
         raise ValueError('at least one update step is required')
     reference=ExperimentHypothesisSearch(search.protocol,search.hypotheses,search.target,

@@ -9,7 +9,7 @@ from typing import Optional, Protocol, Tuple, Union
 
 from .search import (ExperimentHypothesisSearch, SearchBudgetExceeded,
                      SearchObservation, SearchWork, SearchWorkBudget, _name)
-from .structural import fingerprint_value
+from .structural import fingerprint_value, ordered_tuple
 
 
 class QueryStatus(str, Enum):
@@ -24,8 +24,8 @@ class ConstraintQuery:
     evidence: Tuple[SearchObservation, ...] = ()
 
     def __post_init__(self):
-        object.__setattr__(self,'commitments',tuple(self.commitments))
-        object.__setattr__(self,'evidence',tuple(self.evidence))
+        object.__setattr__(self,'commitments',ordered_tuple(self.commitments))
+        object.__setattr__(self,'evidence',ordered_tuple(self.evidence))
         for name in self.commitments:
             _name(name)
 
@@ -37,7 +37,7 @@ class MacroAlternativeQuery:
 
     def __post_init__(self):
         _name(self.answer)
-        object.__setattr__(self,'evidence',tuple(self.evidence))
+        object.__setattr__(self,'evidence',ordered_tuple(self.evidence))
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ class LowerSubstituteQuery:
 
     def __post_init__(self):
         _name(self.candidate)
-        object.__setattr__(self,'lower_names',tuple(self.lower_names))
+        object.__setattr__(self,'lower_names',ordered_tuple(self.lower_names))
         for name in self.lower_names:
             _name(name)
         if len(set(self.lower_names)) != len(self.lower_names):

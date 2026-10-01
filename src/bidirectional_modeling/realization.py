@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .structural import ordered_tuple
 from dataclasses import replace
 from itertools import product
 from typing import Any, Callable, Iterable, Mapping, Optional, Protocol, Sequence, Union
@@ -48,7 +49,7 @@ class RegistryGenerator:
     """A minimal generator for a known design library."""
 
     def __init__(self, models: Iterable[ExecutableModel]) -> None:
-        self.models = tuple(models)
+        self.models = ordered_tuple(models)
 
     def generate(
         self, spec: MacroSpec, context: Context, budget: ResourceBudget
@@ -68,7 +69,7 @@ class ParametricCandidateGenerator:
     ) -> None:
         if any(not values for values in parameter_space.values()):
             raise ValueError("every parameter must have at least one candidate value")
-        self.parameter_space = dict(parameter_space)
+        self.parameter_space = {name: ordered_tuple(values) for name, values in parameter_space.items()}
         self.factory = factory
 
     def generate(
@@ -111,7 +112,7 @@ class Realizer:
         probes: Sequence[RedTeamProbe] = (),
     ) -> None:
         self.evaluator = evaluator or SatisfactionEvaluator()
-        self.probes = tuple(probes)
+        self.probes = ordered_tuple(probes)
 
     def realize(
         self,
@@ -251,4 +252,3 @@ class Realizer:
             undecided=tuple(undecided),
             diagnostics=tuple(stream.diagnostics),
         )
-
