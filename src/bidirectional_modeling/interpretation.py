@@ -29,7 +29,7 @@ from .core import (
 )
 from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_result
 from ._generation import CandidateStream
-from .structural import freeze_value
+from .structural import freeze_value, ordered_tuple, deterministic_repr
 from .provenance import safe_macro_spec_fingerprint, safe_context_fingerprint
 
 
@@ -51,7 +51,7 @@ class CatalogHypothesisGenerator:
     independence_declared = False
 
     def __init__(self, hypotheses: Iterable[PurposeHypothesis]) -> None:
-        self.hypotheses = tuple(hypotheses)
+        self.hypotheses = ordered_tuple(hypotheses)
 
     def generate(
         self, model: ExecutableModel, context: Context
@@ -109,10 +109,10 @@ class ObservedEffectGenerator:
                 for trace in traces
             )
             if remains_constant:
-                label = "maintain %s at %r" % (field_name, final_value)
+                label = "maintain %s at %s" % (field_name, deterministic_repr(final_value))
                 aggregation = Aggregation.EACH
             else:
-                label = "at horizon %d, %s = %r" % (self.horizon, field_name, final_value)
+                label = "at horizon %d, %s = %s" % (self.horizon, field_name, deterministic_repr(final_value))
                 aggregation = Aggregation.FINAL
             spec = MacroSpec(
                 name=label,
@@ -131,7 +131,7 @@ class ObservedEffectGenerator:
     def generate(
         self, model: ExecutableModel, context: Context
     ) -> Iterable[PurposeHypothesis]:
-        traces = tuple(model.simulate(context, self.horizon))
+        traces = ordered_tuple(model.simulate(context, self.horizon))
         return self.generate_from_traces(traces)
 
 
@@ -163,7 +163,8 @@ def _select_experiment(candidates, experiments, observed):
             continue
         allowed = {c.hypothesis.name: _possibilities(c.hypothesis, experiment) for c in candidates}
         # Count declared response signatures once; duplicates do not add weight.
-        signatures = tuple(set(frozenset(v) for v in allowed.values()))
+        signatures = tuple(sorted({frozenset(v) for v in allowed.values()},
+                                  key=lambda values: tuple(sorted(values))))
         eliminated = [sum(outcome not in values for values in signatures)
                       for outcome in experiment.outcomes
                       if any(outcome in values for values in signatures)]
@@ -201,11 +202,11 @@ class Interpreter:
         *, observations: Sequence[InterpretationObservation] = (),
     ) -> InterpretationResult:
         budget = budget or ResourceBudget()
-        experiments = tuple(experiments)
+        experiments = ordered_tuple(experiments)
         by_experiment = {e.name: e for e in experiments}
         if len(by_experiment) != len(experiments):
             raise ValueError('duplicate experiment name')
-        observations = tuple(observations)
+        observations = ordered_tuple(observations)
         observed = {}
         for observation in observations:
             experiment = by_experiment.get(observation.experiment)
@@ -215,7 +216,7 @@ class Interpreter:
                 raise ValueError('conflicting outcomes require distinct experiment instances')
             observed[observation.experiment] = observation.outcome
         excluded, rejected, undecided = [], [], []
-        all_evidence = tuple(context.history) + tuple(evidence)
+        all_evidence = tuple(context.history) + ordered_tuple(evidence)
         batches: dict[int, TraceBatch] = {}
         simulations_used = 0
         remaining_simulations = budget.max_simulations

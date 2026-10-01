@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .core import UndefinedTransition
-from .structural import freeze_value, isolated_mapping
+from .structural import freeze_value, isolated_mapping, ordered_tuple
 
 
 class Edge(Enum):
@@ -55,7 +55,7 @@ def explore_reachable(model, context, *, max_depth, max_states,
         raise ValueError('max_depth must be nonnegative or None')
     states, indices, initial, errors = [], {}, [], []
     frontier, transitions = deque(), {}
-    actions = tuple(dict.fromkeys(('noop',) + tuple(model.actions)))
+    actions = tuple(dict.fromkeys(('noop',) + ordered_tuple(model.actions)))
     state_limit = depth_limit = False
     evaluations = 0
 
@@ -78,7 +78,7 @@ def explore_reachable(model, context, *, max_depth, max_states,
         frontier.append(index)
         return index
 
-    for name in model.initial_states:
+    for name in ordered_tuple(model.initial_states):
         try:
             index = add(model.states[name], name, ())
             if index is None:

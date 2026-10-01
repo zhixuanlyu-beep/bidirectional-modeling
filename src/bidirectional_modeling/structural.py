@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections.abc import Set as AbstractSet
 from fractions import Fraction
 from copy import deepcopy
 from enum import Enum
@@ -18,6 +19,18 @@ from typing import Any, Callable, Mapping, Optional, Set, Tuple
 
 
 FrozenValue = Tuple[Any, ...]
+
+
+def ordered_tuple(values):
+    """Snapshot declared order; never infer traversal order from a set.
+
+    Sets remain supported as semantic values by freeze_value, which sorts their
+    identities. Ordered protocols, action paths and budgeted catalogues must
+    instead supply a sequence or a deterministic iterator.
+    """
+    if isinstance(values, AbstractSet):
+        raise TypeError('ordered inputs cannot be an unordered set')
+    return tuple(values)
 
 
 def freeze_value(
@@ -111,6 +124,27 @@ def freeze_value(
         "%s requires canonical primitive/container values; got %s.%s"
         % (purpose, type(value).__module__, type(value).__qualname__)
     )
+
+
+def deterministic_repr(value):
+    """Readable canonical text for supported semantic values, without repr hooks."""
+    freeze_value(value, purpose='deterministic value display')
+    def render(item):
+        if isinstance(item, Enum):
+            return '<%s.%s: %s>' % (type(item).__name__, item.name, render(item.value))
+        if type(item) is dict:
+            pairs = sorted(item.items(), key=freeze_value)
+            return '{' + ', '.join(render(k) + ': ' + render(v) for k, v in pairs) + '}'
+        if type(item) in (set, frozenset):
+            if not item: return 'set()' if type(item) is set else 'frozenset()'
+            text = '{' + ', '.join(render(v) for v in sorted(item, key=freeze_value)) + '}'
+            return text if type(item) is set else 'frozenset(' + text + ')'
+        if type(item) is list:
+            return '[' + ', '.join(render(v) for v in item) + ']'
+        if type(item) is tuple:
+            return '(' + ', '.join(render(v) for v in item) + (',' if len(item) == 1 else '') + ')'
+        return repr(item)  # freeze_value admitted only exact primitive types here
+    return render(value)
 
 
 def fingerprint_value(
@@ -373,4 +407,3 @@ def isolated_mapping(
     if not isinstance(copied, Mapping):
         raise TypeError("%s must remain a mapping after isolation" % purpose)
     return dict(copied)
-

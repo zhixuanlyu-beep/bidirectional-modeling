@@ -3,6 +3,7 @@
 Generation uses greedy weighted cover, not an optimality claim. Verification
 needs retained evidence and the bound catalogue, not the entire history.
 """
+from .structural import ordered_tuple
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -21,8 +22,8 @@ class MacroSufficiencyCertificate:
     def __post_init__(self):
         _name(self.answer)
         _name(self.witness_candidate)
-        object.__setattr__(self, 'evidence', tuple(self.evidence))
-        object.__setattr__(self, 'exclusions', tuple(tuple(x) for x in self.exclusions))
+        object.__setattr__(self, 'evidence', ordered_tuple(self.evidence))
+        object.__setattr__(self, 'exclusions', tuple(ordered_tuple(x) for x in ordered_tuple(self.exclusions)))
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,5 @@
 """Optional finite conflict explanations and minimum commitment retractions."""
+from .structural import ordered_tuple
 from dataclasses import dataclass
 from itertools import combinations
 
@@ -33,14 +34,14 @@ def suggest_consistency_repairs(problem, commitments, evidence, *,
     """
     _natural(max_subsets)
     budget = budget if budget is not None else SearchWorkBudget()
-    declared = tuple(commitments)
+    declared = ordered_tuple(commitments)
     names = tuple(dict.fromkeys(declared))
     if len(names) != len(declared):
         raise ValueError('commitments must be distinct')
     known = {rule.name for rule in problem.protocol.constraints}
     if any(name not in known for name in names):
         raise ValueError('unknown commitment')
-    evidence = tuple(evidence)
+    evidence = ordered_tuple(evidence)
     checked, feasible, core = 0, [], None
     try:
         evidence = problem._evidence(evidence, budget)

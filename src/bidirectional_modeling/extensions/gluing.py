@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from itertools import combinations, product
 
 from ..search import SearchBudgetExceeded, SearchWorkBudget, _name
-from ..structural import fingerprint_value
+from ..structural import fingerprint_value, ordered_tuple
 
 
 @dataclass(frozen=True)
@@ -18,8 +18,8 @@ class LocalDescription:
 
     def __post_init__(self):
         _name(self.name)
-        object.__setattr__(self, 'variables', tuple(self.variables))
-        object.__setattr__(self, 'assignments', tuple(tuple(r) for r in self.assignments))
+        object.__setattr__(self, 'variables', ordered_tuple(self.variables))
+        object.__setattr__(self, 'assignments', tuple(ordered_tuple(r) for r in ordered_tuple(self.assignments)))
         if not self.variables or len(set(self.variables)) != len(self.variables):
             raise ValueError('declare distinct local variables')
         if any(len(r) != len(self.variables) for r in self.assignments):
@@ -41,9 +41,9 @@ class GluingProblem:
     global_assignments: object = None
 
     def __post_init__(self):
-        domains = tuple((name, tuple(values)) for name, values in self.domains)
+        domains = tuple((name, ordered_tuple(values)) for name, values in ordered_tuple(self.domains))
         object.__setattr__(self, 'domains', domains)
-        object.__setattr__(self, 'locals', tuple(self.locals))
+        object.__setattr__(self, 'locals', ordered_tuple(self.locals))
         names = tuple(n for n, _ in domains)
         if not names or len(set(names)) != len(names) or not self.locals:
             raise ValueError('nonempty domains and local descriptions required')
@@ -62,7 +62,7 @@ class GluingProblem:
             if any(any(v not in domain[n] for n, v in zip(patch.variables, row)) for row in patch.assignments):
                 raise ValueError('local assignment outside domain')
         if self.global_assignments is not None:
-            rows = tuple(tuple(r) for r in self.global_assignments)
+            rows = tuple(ordered_tuple(r) for r in ordered_tuple(self.global_assignments))
             if any(len(r) != len(names) or any(v not in domain[n] for n, v in zip(names, r)) for r in rows):
                 raise ValueError('global assignment outside domain')
             object.__setattr__(self, 'global_assignments', rows)

@@ -14,6 +14,8 @@ from fractions import Fraction
 from typing import Any, Callable, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
 
 from .structural import (
+    ordered_tuple,
+    deterministic_repr,
     callable_fingerprint,
     freeze_value,
     isolated_copy,
@@ -86,6 +88,9 @@ class Intervention:
     actions: Tuple[str, ...] = ()
     repeat_last: bool = True
 
+    def __post_init__(self):
+        object.__setattr__(self, 'actions', ordered_tuple(self.actions))
+
     def action_at(self, step: int) -> str:
         if not self.actions:
             return "noop"
@@ -140,6 +145,8 @@ class Context:
     scenario_manifest: Tuple[ScenarioKey, ...] = ()
 
     def __post_init__(self) -> None:
+        for name in ('history', 'interventions', 'assumptions', 'scenario_manifest'):
+            object.__setattr__(self, name, ordered_tuple(getattr(self, name)))
         names = [intervention.name for intervention in self.interventions]
         if len(names) != len(set(names)):
             raise ValueError("intervention names must be unique")
@@ -225,6 +232,7 @@ class Trace:
     snapshots: Tuple[Snapshot, ...]
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, 'snapshots', ordered_tuple(self.snapshots))
         if not self.model_name:
             raise ValueError("trace model name must be non-empty")
         ScenarioKey(self.initial_state, self.intervention)
@@ -353,7 +361,7 @@ class FieldRequirement:
             return sum((Fraction(value) for value in values), Fraction()) / len(values)
         if self.aggregation == Aggregation.DELTA:
             return values[-1] - values[0]
-        return tuple(values)
+        return ordered_tuple(values)
 
     def evaluate(
         self,
@@ -386,7 +394,7 @@ class FieldRequirement:
             category=self.category,
             passed=passed_all,
             observed=tuple(outcomes),
-            expected="%s %r after %s" % (self.operator, self.expected, self.aggregation.value),
+            expected="%s %s after %s" % (self.operator, deterministic_repr(self.expected), self.aggregation.value),
             margin=min(margins) if margins else None,
             tolerance=self.tolerance,
             detail=detail,
@@ -474,6 +482,7 @@ class EquivalenceSpec:
     tolerances: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, 'fields', ordered_tuple(self.fields))
         if any(not isinstance(item, str) or not item for item in self.fields):
             raise ValueError("equivalence field names must be non-empty strings")
         if len(self.fields) != len(set(self.fields)):
@@ -525,16 +534,9 @@ def _freeze_value(value: Any) -> Any:
 
 def requirement_semantic_signature(requirement: Requirement) -> Tuple[Any, ...]:
     method = getattr(requirement, "semantic_signature", None)
-    if method is not None:
-        return tuple(method())
-    # Unknown third-party requirements fail closed: only the same object is
-    # considered semantically identical during this process.
-    return (
-        "opaque",
-        type(requirement).__module__,
-        type(requirement).__qualname__,
-        id(requirement),
-    )
+    if not callable(method):
+        raise TypeError('requirement must declare a deterministic semantic_signature')
+    return ordered_tuple(method())
 
 
 @dataclass(frozen=True)
@@ -552,6 +554,9 @@ class MacroSpec:
     tags: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        for name in ('observables', 'objectives', 'invariants', 'constraints',
+                     'assumptions', 'tags'):
+            object.__setattr__(self, name, ordered_tuple(getattr(self, name)))
         if not isinstance(self.horizon, int) or isinstance(self.horizon, bool):
             raise TypeError("horizon must be an integer")
         if self.horizon < 1:
@@ -657,6 +662,8 @@ class FiniteStateModel:
     applicable: Optional[Applicability] = None
 
     def __post_init__(self) -> None:
+        for name in ('initial_states', 'actions', 'assumptions', 'failure_boundaries', 'capabilities'):
+            setattr(self, name, ordered_tuple(getattr(self, name)))
         if not isinstance(self.name, str) or not self.name:
             raise ValueError("model name must be a non-empty string")
         if not isinstance(self.states, Mapping):
@@ -800,7 +807,7 @@ class FiniteStateModel:
         interventions = FiniteStateModel._interventions(self, context)
         return tuple(
             ScenarioKey(initial_name, intervention.name)
-            for initial_name in self.initial_states
+            for initial_name in ordered_tuple(self.initial_states)
             for intervention in interventions
         )
 
@@ -810,7 +817,7 @@ class FiniteStateModel:
         if horizon < 0:
             raise ValueError("simulation horizon must be non-negative")
         interventions = self._interventions(context)
-        for initial_name in self.initial_states:
+        for initial_name in ordered_tuple(self.initial_states):
             for intervention in interventions:
                 state = isolated_mapping(
                     self.states[initial_name], purpose="simulation initial state"
@@ -1055,7 +1062,7 @@ class RealizationResult:
 def _labels(values, what):
     if isinstance(values, str):
         raise ValueError(what + ' must be a collection of labels')
-    values = tuple(values)
+    values = ordered_tuple(values)
     if (not values or any(type(v) is not str or not v.strip() for v in values)
             or len(set(values)) != len(values)):
         raise ValueError(what + ' requires distinct nonempty string labels')
@@ -1167,7 +1174,7 @@ class DiscriminatingQuery:
     selection_score: float
 
     def __post_init__(self):
-        object.__setattr__(self, 'candidate_names', tuple(self.candidate_names))
+        object.__setattr__(self, 'candidate_names', ordered_tuple(self.candidate_names))
         object.__setattr__(self, 'allowed_outcomes', _outcome_snapshot(self.allowed_outcomes))
         if set(self.candidate_names) != set(self.allowed_outcomes):
             raise ValueError('query candidates must match outcome declarations')
@@ -1213,9 +1220,9 @@ class InterpretationResult:
 
     def __post_init__(self):
         for name in ('candidates', 'equivalent_explanations', 'excluded', 'observations', 'rejected'):
-            object.__setattr__(self, name, tuple(getattr(self, name)))
+            object.__setattr__(self, name, ordered_tuple(getattr(self, name)))
         object.__setattr__(self, 'undecided',
-                           tuple((name, tuple(reasons)) for name, reasons in self.undecided))
+                           tuple((name, tuple(reasons)) for name, reasons in ordered_tuple(self.undecided)))
 
     @property
     def identification_status(self):

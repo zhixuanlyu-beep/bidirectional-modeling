@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -447,6 +448,8 @@ class SatisfactionEvaluator:
                 isolated_copy(context, purpose="simulation input context"),
                 horizon,
             )
+            if isinstance(generated, AbstractSet):
+                raise TypeError('simulation cannot return an unordered set')
         except Exception as error:
             boundaries.append(
                 TraceDiagnostic('simulation_start_failed', "simulation failed before producing a scenario: %s" % error)
@@ -824,4 +827,3 @@ class SatisfactionEvaluator:
         budget = budget or ResourceBudget()
         batch = self.collect(model, context, spec.horizon, budget)
         return self.evaluate_batch(model, spec, context, batch, budget)
-

@@ -10,7 +10,7 @@ from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_re
 from .provenance import trace_batch_protocol_fingerprint
 from .search import SearchBudgetExceeded, SearchWorkBudget, SearchObservation, _natural
 from .search_adapter import _collect_response_matrix, model_declaration_fingerprint
-from .structural import fingerprint_value, isolated_copy
+from .structural import fingerprint_value, isolated_copy, ordered_tuple
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class PartialPrediction:
 
     def __post_init__(self):
         for field in ('experiments', 'responses', 'batch_bindings'):
-            object.__setattr__(self, field, tuple(getattr(self, field)))
+            object.__setattr__(self, field, ordered_tuple(getattr(self, field)))
 
     @property
     def fingerprint(self):
@@ -62,10 +62,10 @@ def collect_partial_prediction(protocol, candidate, cases, experiments, *,
     """
     _natural(max_simulations)
     budget = budget if budget is not None else SearchWorkBudget()
-    cases = isolated_copy(tuple(cases), purpose='partial cases')
+    cases = isolated_copy(ordered_tuple(cases), purpose='partial cases')
     candidate = isolated_copy(candidate, purpose='partial candidate')
     names = tuple(e.name for e in protocol.experiments)
-    selected = tuple(experiments)
+    selected = ordered_tuple(experiments)
     if not selected or len(set(selected)) != len(selected) or any(n not in names for n in selected):
         raise ValueError('select distinct experiments from the declared domain')
     if tuple(c.experiment for c in cases) != names:
@@ -152,7 +152,7 @@ def verify_partial_prediction(protocol, candidate, cases, prediction, *,
                               max_simulations=10000, budget=None, evaluator=None):
     """Independently rerun the selected matrix; fingerprint equality alone is insufficient."""
     _natural(max_simulations)
-    cases = tuple(cases)
+    cases = ordered_tuple(cases)
     if not _well_formed_prediction(prediction):
         return PartialPredictionVerification('invalid', 'malformed_prediction', 0)
     if prediction.input_fingerprint != _binding(protocol, candidate, cases):

@@ -9,14 +9,14 @@ from itertools import product
 
 from ..core import FiniteStateModel, ModelMetrics
 from ..search import DescriptionLength, SearchBudgetExceeded, SearchWorkBudget, _name, _natural
-from ..structural import fingerprint_value
+from ..structural import fingerprint_value, ordered_tuple
 
 
 _ARITY = {'false': 0, 'true': 0, 'var': 1, 'not': 1, 'and': 2, 'or': 2, 'xor': 2}
 
 
 def _normalize(tree):
-    tree = tuple(tree)
+    tree = ordered_tuple(tree)
     if not tree or tree[0] not in _ARITY or len(tree) != 1 + _ARITY[tree[0]]:
         raise ValueError('invalid Boolean AST')
     if tree[0] == 'var':
@@ -111,7 +111,7 @@ class BooleanExpression:
 
     def replace(self, path, replacement):
         """Replace a subtree; path indexes children in the canonical AST."""
-        path = tuple(path)
+        path = ordered_tuple(path)
         def rewrite(tree, rest):
             if not rest:
                 return replacement.tree
@@ -132,8 +132,8 @@ class BooleanLanguage:
     constants: bool = True
 
     def __post_init__(self):
-        object.__setattr__(self, 'variables', tuple(self.variables))
-        object.__setattr__(self, 'operations', tuple(self.operations))
+        object.__setattr__(self, 'variables', ordered_tuple(self.variables))
+        object.__setattr__(self, 'operations', ordered_tuple(self.operations))
         if not self.variables or len(set(self.variables)) != len(self.variables):
             raise ValueError('distinct variables required')
         for name in self.variables:
@@ -232,7 +232,7 @@ class BooleanSubstituteReport:
 
 
 def _validated_inputs(target, language, inputs):
-    rows = tuple(dict(row) for row in inputs)
+    rows = tuple(dict(row) for row in ordered_tuple(inputs))
     variables = set(language.variables)
     if not _variables(target.tree) <= variables:
         raise ValueError('target must use declared variables')

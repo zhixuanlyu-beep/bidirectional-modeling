@@ -7,7 +7,7 @@ from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_re
 from .provenance import context_fingerprint
 from .search import (DescriptionLength, ExperimentHypothesisSearch, SearchHypothesis,
                      SearchProtocol, _name, _natural)
-from .structural import callable_signature, fingerprint_value, isolated_copy
+from .structural import callable_signature, fingerprint_value, isolated_copy, ordered_tuple
 
 
 @dataclass(frozen=True)
@@ -39,6 +39,10 @@ class ModelSearchCandidate:
     description: DescriptionLength
     commitments: Tuple[str, ...] = ()
     materials: Tuple[str, ...] = ()
+
+    def __post_init__(self):
+        object.__setattr__(self, 'commitments', ordered_tuple(self.commitments))
+        object.__setattr__(self, 'materials', ordered_tuple(self.materials))
 
 
 @dataclass(frozen=True)
@@ -155,7 +159,7 @@ class ExecutableSearchAdapter:
         if backend not in ('scan','indexed'):
             raise ValueError('backend must be scan or indexed')
         _name(target)
-        candidates, cases, world_answers = tuple(candidates), tuple(cases), tuple(world_answers)
+        candidates, cases, world_answers = ordered_tuple(candidates), ordered_tuple(cases), ordered_tuple(world_answers)
         if len(world_answers) != len(protocol.worlds):
             raise ValueError('target answer table must cover the response universe')
         for answer in world_answers:
@@ -187,4 +191,3 @@ class ExecutableSearchAdapter:
             hypotheses.append(hypothesis)
         search = base.with_hypotheses(tuple(hypotheses))
         return ModelSearchResult(search,used,tuple(bindings),tuple(diagnostics))
-

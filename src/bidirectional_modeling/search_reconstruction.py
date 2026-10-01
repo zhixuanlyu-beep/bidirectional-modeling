@@ -1,4 +1,5 @@
 """Explicit commitment rewrites, independent of model parentage and complexity."""
+from .structural import ordered_tuple
 from dataclasses import dataclass
 
 from .search import SearchHypothesis, _name
@@ -13,7 +14,7 @@ class ReconstructionRule:
     def __post_init__(self):
         _name(self.name)
         for field in ('withdraw','add'):
-            values = tuple(getattr(self,field))
+            values = ordered_tuple(getattr(self,field))
             for value in values:
                 _name(value)
             if len(values) != len(set(values)):
@@ -33,4 +34,4 @@ class ReconstructionRule:
         commitments = tuple(dict.fromkeys(
             tuple(c for c in parent.commitments if c not in self.withdraw)+self.add))
         return SearchHypothesis(name,world,macro_answer,description,commitments,
-                                parent.materials if materials is None else tuple(materials))
+                                parent.materials if materials is None else ordered_tuple(materials))

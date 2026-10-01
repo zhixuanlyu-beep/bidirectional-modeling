@@ -8,7 +8,7 @@ from enum import Enum
 from types import MappingProxyType
 
 from .search import SearchBudgetExceeded, SearchProtocol, SearchWorkBudget, _name
-from .structural import fingerprint_value
+from .structural import fingerprint_value, ordered_tuple
 
 
 class ContextChange(str, Enum):
@@ -33,7 +33,7 @@ class ModelingContext:
             _name(value)
         if not isinstance(self.protocol, SearchProtocol):
             raise TypeError('context requires a search protocol')
-        object.__setattr__(self, 'objects', tuple(self.objects))
+        object.__setattr__(self, 'objects', ordered_tuple(self.objects))
         for value in self.objects:
             _name(value)
         if len(set(self.objects)) != len(self.objects):
@@ -60,7 +60,7 @@ class ContextTransition:
         if not isinstance(self.kind, ContextChange):
             raise TypeError('use ContextChange')
         for field, size in (('experiments', 2), ('responses', 3), ('commitments', 2)):
-            rows = tuple(tuple(row) for row in getattr(self, field))
+            rows = tuple(ordered_tuple(row) for row in ordered_tuple(getattr(self, field)))
             if any(len(row) != size for row in rows):
                 raise ValueError('malformed context translation')
             for row in rows:

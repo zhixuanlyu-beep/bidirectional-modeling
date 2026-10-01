@@ -6,7 +6,7 @@ from .search import (ExperimentHypothesisSearch, SearchBudgetExceeded, SearchHyp
 from .search_adapter import ExecutableSearchAdapter, model_declaration_fingerprint, _promote_prediction
 from .search_queries import (ConstraintQuery, LowerSubstituteQuery, QueryResult, QueryStatus,
                              _query_scope)
-from .structural import fingerprint_value, isolated_copy
+from .structural import fingerprint_value, isolated_copy, ordered_tuple
 from .search_partial import collect_partial_prediction, PartialPredictionResult
 
 
@@ -33,11 +33,11 @@ class LazyExecutableSearch:
 
     def __init__(self, protocol, candidates, cases, *, target, world_answers,
                  backend='scan', evaluator=None):
-        self._candidates = isolated_copy(tuple(candidates), purpose='lazy candidates')
-        self._cases = isolated_copy(tuple(cases), purpose='lazy cases')
+        self._candidates = isolated_copy(ordered_tuple(candidates), purpose='lazy candidates')
+        self._cases = isolated_copy(ordered_tuple(cases), purpose='lazy cases')
         self._protocol = protocol
         self._target = target
-        self._answers = tuple(world_answers)
+        self._answers = ordered_tuple(world_answers)
         self._backend = backend
         self._adapter = ExecutableSearchAdapter(evaluator)
         base = self._adapter.prepare(protocol, (), self._cases, target=target,
@@ -95,7 +95,7 @@ class LazyExecutableSearch:
         if candidate not in candidates:
             raise ValueError('unknown candidate')
         names = tuple(e.name for e in self._protocol.experiments)
-        requested = tuple(experiments)
+        requested = ordered_tuple(experiments)
         if not requested or len(set(requested)) != len(requested) or any(n not in names for n in requested):
             raise ValueError('select distinct experiments from the declared domain')
         budget = budget if budget is not None else SearchWorkBudget()
@@ -151,7 +151,7 @@ class LazyExecutableSearch:
         _natural(max_simulations)
         self._check_declaration()
         budget = budget if budget is not None else SearchWorkBudget()
-        evidence = tuple(evidence)
+        evidence = ordered_tuple(evidence)
         excluded, matching, certificates, diagnostics = [], [], [], []
         used, reason = 0, 'completed'
         try:

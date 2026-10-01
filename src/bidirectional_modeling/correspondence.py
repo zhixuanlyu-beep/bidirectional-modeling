@@ -28,6 +28,7 @@ from .provenance import (
     safe_observed_model_fingerprint as _safe_model_evidence_fingerprint,
 )
 from .structural import (
+    ordered_tuple,
     callable_fingerprint,
     fingerprint_value,
     freeze_value,
@@ -54,6 +55,7 @@ class Scale:
     equivalence: EquivalenceSpec
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, 'observables', ordered_tuple(self.observables))
         if not isinstance(self.name, str) or not self.name:
             raise ValueError("scale name must be a non-empty string")
         if not self.observables:
@@ -100,6 +102,7 @@ class Correspondence:
     scenario_projection_id: Optional[str] = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, 'assumptions', ordered_tuple(self.assumptions))
         if not self.name:
             raise ValueError("correspondence name must be non-empty")
         if self.lower_scale.name == self.upper_scale.name:
@@ -874,7 +877,7 @@ class CorrespondenceValidator:
     ) -> CorrespondenceSuiteCertificate:
         """Validate calibration and holdout cases under one shared budget."""
 
-        cases = tuple(cases)
+        cases = ordered_tuple(cases)
         if not cases:
             raise ValueError("a correspondence validation suite cannot be empty")
         names = [item.name for item in cases]
