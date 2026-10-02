@@ -21,7 +21,7 @@ from .core import (
     Snapshot,
     Trace,
 )
-from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_result
+from .evaluation import SatisfactionEvaluator, _checked_trace_batch
 from .provenance import (
     context_fingerprint,
     safe_context_fingerprint,
@@ -569,9 +569,7 @@ class CorrespondenceValidator:
             try:
                 batch = self.evaluator.collect(model, context, horizon,
                     replace(budget, max_simulations=allowance))
-                batch = _checked_evaluator_result(batch, TraceBatch, allowance)
-                if not batch.binds(model, context, horizon):
-                    raise ValueError("collected batch does not bind this model, context and horizon")
+                batch = _checked_trace_batch(batch, model, context, horizon, allowance)
                 return batch, batch.simulations_used
             except Exception as error:
                 # A failed callback may have used any portion of its allowance.
