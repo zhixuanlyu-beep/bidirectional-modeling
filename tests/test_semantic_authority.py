@@ -123,7 +123,7 @@ class RoundTripBoundaries(unittest.TestCase):
             (model(),), Hypotheses())
         self.assertFalse(report.compatibility_passed)
         self.assertEqual(report.semantic_preservation, (False,))
-        self.assertEqual(report.interpretations[0].identification_status, 'unique')
+        self.assertEqual(report.interpretations[0].identification_status, 'undecided')
 
     def test_bad_collection_outputs_never_start_the_second_comparison(self):
         m = model()

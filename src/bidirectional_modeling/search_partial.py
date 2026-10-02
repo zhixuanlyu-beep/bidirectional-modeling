@@ -129,7 +129,7 @@ class _BoundedReplayEvaluator:
                 diagnostics = tuple(d for d in diagnostics if d.code != 'iterator_limit_reached')
             digest = trace_batch_protocol_fingerprint(batch.model_fingerprint,
                 batch.context_fingerprint, batch.horizon, limit, batch.coverage_authority,
-                batch.complete, batch.coverage, tuple(d.code for d in diagnostics))
+                batch.complete, batch.coverage, tuple(d.code for d in diagnostics), batch.traces)
             return replace(batch, simulation_limit=limit, protocol_fingerprint=digest,
                            diagnostics=diagnostics)
         return batch

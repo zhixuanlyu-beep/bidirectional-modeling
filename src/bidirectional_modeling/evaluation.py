@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -18,6 +17,7 @@ from .core import (
     ResourceBudget,
     SatisfactionCertificate,
     Trace,
+    _nonnegative_number,
 )
 from .provenance import (
     safe_context_fingerprint,
@@ -92,6 +92,7 @@ class TraceBatch:
             self.complete,
             self.coverage,
             tuple(d.code for d in self.diagnostics),
+            self.traces,
         )
         if expected_protocol != self.protocol_fingerprint:
             raise ValueError(
@@ -190,6 +191,7 @@ def _trace_batch_binding_errors(
         batch.complete,
         batch.coverage,
         tuple(d.code for d in batch.diagnostics),
+        batch.traces,
     )
     if batch.protocol_fingerprint != expected_protocol:
         errors.append("trace batch metadata changed after collection")
@@ -237,6 +239,7 @@ class SatisfactionEvaluator:
             complete,
             coverage,
             tuple(d.code for d in final_boundaries),
+            traces,
         )
         return TraceBatch(
             traces=traces,
@@ -611,8 +614,7 @@ class SatisfactionEvaluator:
 
         try:
             model_cost = model.metrics.cost
-            if math.isnan(float(model_cost)) or model_cost < 0:
-                raise ValueError("candidate cost must be a non-negative number")
+            _nonnegative_number(model_cost, label='candidate cost')
         except Exception as error:
             model_cost = "unavailable"
             checks.append(
@@ -799,7 +801,7 @@ class SatisfactionEvaluator:
         boundaries = tuple(d.detail for d in diagnostics)
         trace_protocol_digest = trace_batch_protocol_fingerprint(
             model_digest, context_digest, spec.horizon, budget.max_simulations,
-            "none", False, 0.0, tuple(d.code for d in diagnostics))
+            "none", False, 0.0, tuple(d.code for d in diagnostics), ())
         protocol_digest = satisfaction_protocol_fingerprint(
             spec_digest,
             model_digest,

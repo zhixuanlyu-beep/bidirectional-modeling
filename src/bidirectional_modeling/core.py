@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from fractions import Fraction
-from typing import Any, Callable, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, Iterable, Mapping, Optional, Protocol, Sequence, Tuple, Union
 
 from .structural import (
     ordered_tuple,
@@ -26,6 +26,17 @@ from .structural import (
 
 Snapshot = Mapping[str, Any]
 State = Mapping[str, Any]
+Numeric = Union[int, float, Fraction]
+
+
+def _nonnegative_number(value, *, label, allow_infinity=False):
+    """Preserve declared exact numbers; floats keep their represented value."""
+    if type(value) not in (int, float, Fraction):
+        raise TypeError('%s must be an int, float or Fraction' % label)
+    if value < 0 or (type(value) is float and (
+            math.isnan(value) or (math.isinf(value) and not allow_infinity))):
+        raise ValueError('%s must be non-negative%s' % (label, '' if allow_infinity else ' and finite'))
+    return value
 
 
 class UndefinedTransition(LookupError):
@@ -115,7 +126,7 @@ class ScenarioKey:
 class ResourceBudget:
     max_candidates: int = 100
     max_simulations: int = 10_000
-    max_cost: float = math.inf
+    max_cost: Numeric = math.inf
 
     def __post_init__(self) -> None:
         if (
@@ -127,10 +138,7 @@ class ResourceBudget:
             raise TypeError("candidate and simulation budget limits must be integers")
         if self.max_candidates <= 0 or self.max_simulations <= 0:
             raise ValueError("budget limits must be positive")
-        max_cost = float(self.max_cost)
-        if math.isnan(max_cost) or max_cost < 0:
-            raise ValueError("max_cost must be non-negative")
-        object.__setattr__(self, "max_cost", max_cost)
+        _nonnegative_number(self.max_cost, label='max_cost', allow_infinity=True)
 
 
 @dataclass(frozen=True)
@@ -166,41 +174,19 @@ class Context:
     def semantic_signature(self) -> Tuple[Any, ...]:
         """Canonical identity for the assumptions and domain of one evaluation."""
 
-        history = tuple(
-            sorted(
-                (
-                    item.statement,
-                    item.hypothesis,
-                    item.annotation,
-                    item.kind,
-                    item.source,
-                )
-                for item in self.history
-            )
-        )
-        interventions = tuple(
-            sorted(
-                (
-                    item.name,
-                    tuple(item.actions),
-                    item.repeat_last,
-                )
-                for item in self.interventions
-            )
-        )
-        scenarios = tuple(
-            sorted(
-                (item.initial_state, item.intervention)
-                for item in self.scenario_manifest
-            )
-        )
+        history = tuple((item.statement, item.hypothesis, item.annotation, item.kind, item.source)
+                        for item in self.history)
+        interventions = tuple((item.name, item.actions, item.repeat_last)
+                              for item in self.interventions)
+        scenarios = tuple((item.initial_state, item.intervention)
+                          for item in self.scenario_manifest)
         return (
             _freeze_context_value(self.environment),
             self.scale,
             history,
             self.observer,
             interventions,
-            tuple(sorted(self.assumptions)),
+            self.assumptions,
             self.include_baseline,
             scenarios,
         )
@@ -208,19 +194,15 @@ class Context:
 
 @dataclass(frozen=True)
 class ModelMetrics:
-    cost: float
-    complexity: float
-    risk: float
+    cost: Numeric
+    complexity: Numeric
+    risk: Numeric
 
     def __post_init__(self) -> None:
-        values = tuple(float(item) for item in (self.cost, self.complexity, self.risk))
-        if any(not math.isfinite(item) or item < 0 for item in values):
-            raise ValueError("model metrics must be finite and non-negative")
-        object.__setattr__(self, "cost", values[0])
-        object.__setattr__(self, "complexity", values[1])
-        object.__setattr__(self, "risk", values[2])
+        for name in ('cost', 'complexity', 'risk'):
+            _nonnegative_number(getattr(self, name), label='model metric '+name)
 
-    def as_tuple(self) -> Tuple[float, float, float]:
+    def as_tuple(self) -> Tuple[Numeric, Numeric, Numeric]:
         return self.cost, self.complexity, self.risk
 
 
@@ -887,7 +869,7 @@ class SatisfactionCertificate:
     context_fingerprint: str
     trace_batch_fingerprint: str
     protocol_fingerprint: str
-    max_cost: float
+    max_cost: Numeric
     complete: bool = True
     coverage_authority: str = "candidate-enumeration"
     charged_simulations: Optional[int] = None
@@ -938,10 +920,7 @@ class SatisfactionCertificate:
             ("satisfaction protocol fingerprint", self.protocol_fingerprint),
         ):
             validate_fingerprint(fingerprint, purpose=label)
-        max_cost = float(self.max_cost)
-        if math.isnan(max_cost) or max_cost < 0:
-            raise ValueError("certificate max_cost must be non-negative")
-        object.__setattr__(self, "max_cost", max_cost)
+        _nonnegative_number(self.max_cost, label='certificate max_cost', allow_infinity=True)
         from .provenance import satisfaction_protocol_fingerprint
 
         expected_protocol = satisfaction_protocol_fingerprint(
@@ -990,7 +969,7 @@ class SatisfactionCertificate:
     def binds_trace_batch(self, batch: Any) -> bool:
         """Whether this certificate was produced from the supplied trace batch."""
 
-        return (
+        metadata_matches = (
             getattr(batch, "protocol_fingerprint", None)
             == self.trace_batch_fingerprint
             and getattr(batch, "horizon", None) == self.horizon
@@ -1001,6 +980,16 @@ class SatisfactionCertificate:
             and getattr(batch, "context_fingerprint", None)
             == self.context_fingerprint
         )
+        if not metadata_matches:
+            return False
+        from .provenance import trace_batch_protocol_fingerprint
+        try:
+            return batch.protocol_fingerprint == trace_batch_protocol_fingerprint(
+                batch.model_fingerprint, batch.context_fingerprint, batch.horizon,
+                batch.simulation_limit, batch.coverage_authority, batch.complete,
+                batch.coverage, tuple(d.code for d in batch.diagnostics), batch.traces)
+        except Exception:
+            return False
 
 
 @dataclass(frozen=True)
@@ -1019,6 +1008,10 @@ class Counterexample:
     violated: Tuple[str, ...] = ()
     suggested_refinements: Tuple[str, ...] = ()
     blocking: bool = True
+
+    def __post_init__(self):
+        if type(self.blocking) is not bool:
+            raise TypeError('counterexample blocking must be an explicit boolean')
 
 
 @dataclass(frozen=True)

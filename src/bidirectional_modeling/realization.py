@@ -21,6 +21,15 @@ from .core import (
 )
 from .evaluation import SatisfactionEvaluator, _checked_evaluator_result, _checked_satisfaction_result
 from ._generation import CandidateStream
+from .provenance import (safe_macro_spec_fingerprint, safe_context_fingerprint,
+                         _model_input_snapshot, _model_input_unchanged)
+
+
+def _probe_flags(probes):
+    flags = tuple(getattr(probe, 'blocking', True) for probe in probes)
+    if any(type(flag) is not bool for flag in flags):
+        raise TypeError('probe blocking must be an explicit boolean')
+    return flags
 
 
 class CandidateGenerator(Protocol):
@@ -113,6 +122,7 @@ class Realizer:
     ) -> None:
         self.evaluator = evaluator or SatisfactionEvaluator()
         self.probes = ordered_tuple(probes)
+        _probe_flags(self.probes)
 
     def realize(
         self,
@@ -122,6 +132,8 @@ class Realizer:
         budget: Optional[ResourceBudget] = None,
     ) -> RealizationResult:
         budget = budget or ResourceBudget()
+        required_flags = _probe_flags(self.probes)
+        initial_scope = (safe_macro_spec_fingerprint(spec), safe_context_fingerprint(context))
         def factory():
             return source.generate(spec, context, budget) if hasattr(source, "generate") else source
         stream = CandidateStream(factory, budget.max_candidates)
@@ -139,6 +151,7 @@ class Realizer:
             except StopIteration:
                 break
             searched += 1
+            input_snapshot = _model_input_snapshot(model)
             candidate_budget = replace(budget, max_simulations=remaining_simulations)
             reserved = 0
             try:
@@ -172,12 +185,11 @@ class Realizer:
                     + certificate.failure_boundaries) or "verification incomplete"))
             if certificate.satisfied:
                 for probe_index, probe in enumerate(self.probes):
-                    required = getattr(probe, "blocking", True)
+                    required = required_flags[probe_index]
                     if remaining_simulations <= 0:
                         diagnostics.append(VerificationIssue(
                             "probe-budget", "configured probes could not all run"))
-                        unresolved = unresolved or any(
-                            getattr(p, "blocking", True) for p in self.probes[probe_index:])
+                        unresolved = unresolved or any(required_flags[probe_index:])
                         truncated = True
                         break
                     probe_budget = replace(budget, max_simulations=remaining_simulations)
@@ -200,8 +212,7 @@ class Realizer:
                     except Exception as error:
                         diagnostics.append(VerificationIssue(
                             "probe-execution", str(error), {"probe": type(probe).__name__}))
-                        unresolved = unresolved or any(
-                            getattr(p, "blocking", True) for p in self.probes[probe_index:])
+                        unresolved = unresolved or any(required_flags[probe_index:])
                         # An arbitrary probe may have consumed any portion of the
                         # budget before raising. Fail closed and reserve all of
                         # the remaining allowance instead of risking overspend.
@@ -211,6 +222,11 @@ class Realizer:
                         break
                     simulations_used += outcome.simulations_used
                     remaining_simulations -= outcome.simulations_used
+                    if (outcome.certificate is None and outcome.counterexample is None
+                            and not outcome.diagnostics):
+                        unresolved = unresolved or required
+                        diagnostics.append(VerificationIssue('probe-verification',
+                            'probe returned no completed claim', {'probe': type(probe).__name__}))
                     if outcome.certificate is not None:
                         probe_certificates.append(outcome.certificate)
                         if not outcome.certificate.complete:
@@ -237,11 +253,25 @@ class Realizer:
             if unresolved:
                 undecided.append(evaluation)
             elif certificate.satisfied and not any(item.blocking for item in counterexamples):
-                accepted.append(evaluation)
+                accepted.append((evaluation, input_snapshot))
             else:
-                rejected.append(evaluation)
+                rejected.append((evaluation, input_snapshot))
 
         truncated = truncated or not stream.complete
+
+        scope_unchanged = initial_scope == (safe_macro_spec_fingerprint(spec),
+                                             safe_context_fingerprint(context))
+        for bucket in (accepted, rejected):
+            current = []
+            for evaluation, snapshot in bucket:
+                if (scope_unchanged and evaluation.certificate.binds_specification(spec)
+                        and evaluation.certificate.binds_context(context)
+                        and _model_input_unchanged(evaluation.model, snapshot)):
+                    current.append(evaluation)
+                else:
+                    undecided.append(replace(evaluation, diagnostics=evaluation.diagnostics + (
+                        VerificationIssue('final-binding', 'verification inputs changed before the result was returned'),)))
+            bucket[:] = current
 
         frontier, dominated = pareto_partition(accepted)
         return RealizationResult(
