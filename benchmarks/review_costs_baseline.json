@@ -1,0 +1,131 @@
+{
+  "constructor_cost_included": false,
+  "constructors_counted_separately": true,
+  "timing_is_diagnostic": true,
+  "results": [
+    {
+      "kind": "query",
+      "worlds": 10,
+      "query_operations": 4,
+      "verification_operations": 2
+    },
+    {
+      "kind": "relation",
+      "worlds": 10,
+      "preparation_operations": 40
+    },
+    {
+      "kind": "query",
+      "worlds": 1000,
+      "query_operations": 4,
+      "verification_operations": 2
+    },
+    {
+      "kind": "relation",
+      "worlds": 1000,
+      "preparation_operations": 4000
+    },
+    {
+      "kind": "evidence_validation",
+      "worlds": 10,
+      "position": "first",
+      "operations": 12,
+      "repeated_operations": 14
+    },
+    {
+      "kind": "evidence_validation",
+      "worlds": 10,
+      "position": "last",
+      "operations": 66,
+      "repeated_operations": 86
+    },
+    {
+      "kind": "core_reduction",
+      "worlds": 10,
+      "operations": 148,
+      "repeated_operations": 238
+    },
+    {
+      "kind": "evidence_validation",
+      "worlds": 1000,
+      "position": "first",
+      "operations": 12,
+      "repeated_operations": 14
+    },
+    {
+      "kind": "evidence_validation",
+      "worlds": 1000,
+      "position": "last",
+      "operations": 6006,
+      "repeated_operations": 8006
+    },
+    {
+      "kind": "core_reduction",
+      "worlds": 1000,
+      "operations": 13018,
+      "repeated_operations": 22018
+    },
+    {
+      "kind": "consistent_conflict",
+      "worlds": 1000,
+      "operations": 12
+    },
+    {
+      "kind": "conflict_verification",
+      "worlds": 1000,
+      "operations": 2013
+    },
+    {
+      "kind": "absence_verification",
+      "worlds": 1000,
+      "search_constructions": 0
+    },
+    {
+      "kind": "adapter",
+      "candidates": 1,
+      "search_constructions": 2
+    },
+    {
+      "kind": "screen",
+      "candidates": 4,
+      "cache": "cold",
+      "simulations": 8,
+      "catalogue_declaration_hashes": 8
+    },
+    {
+      "kind": "screen",
+      "candidates": 4,
+      "cache": "warm",
+      "simulations": 0,
+      "catalogue_declaration_hashes": 8
+    },
+    {
+      "kind": "screen",
+      "candidates": 8,
+      "cache": "cold",
+      "simulations": 16,
+      "catalogue_declaration_hashes": 16
+    },
+    {
+      "kind": "screen",
+      "candidates": 8,
+      "cache": "warm",
+      "simulations": 0,
+      "catalogue_declaration_hashes": 16
+    },
+    {
+      "kind": "screen",
+      "candidates": 16,
+      "cache": "cold",
+      "simulations": 32,
+      "catalogue_declaration_hashes": 32
+    },
+    {
+      "kind": "screen",
+      "candidates": 16,
+      "cache": "warm",
+      "simulations": 0,
+      "catalogue_declaration_hashes": 32
+    }
+  ]
+}

@@ -27,6 +27,7 @@ class ModelCertificateBinding(unittest.TestCase):
         changes = (
             replace(original, states={'s': {'x': 2}}),
             replace(original, actions=('noop', 'other')),
+            replace(original, states={'s': {'x': 1}, 't': {'x': 1}}, initial_states=('t', 's')),
             replace(original, readout=lambda s, c: {'x': 1, 'hidden': 2}),
             replace(original, transition=lambda s, a, c: {'x': 2}),
             replace(original, applicable=lambda s, a, c: True),

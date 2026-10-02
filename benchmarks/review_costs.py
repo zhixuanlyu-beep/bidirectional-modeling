@@ -12,7 +12,7 @@ from unittest.mock import patch
 from bidirectional_modeling import (ConstraintQuery, Context, DescriptionLength, ExperimentHypothesisSearch, ResponseConstraint, ScenarioKey, SearchExperiment, SearchObservation, SearchProtocol, SearchWorkBudget)
 from bidirectional_modeling.search_lazy import (LazyExecutableSearch)
 from bidirectional_modeling.search_adapter import (ExecutableSearchAdapter, ModelSearchCandidate, ModelSearchCase)
-from bidirectional_modeling.search_queries import (verify_query_result)
+from bidirectional_modeling.search_queries import (FiniteSearchQueryBackend, verify_query_result)
 from bidirectional_modeling.context_network import (
     ContextChange, ContextTransition, ModelingContext, validate_context_transition,
 )
@@ -53,6 +53,38 @@ def run():
         assert report.status == 'valid' and budget.work.total <= 4*size
         rows.append(dict(kind='relation', worlds=size, preparation_operations=budget.work.total,
                          seconds=perf_counter()-started))
+    for size in (10, 1000):
+        p = SearchProtocol('scope', 'code',
+            (SearchExperiment('a', 'read'), SearchExperiment('b', 'read')),
+            tuple((str(i), str(i)) for i in range(size)),
+            (ResponseConstraint('all', tuple(range(size))), ResponseConstraint('first', (0,))))
+        problem = ExperimentHypothesisSearch(p, (), 'out')
+        for position in ('first', 'last'):
+            row = 0 if position == 'first' else size - 1
+            data = (SearchObservation('a', str(row), 'lab'),)
+            budget = SearchWorkBudget()
+            assert problem.learn_conflict(('all',), data, budget=budget) is None
+            # Re-enable only the old repeated validation for the cost control.
+            execute = FiniteSearchQueryBackend._execute
+            def repeated(backend, problem, query, **kwargs):
+                kwargs.pop('_evidence_snapshot', None)
+                return execute(backend, problem, query, **kwargs)
+            control = SearchWorkBudget()
+            with patch.object(FiniteSearchQueryBackend, '_execute', repeated):
+                assert problem.learn_conflict(('all',), data, budget=control) is None
+            assert control.work.response_checks - budget.work.response_checks == 2 * (row + 1)
+            rows.append(dict(kind='evidence_validation', worlds=size, position=position,
+                             operations=budget.work.total, repeated_operations=control.work.total))
+        data = tuple(SearchObservation(e, str(size - 1), 'lab') for e in ('a', 'b'))
+        budget = SearchWorkBudget()
+        certificate = problem.learn_conflict(('all', 'first'), data, budget=budget)
+        control = SearchWorkBudget()
+        with patch.object(FiniteSearchQueryBackend, '_execute', repeated):
+            assert problem.learn_conflict(('all', 'first'), data, budget=control) == certificate
+        assert certificate.commitments == ('first',) and len(certificate.evidence) == 1
+        assert budget.work.total < control.work.total
+        rows.append(dict(kind='core_reduction', worlds=size, operations=budget.work.total,
+                         repeated_operations=control.work.total))
     size = 1000
     p = SearchProtocol('scope', 'code', (SearchExperiment('a', 'read'),),
         tuple((str(i),) for i in range(size)),
@@ -61,13 +93,13 @@ def run():
     budget = SearchWorkBudget()
     assert problem.learn_conflict(('all',), (SearchObservation('a', '0', 'lab'),),
                                   budget=budget) is None
-    assert budget.work.total <= 20
+    assert budget.work.total <= 12
     rows.append(dict(kind='consistent_conflict', worlds=size, operations=budget.work.total))
     data = (SearchObservation('a', '1', 'lab'),)
     certificate = problem.learn_conflict(('first',), data)
     budget = SearchWorkBudget()
     assert problem.validates_conflict(certificate, data, budget=budget)
-    assert budget.work.total <= 2020
+    assert budget.work.total <= 2013
     rows.append(dict(kind='conflict_verification', worlds=size, operations=budget.work.total))
     query = ConstraintQuery(('first',), data)
     receipt = problem.query(query)
