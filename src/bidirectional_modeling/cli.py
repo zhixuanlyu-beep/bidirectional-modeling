@@ -98,6 +98,7 @@ def build_demo_report() -> Dict[str, Any]:
                     "horizon": item.certificate.horizon,
                     "spec_fingerprint": item.certificate.spec_fingerprint,
                     "model_fingerprint": item.certificate.model_fingerprint,
+                    "model_declaration_fingerprint": item.certificate.model_declaration_fingerprint,
                     "context_fingerprint": item.certificate.context_fingerprint,
                     "trace_batch_fingerprint": (
                         item.certificate.trace_batch_fingerprint
@@ -143,6 +144,7 @@ def build_demo_report() -> Dict[str, Any]:
                     "requirement_count": item.requirement_count,
                     "spec_fingerprint": item.certificate.spec_fingerprint,
                     "model_fingerprint": item.certificate.model_fingerprint,
+                    "model_declaration_fingerprint": item.certificate.model_declaration_fingerprint,
                     "context_fingerprint": item.certificate.context_fingerprint,
                     "trace_batch_fingerprint": (
                         item.certificate.trace_batch_fingerprint

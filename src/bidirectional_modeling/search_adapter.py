@@ -2,12 +2,12 @@
 from dataclasses import dataclass, replace
 from typing import Optional, Tuple
 
-from .core import Context, ExecutableModel, FiniteStateModel, ResourceBudget, ScenarioKey
+from .core import Context, ExecutableModel, ResourceBudget, ScenarioKey
 from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_evaluator_result
-from .provenance import context_fingerprint
+from .provenance import context_fingerprint, model_declaration_fingerprint
 from .search import (DescriptionLength, ExperimentHypothesisSearch, SearchHypothesis,
                      SearchProtocol, _name, _natural)
-from .structural import callable_signature, fingerprint_value, isolated_copy, ordered_tuple
+from .structural import fingerprint_value, isolated_copy, ordered_tuple
 
 
 @dataclass(frozen=True)
@@ -54,22 +54,6 @@ class ModelSearchResult:
     diagnostics: tuple
 
 
-def model_declaration_fingerprint(model):
-    """Bind inspectable configuration; opaque adapters must declare a stable signature."""
-    if type(model) is FiniteStateModel:
-        declaration = (
-            model.name, model.states, model.initial_states, model.actions,
-            model.metrics.as_tuple(), model.assumptions, model.failure_boundaries,
-            model.capabilities,
-            callable_signature(model.transition), callable_signature(model.readout),
-            None if model.applicable is None else callable_signature(model.applicable),
-        )
-    else:
-        signature = getattr(model, 'search_signature', None)
-        if not callable(signature):
-            raise ValueError('third-party model requires search_signature()')
-        declaration = (type(model).__module__,type(model).__qualname__,model.name,signature())
-    return fingerprint_value(declaration)
 
 
 class PredictionDomainError(ValueError):

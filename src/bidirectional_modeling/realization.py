@@ -266,6 +266,7 @@ class Realizer:
             for evaluation, snapshot in bucket:
                 if (scope_unchanged and evaluation.certificate.binds_specification(spec)
                         and evaluation.certificate.binds_context(context)
+                        and evaluation.certificate.binds_model(evaluation.model)
                         and _model_input_unchanged(evaluation.model, snapshot)):
                     current.append(evaluation)
                 else:

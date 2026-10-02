@@ -644,6 +644,7 @@ class FiniteStateModel:
     failure_boundaries: Tuple[str, ...] = ()
     capabilities: Tuple[str, ...] = ()
     applicable: Optional[Applicability] = None
+    callback_semantic_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         for name in ('initial_states', 'actions', 'assumptions', 'failure_boundaries', 'capabilities'):
@@ -866,6 +867,7 @@ class SatisfactionCertificate:
     horizon: int
     spec_fingerprint: str
     model_fingerprint: str
+    model_declaration_fingerprint: str
     context_fingerprint: str
     trace_batch_fingerprint: str
     protocol_fingerprint: str
@@ -915,6 +917,7 @@ class SatisfactionCertificate:
         for label, fingerprint in (
             ("macro specification fingerprint", self.spec_fingerprint),
             ("model evidence fingerprint", self.model_fingerprint),
+            ("model declaration fingerprint", self.model_declaration_fingerprint),
             ("context fingerprint", self.context_fingerprint),
             ("trace batch fingerprint", self.trace_batch_fingerprint),
             ("satisfaction protocol fingerprint", self.protocol_fingerprint),
@@ -929,11 +932,20 @@ class SatisfactionCertificate:
             self.context_fingerprint,
             self.trace_batch_fingerprint,
             self.max_cost,
+            self.model_declaration_fingerprint,
         )
         if expected_protocol != self.protocol_fingerprint:
             raise ValueError(
                 "satisfaction certificate fields do not match its protocol fingerprint"
             )
+
+    def binds_model(self, model: ExecutableModel) -> bool:
+        from .provenance import model_declaration_fingerprint
+
+        try:
+            return model_declaration_fingerprint(model) == self.model_declaration_fingerprint
+        except Exception:
+            return False
 
     def binds_specification(self, spec: MacroSpec) -> bool:
         from .provenance import macro_spec_fingerprint

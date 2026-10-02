@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Optional, Tuple
 
 from .core import Context, EquivalenceSpec, ExecutableModel, FiniteStateModel, MacroSpec, Trace
-from .structural import fingerprint_value, freeze_value, ordered_tuple
+from .structural import callable_signature, fingerprint_value, freeze_value, ordered_tuple
 
 
 def _safe_model_name(model: ExecutableModel) -> str:
@@ -78,6 +78,37 @@ def observed_model_fingerprint(
         ("observed-model-v3", type(model).__module__, type(model).__qualname__,
          _safe_model_name(model), resource_signature, horizon, _trace_signatures(traces)),
         purpose="model evidence fingerprint",
+    )
+
+
+def model_declaration_fingerprint(model):
+    """Bind inspectable configuration; opaque adapters must declare a stable signature."""
+    if type(model) is FiniteStateModel:
+        declaration = (
+            model.name, model.states, model.initial_states, model.actions,
+            model.metrics.as_tuple(), model.assumptions, model.failure_boundaries,
+            model.capabilities,
+            None if vars(model).get("simulate") is None else callable_signature(vars(model)["simulate"], semantic_id=model.callback_semantic_id),
+            callable_signature(model.transition, semantic_id=model.callback_semantic_id), callable_signature(model.readout, semantic_id=model.callback_semantic_id),
+            None if model.applicable is None else callable_signature(model.applicable, semantic_id=model.callback_semantic_id),
+        )
+    else:
+        signature = getattr(model, 'search_signature', None)
+        if not callable(signature):
+            raise ValueError('third-party model requires search_signature()')
+        declaration = (type(model).__module__,type(model).__qualname__,model.name,
+                       None if getattr(model, "metrics", None) is None else model.metrics.as_tuple(),
+                       signature())
+    return fingerprint_value(("model-declaration-v1", declaration))
+
+
+def safe_model_declaration_fingerprint(model):
+    """Return a digest and diagnostic when declaration identity is unavailable."""
+    return _safe_fingerprint(
+        lambda: model_declaration_fingerprint(model),
+        ("uncertifiable-model-declaration-v1", type(model).__module__,
+         type(model).__qualname__, _safe_model_name(model)),
+        "model declaration",
     )
 
 
@@ -230,17 +261,19 @@ def satisfaction_protocol_fingerprint(
     context_digest: str,
     trace_batch_digest: str,
     max_cost: float,
+    model_declaration_digest: str,
 ) -> str:
     """Fingerprint the inputs and resource constraint of one satisfaction run."""
 
     return fingerprint_value(
         (
-            "satisfaction-evaluator-v2",
+            "satisfaction-evaluator-v3",
             spec_digest,
             model_digest,
             context_digest,
             trace_batch_digest,
             max_cost,
+            model_declaration_digest,
         ),
         purpose="satisfaction evaluation protocol fingerprint",
     )

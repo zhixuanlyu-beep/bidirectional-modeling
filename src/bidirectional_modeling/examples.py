@@ -145,6 +145,7 @@ def software_scenario() -> Tuple[MacroSpec, Context, Tuple[FiniteStateModel, ...
             ModelMetrics(cost=1.0, complexity=0.8, risk=2.0),
             failure_boundaries=("loses state after two ticks",),
             capabilities=("short-term work completion",),
+            callback_semantic_id="fragile-safe-transition-v1",
         ),
         FiniteStateModel(
             "drop-and-report-worker",

@@ -162,7 +162,8 @@ class SatisfactionProvenanceTests(unittest.TestCase):
             callback_context.environment["nested"]["owner"] = "model mutation"
             return original_transition(state, action, callback_context)
 
-        model = replace(self.model, transition=mutating_transition)
+        model = replace(self.model, transition=mutating_transition,
+                        callback_semantic_id="isolated-transition-v1")
         batch = self.evaluator.collect(model, context, self.spec.horizon)
         batch_digest = batch.protocol_fingerprint
 

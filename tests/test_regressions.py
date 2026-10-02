@@ -38,6 +38,9 @@ class LazyTwoScenarioModel:
     def __init__(self):
         self.produced = 0
 
+    def search_signature(self):
+        return "lazy-two-scenarios-v1"
+
     def scenario_count(self, context):
         return 2
 
@@ -58,6 +61,10 @@ class TupleTraceModel:
         self.name = name
         self.traces = tuple(traces)
         self.calls = 0
+
+    def search_signature(self):
+        return tuple((t.model_name, t.initial_state, t.intervention,
+                      tuple(dict(s) for s in t.snapshots)) for t in self.traces)
 
     def simulate(self, context, horizon):
         self.calls += 1

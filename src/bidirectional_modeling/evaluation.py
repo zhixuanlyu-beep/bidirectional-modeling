@@ -23,6 +23,7 @@ from .provenance import (
     safe_context_fingerprint,
     safe_macro_spec_fingerprint,
     safe_observed_model_fingerprint,
+    safe_model_declaration_fingerprint,
     satisfaction_protocol_fingerprint,
     trace_batch_protocol_fingerprint,
 )
@@ -147,6 +148,7 @@ def _checked_satisfaction_result(certificate, model, spec, context, budget, batc
     # Only a complete verdict may accept or refute the current declaration.
     if certificate.complete:
         if (certificate.model_name != model.name
+                or not certificate.binds_model(model)
                 or not certificate.binds_context(context)
                 or certificate.max_cost != budget.max_cost):
             raise ValueError('satisfaction certificate does not bind the requested model, context or cost limit')
@@ -589,11 +591,14 @@ class SatisfactionEvaluator:
         budget = budget or ResourceBudget()
         checks = []
         boundaries = list(batch.boundaries)
+        declaration_digest, declaration_error = safe_model_declaration_fingerprint(model)
         spec_digest, spec_error = safe_macro_spec_fingerprint(spec)
         model_digest, model_error = safe_observed_model_fingerprint(
             model, batch.traces, spec.horizon
         )
         context_digest, context_error = safe_context_fingerprint(context)
+        if declaration_error is not None:
+            boundaries.append("model declaration could not be fingerprinted: %s" % declaration_error)
         if spec_error is not None:
             boundaries.append(
                 "macro specification could not be fingerprinted: %s" % spec_error
@@ -606,7 +611,8 @@ class SatisfactionEvaluator:
             for item in initial_binding_errors
         )
         provenance_complete = (
-            spec_error is None
+            declaration_error is None
+            and spec_error is None
             and model_error is None
             and context_error is None
             and not initial_binding_errors
@@ -686,6 +692,11 @@ class SatisfactionEvaluator:
                     )
                 )
 
+        final_declaration, final_declaration_error = safe_model_declaration_fingerprint(model)
+        if final_declaration_error is not None or final_declaration != declaration_digest:
+            provenance_complete = False
+            boundaries.append("model declaration changed or could not be fingerprinted after evaluation")
+
         final_spec_digest, final_spec_error = safe_macro_spec_fingerprint(spec)
         if final_spec_error is not None:
             provenance_complete = False
@@ -742,6 +753,7 @@ class SatisfactionEvaluator:
             context_digest,
             batch.protocol_fingerprint,
             budget.max_cost,
+            declaration_digest,
         )
         return SatisfactionCertificate(
             spec_name=spec.name,
@@ -761,6 +773,7 @@ class SatisfactionEvaluator:
             horizon=spec.horizon,
             spec_fingerprint=spec_digest,
             model_fingerprint=model_digest,
+            model_declaration_fingerprint=declaration_digest,
             context_fingerprint=context_digest,
             trace_batch_fingerprint=batch.protocol_fingerprint,
             protocol_fingerprint=protocol_digest,
@@ -784,6 +797,7 @@ class SatisfactionEvaluator:
             model_name = str(getattr(model, "name"))
         except Exception:
             model_name = type(model).__name__
+        declaration_digest, declaration_error = safe_model_declaration_fingerprint(model)
         spec_digest, spec_error = safe_macro_spec_fingerprint(spec)
         model_digest, model_error = safe_observed_model_fingerprint(
             model, (), spec.horizon
@@ -792,6 +806,7 @@ class SatisfactionEvaluator:
         diagnostics = [TraceDiagnostic('candidate_verification_failed',
             "candidate verification failed before completion: %s" % detail)]
         for code, label, error in (
+            ('model_declaration_binding_failed', 'model declaration', declaration_error),
             ('spec_binding_failed', "macro specification", spec_error),
             ('model_binding_failed', "model evidence", model_error),
             ('context_binding_failed', "context", context_error),
@@ -808,6 +823,7 @@ class SatisfactionEvaluator:
             context_digest,
             trace_protocol_digest,
             budget.max_cost,
+            declaration_digest,
         )
         check = CheckResult(
             name="candidate verification",
@@ -830,6 +846,7 @@ class SatisfactionEvaluator:
             horizon=spec.horizon,
             spec_fingerprint=spec_digest,
             model_fingerprint=model_digest,
+            model_declaration_fingerprint=declaration_digest,
             context_fingerprint=context_digest,
             trace_batch_fingerprint=trace_protocol_digest,
             protocol_fingerprint=protocol_digest,
