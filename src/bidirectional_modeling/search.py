@@ -285,6 +285,21 @@ class HypothesisSearchReport:
 
 
 
+@dataclass(frozen=True)
+class _EvidenceSnapshot:
+    """Private authority for subsets of evidence validated by this invocation.
+
+    Never stored on the problem, returned in receipts, or shared across calls.
+    Protocol declarations are immutable; independent review creates a new snapshot.
+    """
+    protocol: SearchProtocol
+    observations: frozenset
+
+    def covers(self, problem, evidence):
+        return (self.protocol is problem.protocol
+                and all(o in self.observations for o in evidence))
+
+
 class ExperimentHypothesisSearch:
     """Search an explicit catalogue, keeping every structural representative.
 
@@ -431,10 +446,14 @@ class ExperimentHypothesisSearch:
             possible = retained
         return possible
 
-    def _has_world(self, commitments=(), evidence=(), *, budget):
+    def _has_world(self, commitments=(), evidence=(), *, budget,
+                   _snapshot=None, _force_scan=False):
         """Boolean constraint judgment delegates to the bounded query authority."""
         from .search_queries import ConstraintQuery, QueryStatus
-        receipt = self.query(ConstraintQuery(commitments, evidence), budget=budget)
+        from .search_queries import FiniteSearchQueryBackend
+        receipt = FiniteSearchQueryBackend()._execute(
+            self, ConstraintQuery(commitments, evidence), budget=budget,
+            force_scan=_force_scan, _evidence_snapshot=_snapshot)
         if receipt.status is QueryStatus.UNKNOWN:
             raise SearchBudgetExceeded(receipt.reason, receipt.work)
         return receipt.status is QueryStatus.FOUND
@@ -448,21 +467,25 @@ class ExperimentHypothesisSearch:
         budget = budget if budget is not None else SearchWorkBudget()
         budget.consume("certificate_checks")
         evidence = self._evidence(evidence, budget)
+        snapshot = _EvidenceSnapshot(self.protocol, frozenset(evidence))
+        return self._learn_conflict(commitments, evidence, budget, snapshot)
+
+    def _learn_conflict(self, commitments, evidence, budget, snapshot):
         core = tuple(dict.fromkeys(ordered_tuple(commitments)))
         known = {c.name for c in self.protocol.constraints}
         if any(c not in known for c in core):
             raise ValueError("unknown commitment")
-        if (not core or not self._has_world(evidence=evidence, budget=budget)
-                or not self._has_world(core, budget=budget) or self._has_world(core, evidence, budget=budget)):
+        if (not core or not self._has_world(evidence=evidence, budget=budget, _snapshot=snapshot)
+                or not self._has_world(core, budget=budget, _snapshot=snapshot) or self._has_world(core, evidence, budget=budget, _snapshot=snapshot)):
             return None
         for name in tuple(core):
             trial = tuple(c for c in core if c != name)
-            if not self._has_world(trial, evidence, budget=budget):
+            if not self._has_world(trial, evidence, budget=budget, _snapshot=snapshot):
                 core = trial
         support = evidence
         for observation in evidence:
             trial = tuple(o for o in support if o != observation)
-            if not self._has_world(core, trial, budget=budget):
+            if not self._has_world(core, trial, budget=budget, _snapshot=snapshot):
                 support = trial
         return ConflictCertificate(self.protocol.fingerprint, core, support)
 
@@ -472,7 +495,13 @@ class ExperimentHypothesisSearch:
         if not _well_formed_conflict(certificate):
             return False
         budget.consume("certificate_checks")
-        evidence = self._evidence(evidence, budget)
+        evidence = self._evidence(evidence, budget, use_index=False)
+        snapshot = _EvidenceSnapshot(self.protocol, frozenset(evidence))
+        return self._validates_conflict(certificate, evidence, budget, snapshot, force_scan=True)
+
+    def _validates_conflict(self, certificate, evidence, budget, snapshot, *, force_scan=False):
+        if not _well_formed_conflict(certificate):
+            return False
         if certificate.protocol_fingerprint != self.protocol.fingerprint:
             return False
         if not set(certificate.evidence).issubset(evidence):
@@ -482,9 +511,9 @@ class ExperimentHypothesisSearch:
             for c in certificate.commitments
         ):
             return False
-        return bool(self._has_world(evidence=certificate.evidence, budget=budget)
-                    and self._has_world(certificate.commitments, budget=budget)
-                    and not self._has_world(certificate.commitments, certificate.evidence, budget=budget))
+        return bool(self._has_world(evidence=certificate.evidence, budget=budget, _snapshot=snapshot, _force_scan=force_scan)
+                    and self._has_world(certificate.commitments, budget=budget, _snapshot=snapshot, _force_scan=force_scan)
+                    and not self._has_world(certificate.commitments, certificate.evidence, budget=budget, _snapshot=snapshot, _force_scan=force_scan))
 
     def partition(self, experiments=None, *, budget=None) -> Tuple[Tuple[str, ...], ...]:
         """Full E gives theoretical equivalence; a subset gives provisional groups.
@@ -572,11 +601,15 @@ class ExperimentHypothesisSearch:
         measured = tuple(name for name in domain if any(o.experiment == name for o in evidence))
         try:
             evidence = self._evidence(evidence, budget)
+            snapshot = _EvidenceSnapshot(self.protocol, frozenset(evidence))
             full = self.partition(budget=budget)
             observed = self.partition(measured, budget=budget)
             partition_complete = True
             for c in certificates:
-                if self.validates_conflict(c, evidence, budget=budget):
+                if not _well_formed_conflict(c):
+                    continue
+                budget.consume("certificate_checks")
+                if self._validates_conflict(c, evidence, budget, snapshot):
                     active.append(c)
                     if screening_cores is not None and not self._add_screening_core(
                             screening_cores, c.commitments, budget, screening_allowance):
@@ -607,7 +640,8 @@ class ExperimentHypothesisSearch:
                         rejected.append(h.name)
                         # If learning is interrupted the completed rejection remains valid.
                         if learn_conflicts:
-                            c = self.learn_conflict(h.commitments, evidence, budget=budget)
+                            budget.consume("certificate_checks")
+                            c = self._learn_conflict(h.commitments, evidence, budget, snapshot)
                             if c is not None and c not in active:
                                 active.append(c)
                                 if screening_cores is not None and not self._add_screening_core(

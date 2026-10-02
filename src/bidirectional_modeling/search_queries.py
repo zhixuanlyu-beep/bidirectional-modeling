@@ -134,7 +134,8 @@ class FiniteSearchQueryBackend:
     def execute(self, problem, query, *, budget=None):
         return self._execute(problem, query, budget=budget)
 
-    def _execute(self, problem, query, *, budget=None, force_scan=False):
+    def _execute(self, problem, query, *, budget=None, force_scan=False,
+                 _evidence_snapshot=None):
         # Verification reads the original declarations without rebuilding the
         # validated problem or trusting a cached response index.
         budget=budget if budget is not None else SearchWorkBudget()
@@ -145,10 +146,17 @@ class FiniteSearchQueryBackend:
         def result(status,reason,world=None,candidate=None):
             return QueryResult(status,digest,scope,reason,budget.work,world,candidate,nonempty)
 
+        def checked_evidence():
+            if _evidence_snapshot is not None:
+                if not _evidence_snapshot.covers(problem, query.evidence):
+                    raise ValueError('evidence does not belong to this invocation snapshot')
+                return query.evidence
+            return problem._evidence(query.evidence, budget, use_index=not force_scan)
+
         try:
             budget.consume('query_checks')
             if isinstance(query,ConstraintQuery):
-                evidence=problem._evidence(query.evidence,budget,use_index=not force_scan)
+                evidence=checked_evidence()
                 if problem.backend == 'indexed' and not force_scan:
                     possible = problem._worlds(query.commitments, evidence, budget=budget)
                     world = next(iter(possible), None)
@@ -164,7 +172,7 @@ class FiniteSearchQueryBackend:
                 return result(QueryStatus.ABSENT,'finite_domain_exhausted')
 
             if isinstance(query,MacroAlternativeQuery):
-                evidence=problem._evidence(query.evidence,budget,use_index=not force_scan)
+                evidence=checked_evidence()
                 matches = _world_matcher(problem, (), evidence, budget)
                 unknown=False
                 for h in problem.hypotheses:
