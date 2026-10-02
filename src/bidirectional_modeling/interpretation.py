@@ -29,7 +29,8 @@ from .core import (
 from .evaluation import SatisfactionEvaluator, TraceBatch, _checked_trace_batch, _checked_satisfaction_result
 from ._generation import CandidateStream
 from .structural import freeze_value, ordered_tuple, deterministic_repr
-from .provenance import safe_macro_spec_fingerprint, safe_context_fingerprint
+from .provenance import (safe_macro_spec_fingerprint, safe_context_fingerprint,
+                         _model_input_snapshot, _model_input_unchanged)
 
 
 class HypothesisGenerator(Protocol):
@@ -201,6 +202,8 @@ class Interpreter:
         *, observations: Sequence[InterpretationObservation] = (),
     ) -> InterpretationResult:
         budget = budget or ResourceBudget()
+        initial_context = safe_context_fingerprint(context)
+        model_snapshot = _model_input_snapshot(model)
         experiments = ordered_tuple(experiments)
         by_experiment = {e.name: e for e in experiments}
         if len(by_experiment) != len(experiments):
@@ -259,10 +262,12 @@ class Interpreter:
         candidates = []
         stream = CandidateStream(factory, budget.max_candidates)
         names = set()
+        specifications = {}
         for hypothesis in stream:
             if hypothesis.name in names:
                 raise ValueError("duplicate hypothesis name")
             names.add(hypothesis.name)
+            specifications[hypothesis.name] = hypothesis.spec
             for name, allowed in hypothesis.allowed_outcomes.items():
                 if name not in by_experiment or not set(allowed) <= set(by_experiment[name].outcomes):
                     raise ValueError('hypothesis outcome declaration outside experiment domain')
@@ -336,9 +341,47 @@ class Interpreter:
                 direct_intent_evidence=direct, evidence=relevant, caveats=tuple(caveats)))
 
         truncated = truncated or not stream.complete
+        final_context = safe_context_fingerprint(context)
+        inputs_unchanged = (initial_context == final_context
+                            and _model_input_unchanged(model, model_snapshot))
+        def current_verdict(name, certificate):
+            batch = batches.get(certificate.horizon)
+            return (inputs_unchanged and certificate.binds_specification(specifications[name])
+                    and certificate.binds_context(context) and batch is not None
+                    and batch.binds(model, context, certificate.horizon)
+                    and certificate.binds_trace_batch(batch))
+        changed = []
+        current_candidates = []
+        for candidate in candidates:
+            if current_verdict(candidate.hypothesis.name, candidate.certificate):
+                current_candidates.append(candidate)
+            else:
+                changed.append(candidate.hypothesis.name)
+        candidates = current_candidates
+        current_rejected = []
+        for name, certificate in rejected:
+            if current_verdict(name, certificate):
+                current_rejected.append((name, certificate))
+            else:
+                changed.append(name)
+        rejected = current_rejected
+        current_excluded = []
+        for exclusion in excluded:
+            if (inputs_unchanged
+                    and exclusion.context_fingerprint == initial_context[0]
+                    and exclusion.spec_fingerprint == safe_macro_spec_fingerprint(
+                        specifications[exclusion.candidate])[0]):
+                current_excluded.append(exclusion)
+            else:
+                changed.append(exclusion.candidate)
+        excluded = current_excluded
+        if changed:
+            reason = 'verification inputs changed before the result was returned'
+            undecided.extend((name, (reason,)) for name in changed)
+            evaluator_diagnostics.append(VerificationIssue('final-binding', reason))
         candidates.sort(key=lambda item: item.hypothesis.name)
         groups = _equivalent_groups(candidates, experiments)
-        query = _select_experiment(candidates, experiments, observed) if len(candidates) > 1 and not (truncated or undecided) else None
+        query = _select_experiment(candidates, experiments, observed) if len(candidates) > 1 and not (truncated or undecided or evaluator_diagnostics) else None
 
         # A proposed experiment does not make the current evidence identifying;
         # it only describes how the ambiguity could be reduced in a later turn.

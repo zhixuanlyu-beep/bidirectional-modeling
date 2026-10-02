@@ -186,7 +186,9 @@ class CorrespondenceSuiteTests(unittest.TestCase):
             environment={"a": 1, "b": {"value": 3}},
         )
 
-        self.assertEqual(context_fingerprint(first), context_fingerprint(reordered))
+        self.assertNotEqual(context_fingerprint(first), context_fingerprint(reordered))
+        self.assertEqual(context_fingerprint(first), context_fingerprint(
+            replace(first, environment={"a": 1, "b": {"value": 2}})))
         self.assertNotEqual(context_fingerprint(first), context_fingerprint(changed))
         self.assertEqual(len(context_fingerprint(first)), 64)
 

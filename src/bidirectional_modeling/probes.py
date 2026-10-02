@@ -13,6 +13,10 @@ class HorizonExtensionProbe:
     """Tests a separate extended specification; advisory unless explicitly required."""
 
     def __init__(self, extra_steps: int = 3, blocking: bool = False) -> None:
+        if type(extra_steps) is not int:
+            raise TypeError('extra_steps must be an integer')
+        if type(blocking) is not bool:
+            raise TypeError('probe blocking must be an explicit boolean')
         if extra_steps < 1:
             raise ValueError("extra_steps must be positive")
         self.extra_steps = extra_steps

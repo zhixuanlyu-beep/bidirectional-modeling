@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Optional, Tuple
 
-from .core import Context, EquivalenceSpec, ExecutableModel, MacroSpec, Trace
-from .structural import fingerprint_value, freeze_value
+from .core import Context, EquivalenceSpec, ExecutableModel, FiniteStateModel, MacroSpec, Trace
+from .structural import fingerprint_value, freeze_value, ordered_tuple
 
 
 def _safe_model_name(model: ExecutableModel) -> str:
@@ -24,7 +24,7 @@ def context_fingerprint(context: Context) -> str:
     """Return a stable digest for a declared context and scenario domain."""
 
     return fingerprint_value(
-        ("context-v1", context.semantic_signature()),
+        ("context-v2", context.semantic_signature()),
         purpose="context fingerprint deterministic structural identity",
     )
 
@@ -53,56 +53,67 @@ def equivalence_fingerprint(equivalence: EquivalenceSpec) -> str:
     )
 
 
+def _trace_signatures(traces):
+    signatures = []
+    for index, trace in enumerate(traces):
+        if isinstance(trace, Trace):
+            value = (trace.model_name, trace.initial_state, trace.intervention,
+                     tuple(dict(snapshot) for snapshot in trace.snapshots))
+        else:
+            value = ("invalid-trace", index, type(trace).__module__, type(trace).__qualname__)
+        signatures.append(freeze_value(value, purpose="ordered trace evidence"))
+    return tuple(signatures)
+
+
 def observed_model_fingerprint(
     model: ExecutableModel,
     traces: Iterable[Any],
     horizon: int,
 ) -> str:
-    """Fingerprint a model's identity and its observed, bounded trace evidence."""
-
-    # Search-only adapters may omit resource metrics. Satisfaction checking
-    # validates them separately; when present, their exact declaration is bound.
+    """Fingerprint bounded evidence in the exact order seen by requirements."""
     metrics = getattr(model, "metrics", None)
     resource_signature = (None if metrics is None else
                           tuple(getattr(metrics, key) for key in ("cost", "complexity", "risk")))
-    trace_signatures = []
-    for index, trace in enumerate(traces):
-        if not isinstance(trace, Trace):
-            trace_signatures.append(
-                freeze_value(
-                    (
-                        "invalid-trace",
-                        index,
-                        type(trace).__module__,
-                        type(trace).__qualname__,
-                    ),
-                    purpose="model evidence fingerprint",
-                )
-            )
-            continue
-        trace_signatures.append(
-            freeze_value(
-                (
-                    trace.model_name,
-                    trace.initial_state,
-                    trace.intervention,
-                    tuple(dict(snapshot) for snapshot in trace.snapshots),
-                ),
-                purpose="model evidence fingerprint",
-            )
-        )
     return fingerprint_value(
-        (
-            "observed-model-v2",
-            type(model).__module__,
-            type(model).__qualname__,
-            _safe_model_name(model),
-            resource_signature,
-            horizon,
-            tuple(sorted(trace_signatures)),
-        ),
+        ("observed-model-v3", type(model).__module__, type(model).__qualname__,
+         _safe_model_name(model), resource_signature, horizon, _trace_signatures(traces)),
         purpose="model evidence fingerprint",
     )
+
+
+def _model_input_snapshot(model):
+    """Local drift guard; callback references never enter persistent fingerprints.
+
+    Opaque implementations retain the observed metadata contract. This does not
+    certify hidden state or arbitrary callback code without bounded execution.
+    """
+    digest, error = safe_observed_model_fingerprint(model, (), 1)
+    if error is not None:
+        return None
+    try:
+        metadata = tuple(ordered_tuple(getattr(model, name, ()))
+                         for name in ('assumptions', 'failure_boundaries', 'capabilities'))
+        metadata = freeze_value(metadata)
+    except Exception:
+        return None
+    if isinstance(model, FiniteStateModel):
+        try:
+            configuration = freeze_value((metadata, model.states, ordered_tuple(model.initial_states),
+                                          ordered_tuple(model.actions)))
+            callbacks = (model.transition, model.readout, model.applicable,
+                         vars(model).get('simulate'))
+        except Exception:
+            return None
+    else:
+        configuration, callbacks = metadata, ()
+    return digest, configuration, callbacks
+
+
+def _model_input_unchanged(model, snapshot):
+    current = _model_input_snapshot(model)
+    return (snapshot is not None and current is not None and snapshot[:2] == current[:2]
+            and len(snapshot[2]) == len(current[2])
+            and all(old is new for old, new in zip(snapshot[2], current[2])))
 
 
 def _safe_fingerprint(
@@ -189,12 +200,16 @@ def trace_batch_protocol_fingerprint(
     complete: bool,
     coverage: float,
     diagnostic_codes: Tuple[str, ...],
+    traces: Tuple[Trace, ...],
 ) -> str:
     """Fingerprint both the trace-collection protocol and certified outcome."""
 
+    evidence_digest, _ = _safe_fingerprint(
+        lambda: fingerprint_value(('ordered-traces-v1', _trace_signatures(traces))),
+        ('uncertifiable-traces-v1',), 'trace evidence')
     return fingerprint_value(
         (
-            "trace-batch-v2",
+            "trace-batch-v3",
             model_digest,
             context_digest,
             horizon,
@@ -203,6 +218,7 @@ def trace_batch_protocol_fingerprint(
             complete,
             coverage,
             tuple(sorted(set(diagnostic_codes))),
+            evidence_digest,
         ),
         purpose="trace batch protocol fingerprint",
     )
@@ -219,7 +235,7 @@ def satisfaction_protocol_fingerprint(
 
     return fingerprint_value(
         (
-            "satisfaction-evaluator-v1",
+            "satisfaction-evaluator-v2",
             spec_digest,
             model_digest,
             context_digest,
@@ -228,4 +244,3 @@ def satisfaction_protocol_fingerprint(
         ),
         purpose="satisfaction evaluation protocol fingerprint",
     )
-
