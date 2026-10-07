@@ -1,0 +1,884 @@
+{
+  "checksum": "e53b6f12347a4e8ef94e2d4569fb358fe64b4617d0225527802ec5e573d091cb",
+  "payload": {
+    "backend": "scan",
+    "budgets": {
+      "max_operations": 1000000,
+      "max_simulations": 10000
+    },
+    "candidates": [
+      {
+        "commitments": [],
+        "description": {
+          "assumptions": 0,
+          "concepts": 0,
+          "framework": 0,
+          "observation_map": 0,
+          "parameters": 0,
+          "relations": 1
+        },
+        "materials": [],
+        "model": {
+          "actions": [
+            "noop",
+            "approve",
+            "revoke",
+            "release"
+          ],
+          "initial_states": [
+            "pending"
+          ],
+          "name": "guarded",
+          "readouts": [
+            [
+              "pending",
+              [
+                [
+                  "status",
+                  "pending"
+                ]
+              ]
+            ],
+            [
+              "approved",
+              [
+                [
+                  "status",
+                  "approved"
+                ]
+              ]
+            ],
+            [
+              "released",
+              [
+                [
+                  "status",
+                  "released"
+                ]
+              ]
+            ]
+          ],
+          "resources": [
+            1,
+            12,
+            0
+          ],
+          "schema_version": 1,
+          "states": [
+            "pending",
+            "approved",
+            "released"
+          ],
+          "transitions": [
+            [
+              "pending",
+              "noop",
+              "pending"
+            ],
+            [
+              "pending",
+              "approve",
+              "approved"
+            ],
+            [
+              "pending",
+              "revoke",
+              "pending"
+            ],
+            [
+              "pending",
+              "release",
+              "pending"
+            ],
+            [
+              "approved",
+              "noop",
+              "approved"
+            ],
+            [
+              "approved",
+              "approve",
+              "approved"
+            ],
+            [
+              "approved",
+              "revoke",
+              "pending"
+            ],
+            [
+              "approved",
+              "release",
+              "released"
+            ],
+            [
+              "released",
+              "noop",
+              "released"
+            ],
+            [
+              "released",
+              "approve",
+              "released"
+            ],
+            [
+              "released",
+              "revoke",
+              "released"
+            ],
+            [
+              "released",
+              "release",
+              "released"
+            ]
+          ]
+        }
+      },
+      {
+        "commitments": [
+          "release-without-approval"
+        ],
+        "description": {
+          "assumptions": 0,
+          "concepts": 0,
+          "framework": 0,
+          "observation_map": 0,
+          "parameters": 0,
+          "relations": 2
+        },
+        "materials": [],
+        "model": {
+          "actions": [
+            "noop",
+            "approve",
+            "revoke",
+            "release"
+          ],
+          "initial_states": [
+            "pending"
+          ],
+          "name": "shortcut",
+          "readouts": [
+            [
+              "pending",
+              [
+                [
+                  "status",
+                  "pending"
+                ]
+              ]
+            ],
+            [
+              "approved",
+              [
+                [
+                  "status",
+                  "approved"
+                ]
+              ]
+            ],
+            [
+              "released",
+              [
+                [
+                  "status",
+                  "released"
+                ]
+              ]
+            ]
+          ],
+          "resources": [
+            1,
+            12,
+            0
+          ],
+          "schema_version": 1,
+          "states": [
+            "pending",
+            "approved",
+            "released"
+          ],
+          "transitions": [
+            [
+              "pending",
+              "noop",
+              "pending"
+            ],
+            [
+              "pending",
+              "approve",
+              "approved"
+            ],
+            [
+              "pending",
+              "revoke",
+              "pending"
+            ],
+            [
+              "pending",
+              "release",
+              "released"
+            ],
+            [
+              "approved",
+              "noop",
+              "approved"
+            ],
+            [
+              "approved",
+              "approve",
+              "approved"
+            ],
+            [
+              "approved",
+              "revoke",
+              "pending"
+            ],
+            [
+              "approved",
+              "release",
+              "released"
+            ],
+            [
+              "released",
+              "noop",
+              "released"
+            ],
+            [
+              "released",
+              "approve",
+              "released"
+            ],
+            [
+              "released",
+              "revoke",
+              "released"
+            ],
+            [
+              "released",
+              "release",
+              "released"
+            ]
+          ]
+        }
+      },
+      {
+        "commitments": [
+          "revocation-ignored"
+        ],
+        "description": {
+          "assumptions": 0,
+          "concepts": 0,
+          "framework": 0,
+          "observation_map": 0,
+          "parameters": 0,
+          "relations": 3
+        },
+        "materials": [],
+        "model": {
+          "actions": [
+            "noop",
+            "approve",
+            "revoke",
+            "release"
+          ],
+          "initial_states": [
+            "pending"
+          ],
+          "name": "sticky-0",
+          "readouts": [
+            [
+              "pending",
+              [
+                [
+                  "status",
+                  "pending"
+                ]
+              ]
+            ],
+            [
+              "approved",
+              [
+                [
+                  "status",
+                  "approved"
+                ]
+              ]
+            ],
+            [
+              "released",
+              [
+                [
+                  "status",
+                  "released"
+                ]
+              ]
+            ]
+          ],
+          "resources": [
+            1,
+            12,
+            0
+          ],
+          "schema_version": 1,
+          "states": [
+            "pending",
+            "approved",
+            "released"
+          ],
+          "transitions": [
+            [
+              "pending",
+              "noop",
+              "pending"
+            ],
+            [
+              "pending",
+              "approve",
+              "approved"
+            ],
+            [
+              "pending",
+              "revoke",
+              "pending"
+            ],
+            [
+              "pending",
+              "release",
+              "pending"
+            ],
+            [
+              "approved",
+              "noop",
+              "approved"
+            ],
+            [
+              "approved",
+              "approve",
+              "approved"
+            ],
+            [
+              "approved",
+              "revoke",
+              "approved"
+            ],
+            [
+              "approved",
+              "release",
+              "released"
+            ],
+            [
+              "released",
+              "noop",
+              "released"
+            ],
+            [
+              "released",
+              "approve",
+              "released"
+            ],
+            [
+              "released",
+              "revoke",
+              "released"
+            ],
+            [
+              "released",
+              "release",
+              "released"
+            ]
+          ]
+        }
+      }
+    ],
+    "cases": [
+      {
+        "context": {
+          "assumptions": [],
+          "environment": {},
+          "history": [],
+          "include_baseline": false,
+          "interventions": [
+            {
+              "actions": [
+                "release"
+              ],
+              "name": "without-approval",
+              "repeat_last": false
+            }
+          ],
+          "observer": "human",
+          "scale": "task",
+          "scenario_manifest": [
+            {
+              "initial_state": "pending",
+              "intervention": "without-approval"
+            }
+          ]
+        },
+        "experiment": "without-approval",
+        "field": "status",
+        "horizon": 1,
+        "scenario": {
+          "initial_state": "pending",
+          "intervention": "without-approval"
+        }
+      },
+      {
+        "context": {
+          "assumptions": [],
+          "environment": {},
+          "history": [],
+          "include_baseline": false,
+          "interventions": [
+            {
+              "actions": [
+                "approve",
+                "release"
+              ],
+              "name": "with-approval",
+              "repeat_last": false
+            }
+          ],
+          "observer": "human",
+          "scale": "task",
+          "scenario_manifest": [
+            {
+              "initial_state": "pending",
+              "intervention": "with-approval"
+            }
+          ]
+        },
+        "experiment": "with-approval",
+        "field": "status",
+        "horizon": 2,
+        "scenario": {
+          "initial_state": "pending",
+          "intervention": "with-approval"
+        }
+      },
+      {
+        "context": {
+          "assumptions": [],
+          "environment": {},
+          "history": [],
+          "include_baseline": false,
+          "interventions": [
+            {
+              "actions": [
+                "approve",
+                "revoke",
+                "release"
+              ],
+              "name": "after-revocation",
+              "repeat_last": false
+            }
+          ],
+          "observer": "human",
+          "scale": "task",
+          "scenario_manifest": [
+            {
+              "initial_state": "pending",
+              "intervention": "after-revocation"
+            }
+          ]
+        },
+        "experiment": "after-revocation",
+        "field": "status",
+        "horizon": 3,
+        "scenario": {
+          "initial_state": "pending",
+          "intervention": "after-revocation"
+        }
+      }
+    ],
+    "identity_domains": {
+      "batch": "trace-batch-v3",
+      "context": "context-v2",
+      "declaration": "model-declaration-v1",
+      "observations": "observed-model-v3",
+      "problem": "search-problem-v2",
+      "protocol": "search-protocol-v1",
+      "query": "search-query-v1"
+    },
+    "preparation": {
+      "diagnostics": [],
+      "simulations_used": 18
+    },
+    "producer_version": "0.36.0",
+    "protocol": {
+      "coding": "explicit-table-v1",
+      "constraints": [
+        {
+          "name": "release-without-approval",
+          "worlds": [
+            4,
+            5,
+            6,
+            7
+          ]
+        },
+        {
+          "name": "revocation-ignored",
+          "worlds": [
+            1,
+            3,
+            5,
+            7
+          ]
+        }
+      ],
+      "experiments": [
+        {
+          "cost": 1,
+          "name": "without-approval",
+          "semantics": "final status after release"
+        },
+        {
+          "cost": 1,
+          "name": "with-approval",
+          "semantics": "final status after approve,release"
+        },
+        {
+          "cost": 1,
+          "name": "after-revocation",
+          "semantics": "final status after approve,revoke,release"
+        }
+      ],
+      "scope": "approval-workflow-v1",
+      "worlds": [
+        [
+          "pending",
+          "pending",
+          "pending"
+        ],
+        [
+          "pending",
+          "pending",
+          "released"
+        ],
+        [
+          "pending",
+          "released",
+          "pending"
+        ],
+        [
+          "pending",
+          "released",
+          "released"
+        ],
+        [
+          "released",
+          "pending",
+          "pending"
+        ],
+        [
+          "released",
+          "pending",
+          "released"
+        ],
+        [
+          "released",
+          "released",
+          "pending"
+        ],
+        [
+          "released",
+          "released",
+          "released"
+        ]
+      ]
+    },
+    "schema_version": 1,
+    "search_work": {
+      "candidate_checks": 85,
+      "certificate_checks": 4,
+      "constraint_checks": 64,
+      "index_entries": 0,
+      "index_operations": 0,
+      "pair_checks": 0,
+      "partition_checks": 18,
+      "query_checks": 14,
+      "response_checks": 80,
+      "subset_checks": 0,
+      "world_queries": 1
+    },
+    "session": {
+      "checksum": "52f1b2a1eb84a8b93fbc77a2bb72b3a84dd2f54f8959ebfcb432cad476e6be14",
+      "payload": {
+        "backend": "scan",
+        "certificates": [
+          {
+            "commitments": [
+              "release-without-approval"
+            ],
+            "evidence": [
+              {
+                "experiment": "without-approval",
+                "response": "pending",
+                "source": "fixture:approval-v1"
+              }
+            ],
+            "protocol_fingerprint": "6c163cddfa5939e35dd37cc63ff9f6152b73d8e181a3dbcc6dd6f06dc366902e"
+          },
+          {
+            "commitments": [
+              "revocation-ignored"
+            ],
+            "evidence": [
+              {
+                "experiment": "after-revocation",
+                "response": "pending",
+                "source": "fixture:approval-v2"
+              }
+            ],
+            "protocol_fingerprint": "6c163cddfa5939e35dd37cc63ff9f6152b73d8e181a3dbcc6dd6f06dc366902e"
+          }
+        ],
+        "events": [],
+        "evidence": [
+          {
+            "experiment": "without-approval",
+            "response": "pending",
+            "source": "fixture:approval-v1"
+          },
+          {
+            "experiment": "with-approval",
+            "response": "released",
+            "source": "fixture:approval-v1"
+          },
+          {
+            "experiment": "after-revocation",
+            "response": "pending",
+            "source": "fixture:approval-v2"
+          }
+        ],
+        "hypotheses": [
+          {
+            "commitments": [],
+            "description": {
+              "assumptions": 0,
+              "concepts": 0,
+              "framework": 0,
+              "observation_map": 0,
+              "parameters": 0,
+              "relations": 1
+            },
+            "macro_answer": "controlled-release",
+            "materials": [],
+            "name": "guarded",
+            "world": 2
+          },
+          {
+            "commitments": [
+              "release-without-approval"
+            ],
+            "description": {
+              "assumptions": 0,
+              "concepts": 0,
+              "framework": 0,
+              "observation_map": 0,
+              "parameters": 0,
+              "relations": 2
+            },
+            "macro_answer": "unsafe-release",
+            "materials": [],
+            "name": "shortcut",
+            "world": 7
+          },
+          {
+            "commitments": [
+              "revocation-ignored"
+            ],
+            "description": {
+              "assumptions": 0,
+              "concepts": 0,
+              "framework": 0,
+              "observation_map": 0,
+              "parameters": 0,
+              "relations": 3
+            },
+            "macro_answer": "unsafe-release",
+            "materials": [],
+            "name": "sticky-0",
+            "world": 3
+          }
+        ],
+        "model_bindings": [
+          [
+            "guarded",
+            "without-approval",
+            "207ac13306062fec48d15860757375ac5f189acf42fcffc9d473775ceb047919",
+            "c03ab666891277e931f0b0fa915cce09962f1e1062ea86f837693a5365af3cec",
+            "4dde3e2a8751d48e11c5a9174c1b77d55892192d9af6f0857985c3e16da424a8"
+          ],
+          [
+            "guarded",
+            "with-approval",
+            "1c28df1ca15ec13cfa7a3967db6b7cc2a4832ce7dea4bc3befe9734db39efcf0",
+            "13d3963126c1f34e609a3d701e2e6bbf1e71bc8c0f6ff13e12029f5caaf036a7",
+            "4dde3e2a8751d48e11c5a9174c1b77d55892192d9af6f0857985c3e16da424a8"
+          ],
+          [
+            "guarded",
+            "after-revocation",
+            "d19b5f89f4cf17d3e7261ba07bb0772068c2fdb0e7fc87f3ed276737f7b0a01c",
+            "92562970117212423fcb04df818130b7f1d0a1cbe91141c67c1e202918014fcb",
+            "4dde3e2a8751d48e11c5a9174c1b77d55892192d9af6f0857985c3e16da424a8"
+          ],
+          [
+            "shortcut",
+            "without-approval",
+            "2ac8d904e9db4a591b6a42a3e7ccce807b88740b1a9fee32d6177671ecf44fd3",
+            "8e9bf29bc2f1c2d0efb38ce4e100c002a151d95f2813327365a5e81d4e346553",
+            "4b4992e818f1fb79ea78f99bcb238860d7f8db2147b6cb347f8525df65c53e75"
+          ],
+          [
+            "shortcut",
+            "with-approval",
+            "99c4045edfbff9c830b3c7ccb190212754835078a0a8237acd3947c701283fff",
+            "fdcb9d0553cc8b54199ec6d0df3d0f71852c7568143045574aac5d497590073a",
+            "4b4992e818f1fb79ea78f99bcb238860d7f8db2147b6cb347f8525df65c53e75"
+          ],
+          [
+            "shortcut",
+            "after-revocation",
+            "eed1f6e5c44b1203c26035748fe640b7b5d9b0b5a6252f668d1ad6191b044ba7",
+            "30e0a6776b6086c3570bed7a14f7e9b0a3d317403083d08edcd3587b552fd2a0",
+            "4b4992e818f1fb79ea78f99bcb238860d7f8db2147b6cb347f8525df65c53e75"
+          ],
+          [
+            "sticky-0",
+            "without-approval",
+            "ffdc264e675f9eea9f4e8a0614c5ed7309d2bd5919a760cf430181e0b62b1356",
+            "c73f2ff64d1b3c6287afe60e1af1bd895f05bd04c81aac29102b452904663395",
+            "611ffc9b2dfb7578a654b3a5bba2e226d50480f7c7070be9bdb147fa354f63c9"
+          ],
+          [
+            "sticky-0",
+            "with-approval",
+            "d5681ec48b51605622855c0dd02e8c170193de0101689c00516cc5c514e726da",
+            "bd07f78e9f0088077509adcbc535b3b11c675dc7c040bea08cf8c8ce5d923357",
+            "611ffc9b2dfb7578a654b3a5bba2e226d50480f7c7070be9bdb147fa354f63c9"
+          ],
+          [
+            "sticky-0",
+            "after-revocation",
+            "8d5859e90e733b43103633109191e3d45d45bcecec201f4a41a526d82c707bfe",
+            "06af9b6317a246db5fc409131be97bd863944a327a1236cb975a6101cb8a6c0c",
+            "611ffc9b2dfb7578a654b3a5bba2e226d50480f7c7070be9bdb147fa354f63c9"
+          ]
+        ],
+        "prepared_problem_fingerprint": "75d0192a2786607d8d6b63d50326111f7cf9dceba5d19a0c924160b660323673",
+        "problem_fingerprint": "75d0192a2786607d8d6b63d50326111f7cf9dceba5d19a0c924160b660323673",
+        "protocol": {
+          "coding": "explicit-table-v1",
+          "constraints": [
+            {
+              "name": "release-without-approval",
+              "worlds": [
+                4,
+                5,
+                6,
+                7
+              ]
+            },
+            {
+              "name": "revocation-ignored",
+              "worlds": [
+                1,
+                3,
+                5,
+                7
+              ]
+            }
+          ],
+          "experiments": [
+            {
+              "cost": 1,
+              "name": "without-approval",
+              "semantics": "final status after release:b172e5899256e19051ba360d2ac6381acb44a841c1fcce6eb082ae236f7525db"
+            },
+            {
+              "cost": 1,
+              "name": "with-approval",
+              "semantics": "final status after approve,release:8247f534719639bf4c8b11deefaf0e5a4eff3b066be5b02da91b571fee2b0c3f"
+            },
+            {
+              "cost": 1,
+              "name": "after-revocation",
+              "semantics": "final status after approve,revoke,release:6d597e092292887d01bcb2523ebfbcc84f5461cfe5034c3e0687f8ecd04dcb6a"
+            }
+          ],
+          "scope": "approval-workflow-v1",
+          "worlds": [
+            [
+              "pending",
+              "pending",
+              "pending"
+            ],
+            [
+              "pending",
+              "pending",
+              "released"
+            ],
+            [
+              "pending",
+              "released",
+              "pending"
+            ],
+            [
+              "pending",
+              "released",
+              "released"
+            ],
+            [
+              "released",
+              "pending",
+              "pending"
+            ],
+            [
+              "released",
+              "pending",
+              "released"
+            ],
+            [
+              "released",
+              "released",
+              "pending"
+            ],
+            [
+              "released",
+              "released",
+              "released"
+            ]
+          ]
+        },
+        "revision": 0,
+        "schema_version": 2,
+        "target": "controlled approval and effective revocation:922aa1045b29a9eb13fbce54846857c8cfd4f4ae24de29b6546422c6516ae11b",
+        "world_answers": [
+          "unsafe-release",
+          "unsafe-release",
+          "controlled-release",
+          "unsafe-release",
+          "unsafe-release",
+          "unsafe-release",
+          "unsafe-release",
+          "unsafe-release"
+        ]
+      }
+    },
+    "session_schema": 2,
+    "target": "controlled approval and effective revocation",
+    "world_answers": [
+      "unsafe-release",
+      "unsafe-release",
+      "controlled-release",
+      "unsafe-release",
+      "unsafe-release",
+      "unsafe-release",
+      "unsafe-release",
+      "unsafe-release"
+    ]
+  }
+}

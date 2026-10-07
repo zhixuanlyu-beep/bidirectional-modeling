@@ -81,6 +81,8 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 
 ## 文档
 
+学习顺序见[三条文档路径](docs/learning_paths.md)：首次使用、应用集成、语义与证明边界。结论发布规则集中在[核心契约](docs/core_contracts.md)，接口与数据演进见[版本政策](docs/version_policy.md)。
+
 | 内容 | 文档 |
 |---|---|
 | 建模、对应、闭合和残差商示例 | [完整用法与边界](docs/usage.md) |
@@ -92,6 +94,9 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 | 协议变化、证书迁移及可选扩展 | [情境转换](docs/context_network.md) |
 | 概念、区分实验与反例排除边界 | [概念实验对应](docs/concept_experiments.md) |
 | 历史变化与迁移说明 | [CHANGELOG](CHANGELOG.md) |
+| 有限审批工作流的证据闭环与试用记录 | [应用评估](docs/application_evaluation.md) |
+| 有限状态数据、完整清单与跨进程重放 | [有限重放](docs/finite_replay.md) |
+| 构造、指纹、预测、复核及撤回成本 | [完整使用成本](docs/performance_lifecycle.md) |
 
 ## 证明边界
 
@@ -114,10 +119,13 @@ coverage report
 coverage json -o coverage.json
 python3 tools/check_coverage.py coverage.json
 python3 tools/check_concept_mutations.py
+python3 tools/check_contracts.py
 bidirectional-modeling search-benchmark --json
 bidirectional-modeling search-updates-benchmark --json
 PYTHONPATH=src python3 benchmarks/review_costs.py
 PYTHONPATH=src python3 benchmarks/evidence_update_costs.py
+PYTHONPATH=src python3 benchmarks/lifecycle_costs.py
+PYTHONPATH=src python3 examples/approval_workflow.py --output-dir /tmp/approval
 ```
 
 CI 在 Python 3.9、3.11 和 3.13 上分别使用两个哈希种子运行测试、覆盖率门槛及 JSON 演示，并检查 wheel 内容。许可证为 MIT。

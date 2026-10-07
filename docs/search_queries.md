@@ -33,8 +33,8 @@ assert verification.status == 'valid'
 
 `verify_query_result(problem, query, receipt, budget=...)` 返回 `valid / invalid / undecided`：
 
-- `FOUND` 的见证由独立扫描实例重新检查；允许与默认搜索不同但有效的见证。
-- `ABSENT` 必须由扫描实例重新穷尽查询，不能仅信任后端状态标志。
+- `FOUND` 的见证按原始声明直接检查；允许与默认搜索不同但有效的见证。
+- `ABSENT` 由 `_query_review` 的独立规则重新穷尽声明域，不调用生成器、索引或证据快照，不能仅信任后端状态标志。
 - `UNKNOWN` 不构成确定性证明，复核结果是 `undecided`。
 - 绑定错误、错误范围、无效见证或复核分歧得到 `invalid`。复核预算耗尽或取消得到 `undecided`。
 
@@ -47,6 +47,8 @@ assert verification.status == 'valid'
 测试穷举双实验二值响应全集、全部 16 种约束子集和观测子集，对照直接真值表，并验证扫描/索引一致性。另覆盖所有预算截断点、取消、未知预测、空候选集、候选变化及伪造回执。
 
 惰性预测后端见 [按候选执行与缓存](search_lazy.md)，保持未知状态、完整问题绑定和独立见证检查。符号无解证书的格式及验证器仍需另行设计。
+
+结论发布条件和仍需信任的基础见[核心契约](core_contracts.md)；API 与回执身份域的演进见[版本政策](version_policy.md)。
 
 
 

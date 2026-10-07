@@ -1,5 +1,7 @@
 # 满足性证书格式与迁移
 
+统一的接口、身份域和会话版本政策见[版本与迁移](version_policy.md)；结论条件见[核心契约](core_contracts.md)。受控有限模型的长期归档见[有限重放](finite_replay.md)，不会反序列化旧回调。
+
 当前满足性协议标识为 `satisfaction-evaluator-v3`。`SatisfactionCertificate` 新增必填的 SHA-256 字段 `model_declaration_fingerprint`，与规范、观测证据、上下文、轨迹批次和成本上限一起进入协议指纹。`model_fingerprint` 仍标识有序的有限观测证据，两者承担不同的绑定检查。
 
 `provenance.model_declaration_fingerprint(model)` 是公共声明指纹入口。精确的 `FiniteStateModel` 绑定名称、全部状态、初态顺序、动作顺序、cost/complexity/risk、假设、失败边界、能力、transition/readout/applicable 回调及实例 simulate 替换。回调使用确定性代码、默认参数、闭包和相关全局绑定；不能规范化的外部依赖需要显式的 `callback_semantic_id`。该 ID 是调用方的版本承诺：改变外部实现或隐藏配置时必须同步改 ID。它不证明任意外部代码的真实行为。

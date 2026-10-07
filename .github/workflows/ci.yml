@@ -38,10 +38,14 @@ jobs:
           python tools/check_coverage.py coverage.json --summary "$GITHUB_STEP_SUMMARY"
       - name: Check concept distinguishing experiments
         run: python tools/check_concept_mutations.py
+      - name: Check core contract references
+        run: python tools/check_contracts.py
       - name: Check bounded-work regressions
         run: |
           python benchmarks/review_costs.py > review-costs.json
           python benchmarks/evidence_update_costs.py > evidence-update-costs.json
+          python benchmarks/lifecycle_costs.py > lifecycle-costs.json
+          python examples/approval_workflow.py --output-dir approval-evaluation > /dev/null
       - name: Run JSON demo
         run: |
           bidirectional-modeling demo --json > demo.json
@@ -93,6 +97,9 @@ jobs:
               "bidirectional_modeling/search_index.py",
               "bidirectional_modeling/search_reconstruction.py",
               "bidirectional_modeling/search_queries.py",
+              "bidirectional_modeling/_query_review.py",
+              "bidirectional_modeling/finite_replay.py",
+              "bidirectional_modeling/versions.py",
               "bidirectional_modeling/search_lazy.py",
               "bidirectional_modeling/search_repairs.py",
               "bidirectional_modeling/search_explanations.py",

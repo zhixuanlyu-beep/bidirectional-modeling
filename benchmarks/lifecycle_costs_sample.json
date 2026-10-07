@@ -1,0 +1,2176 @@
+{
+  "schema_version": 1,
+  "python": "3.12.14",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "max_operations_per_query_or_update_cycle": 1000000,
+  "fixture_observations": true,
+  "collection_latency_included": false,
+  "prediction_preparation_included": true,
+  "constructor_cost_included": true,
+  "fingerprint_cost_included": true,
+  "memory": "tracemalloc Python allocations; per-phase additional peaks; not process RSS",
+  "timings": "single diagnostic sample with tracing overhead; no speed threshold",
+  "results": [
+    {
+      "kind": "workflow-lifecycle",
+      "backend": "scan",
+      "candidates": 3,
+      "states_per_candidate": 3,
+      "experiments": 3,
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 0.001085849999981292,
+        "additional_peak_bytes": 22484,
+        "retained_bytes": 19828
+      },
+      "fingerprints": {
+        "seconds": 0.0038522890000081134,
+        "additional_peak_bytes": 27597,
+        "retained_bytes": 16908
+      },
+      "prediction": {
+        "seconds": 0.11993611400004056,
+        "additional_peak_bytes": 339760,
+        "retained_bytes": 317270
+      },
+      "initialization": {
+        "seconds": 0.0009857090000195967,
+        "additional_peak_bytes": 7397,
+        "retained_bytes": 3570
+      },
+      "search": {
+        "seconds": 0.0029358749999914835,
+        "additional_peak_bytes": 14046,
+        "retained_bytes": 8944
+      },
+      "query": {
+        "seconds": 0.00021741799997698763,
+        "additional_peak_bytes": 5442,
+        "retained_bytes": 1097
+      },
+      "review": {
+        "seconds": 0.00027266200004305574,
+        "additional_peak_bytes": 5282,
+        "retained_bytes": 1480
+      },
+      "archive": {
+        "seconds": 0.13964336599997296,
+        "additional_peak_bytes": 289458,
+        "retained_bytes": 135640
+      },
+      "replay": {
+        "seconds": 0.13206014000002142,
+        "additional_peak_bytes": 171615,
+        "retained_bytes": 79046
+      },
+      "archive_bytes": 21852,
+      "updates": [
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0009585579999793481,
+            "additional_peak_bytes": 5750,
+            "retained_bytes": 2283
+          },
+          "search": {
+            "seconds": 0.000726627999995344,
+            "additional_peak_bytes": 6870,
+            "retained_bytes": 3344
+          },
+          "operations": 129,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007330669999987549,
+            "additional_peak_bytes": 5102,
+            "retained_bytes": 1762
+          },
+          "search": {
+            "seconds": 0.0018886329999645568,
+            "additional_peak_bytes": 10654,
+            "retained_bytes": 6408
+          },
+          "operations": 234,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0009255479999978888,
+            "additional_peak_bytes": 5534,
+            "retained_bytes": 2275
+          },
+          "search": {
+            "seconds": 0.0007132380000030025,
+            "additional_peak_bytes": 6694,
+            "retained_bytes": 3352
+          },
+          "operations": 129,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007241940000426439,
+            "additional_peak_bytes": 4990,
+            "retained_bytes": 1706
+          },
+          "search": {
+            "seconds": 0.0018713270000034754,
+            "additional_peak_bytes": 10316,
+            "retained_bytes": 6320
+          },
+          "operations": 234,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0008570050000002993,
+            "additional_peak_bytes": 4974,
+            "retained_bytes": 2307
+          },
+          "search": {
+            "seconds": 0.0007056160000047385,
+            "additional_peak_bytes": 6654,
+            "retained_bytes": 3336
+          },
+          "operations": 129,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007531680000170127,
+            "additional_peak_bytes": 5462,
+            "retained_bytes": 1706
+          },
+          "search": {
+            "seconds": 0.001906781000002411,
+            "additional_peak_bytes": 10558,
+            "retained_bytes": 6296
+          },
+          "operations": 234,
+          "stop_reason": "determined",
+          "undecided": []
+        }
+      ],
+      "simulations_used": 18,
+      "search_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 1,
+        "response_checks": 80,
+        "constraint_checks": 64,
+        "candidate_checks": 85,
+        "certificate_checks": 4,
+        "partition_checks": 18,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 14
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 12,
+        "constraint_checks": 8,
+        "candidate_checks": 8,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "completed",
+      "seconds": 0.41427720799998724
+    },
+    {
+      "kind": "workflow-lifecycle",
+      "backend": "scan",
+      "candidates": 10,
+      "states_per_candidate": 3,
+      "experiments": 3,
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 0.0015256550000231073,
+        "additional_peak_bytes": 20660,
+        "retained_bytes": 18456
+      },
+      "fingerprints": {
+        "seconds": 0.010009410999998636,
+        "additional_peak_bytes": 28652,
+        "retained_bytes": 16571
+      },
+      "prediction": {
+        "seconds": 0.3852775990000623,
+        "additional_peak_bytes": 204151,
+        "retained_bytes": 175605
+      },
+      "initialization": {
+        "seconds": 0.0017789170000241938,
+        "additional_peak_bytes": 12966,
+        "retained_bytes": 4834
+      },
+      "search": {
+        "seconds": 0.003214866999996957,
+        "additional_peak_bytes": 10610,
+        "retained_bytes": 5568
+      },
+      "query": {
+        "seconds": 0.00021945200001027843,
+        "additional_peak_bytes": 5178,
+        "retained_bytes": 537
+      },
+      "review": {
+        "seconds": 0.0002422260000685128,
+        "additional_peak_bytes": 5146,
+        "retained_bytes": 656
+      },
+      "archive": {
+        "seconds": 0.42987761599999885,
+        "additional_peak_bytes": 564155,
+        "retained_bytes": 211675
+      },
+      "replay": {
+        "seconds": 0.42123023099998136,
+        "additional_peak_bytes": 341106,
+        "retained_bytes": 176699
+      },
+      "archive_bytes": 50199,
+      "updates": [
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0009230639999486812,
+            "additional_peak_bytes": 4950,
+            "retained_bytes": 683
+          },
+          "search": {
+            "seconds": 0.0009049269999650278,
+            "additional_peak_bytes": 8664,
+            "retained_bytes": 4992
+          },
+          "operations": 192,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007309549999945375,
+            "additional_peak_bytes": 4918,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.002134904999934406,
+            "additional_peak_bytes": 9418,
+            "retained_bytes": 5144
+          },
+          "operations": 311,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0009561550000398711,
+            "additional_peak_bytes": 4966,
+            "retained_bytes": 675
+          },
+          "search": {
+            "seconds": 0.0009254379999674711,
+            "additional_peak_bytes": 8640,
+            "retained_bytes": 5008
+          },
+          "operations": 192,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.000725505999980669,
+            "additional_peak_bytes": 4902,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.002118209999935061,
+            "additional_peak_bytes": 9414,
+            "retained_bytes": 5072
+          },
+          "operations": 311,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0009679219999725319,
+            "additional_peak_bytes": 4454,
+            "retained_bytes": 707
+          },
+          "search": {
+            "seconds": 0.000943474999985483,
+            "additional_peak_bytes": 8640,
+            "retained_bytes": 5008
+          },
+          "operations": 192,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007383959999742729,
+            "additional_peak_bytes": 4790,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.0022650820000080785,
+            "additional_peak_bytes": 9410,
+            "retained_bytes": 5064
+          },
+          "operations": 311,
+          "stop_reason": "determined",
+          "undecided": []
+        }
+      ],
+      "simulations_used": 60,
+      "search_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 1,
+        "response_checks": 80,
+        "constraint_checks": 64,
+        "candidate_checks": 106,
+        "certificate_checks": 18,
+        "partition_checks": 60,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 14
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 12,
+        "constraint_checks": 8,
+        "candidate_checks": 8,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "completed",
+      "seconds": 1.26832873099994
+    },
+    {
+      "kind": "workflow-lifecycle",
+      "backend": "scan",
+      "candidates": 34,
+      "states_per_candidate": 3,
+      "experiments": 3,
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 0.0035034930000392706,
+        "additional_peak_bytes": 41050,
+        "retained_bytes": 38350
+      },
+      "fingerprints": {
+        "seconds": 0.035068947000013395,
+        "additional_peak_bytes": 58861,
+        "retained_bytes": 46467
+      },
+      "prediction": {
+        "seconds": 1.335579417999952,
+        "additional_peak_bytes": 339351,
+        "retained_bytes": 310061
+      },
+      "initialization": {
+        "seconds": 0.003977349000024333,
+        "additional_peak_bytes": 39138,
+        "retained_bytes": 13610
+      },
+      "search": {
+        "seconds": 0.003912780999939969,
+        "additional_peak_bytes": 20696,
+        "retained_bytes": 14424
+      },
+      "query": {
+        "seconds": 0.00022160499997880834,
+        "additional_peak_bytes": 5122,
+        "retained_bytes": 537
+      },
+      "review": {
+        "seconds": 0.00024150500007635856,
+        "additional_peak_bytes": 5098,
+        "retained_bytes": 648
+      },
+      "archive": {
+        "seconds": 1.4359225809999998,
+        "additional_peak_bytes": 1405105,
+        "retained_bytes": 356756
+      },
+      "replay": {
+        "seconds": 1.4044984810000187,
+        "additional_peak_bytes": 997386,
+        "retained_bytes": 141217
+      },
+      "archive_bytes": 147536,
+      "updates": [
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0008852969999679772,
+            "additional_peak_bytes": 4390,
+            "retained_bytes": 683
+          },
+          "search": {
+            "seconds": 0.0016008390000479267,
+            "additional_peak_bytes": 21912,
+            "retained_bytes": 14448
+          },
+          "operations": 408,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007611400000087087,
+            "additional_peak_bytes": 4390,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.0038670319999027924,
+            "additional_peak_bytes": 19752,
+            "retained_bytes": 14104
+          },
+          "operations": 575,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0009907670000757207,
+            "additional_peak_bytes": 4790,
+            "retained_bytes": 675
+          },
+          "search": {
+            "seconds": 0.0016726269999480792,
+            "additional_peak_bytes": 21912,
+            "retained_bytes": 14472
+          },
+          "operations": 408,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007329369999524715,
+            "additional_peak_bytes": 4390,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.0030786910000415446,
+            "additional_peak_bytes": 12968,
+            "retained_bytes": 7256
+          },
+          "operations": 575,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0009163140000509884,
+            "additional_peak_bytes": 4790,
+            "retained_bytes": 707
+          },
+          "search": {
+            "seconds": 0.0016338279999672523,
+            "additional_peak_bytes": 9944,
+            "retained_bytes": 2504
+          },
+          "operations": 408,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007320859999708773,
+            "additional_peak_bytes": 4790,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.0029187489999458194,
+            "additional_peak_bytes": 7768,
+            "retained_bytes": 2056
+          },
+          "operations": 575,
+          "stop_reason": "determined",
+          "undecided": []
+        }
+      ],
+      "simulations_used": 204,
+      "search_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 1,
+        "response_checks": 80,
+        "constraint_checks": 64,
+        "candidate_checks": 178,
+        "certificate_checks": 66,
+        "partition_checks": 204,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 14
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 12,
+        "constraint_checks": 8,
+        "candidate_checks": 8,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "completed",
+      "seconds": 4.2436096229999976
+    },
+    {
+      "kind": "early-witness",
+      "backend": "scan",
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 8.468800001537602e-05,
+        "additional_peak_bytes": 1800,
+        "retained_bytes": 920
+      },
+      "fingerprints": {
+        "seconds": 0.0003109589999894524,
+        "additional_peak_bytes": 4794,
+        "retained_bytes": 1050
+      },
+      "query": {
+        "seconds": 0.00018612099995607423,
+        "additional_peak_bytes": 4838,
+        "retained_bytes": 713
+      },
+      "review": {
+        "seconds": 0.00013466300003983633,
+        "additional_peak_bytes": 4814,
+        "retained_bytes": 640
+      },
+      "query_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 2,
+        "constraint_checks": 0,
+        "candidate_checks": 1,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "status": "found",
+      "review_status": "valid"
+    },
+    {
+      "kind": "exhaustive-absence",
+      "backend": "scan",
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 5.470199994306313e-05,
+        "additional_peak_bytes": 1784,
+        "retained_bytes": 904
+      },
+      "fingerprints": {
+        "seconds": 0.0002958369999532806,
+        "additional_peak_bytes": 4794,
+        "retained_bytes": 594
+      },
+      "query": {
+        "seconds": 0.00015699699997639982,
+        "additional_peak_bytes": 4886,
+        "retained_bytes": 689
+      },
+      "review": {
+        "seconds": 0.00017051700001502468,
+        "additional_peak_bytes": 4862,
+        "retained_bytes": 704
+      },
+      "query_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 9,
+        "constraint_checks": 8,
+        "candidate_checks": 8,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 9,
+        "constraint_checks": 8,
+        "candidate_checks": 8,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "absent",
+      "review_status": "valid"
+    },
+    {
+      "kind": "early-witness",
+      "backend": "scan",
+      "response_worlds": 64,
+      "construction": {
+        "seconds": 0.00016270599996914825,
+        "additional_peak_bytes": 7118,
+        "retained_bytes": 3766
+      },
+      "fingerprints": {
+        "seconds": 0.0011265309999544115,
+        "additional_peak_bytes": 12228,
+        "retained_bytes": 3282
+      },
+      "query": {
+        "seconds": 0.00014101299996127636,
+        "additional_peak_bytes": 4838,
+        "retained_bytes": 689
+      },
+      "review": {
+        "seconds": 0.00012415699995926843,
+        "additional_peak_bytes": 4814,
+        "retained_bytes": 696
+      },
+      "query_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 2,
+        "constraint_checks": 0,
+        "candidate_checks": 1,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "status": "found",
+      "review_status": "valid"
+    },
+    {
+      "kind": "exhaustive-absence",
+      "backend": "scan",
+      "response_worlds": 64,
+      "construction": {
+        "seconds": 0.00016350700002476515,
+        "additional_peak_bytes": 7102,
+        "retained_bytes": 3750
+      },
+      "fingerprints": {
+        "seconds": 0.0011131909999448908,
+        "additional_peak_bytes": 12228,
+        "retained_bytes": 594
+      },
+      "query": {
+        "seconds": 0.00019267099992248404,
+        "additional_peak_bytes": 4886,
+        "retained_bytes": 689
+      },
+      "review": {
+        "seconds": 0.00040151700000023993,
+        "additional_peak_bytes": 4350,
+        "retained_bytes": 688
+      },
+      "query_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 65,
+        "constraint_checks": 64,
+        "candidate_checks": 64,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 65,
+        "constraint_checks": 64,
+        "candidate_checks": 64,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "absent",
+      "review_status": "valid"
+    },
+    {
+      "kind": "early-witness",
+      "backend": "scan",
+      "response_worlds": 512,
+      "construction": {
+        "seconds": 0.0011160560000007536,
+        "additional_peak_bytes": 72330,
+        "retained_bytes": 26994
+      },
+      "fingerprints": {
+        "seconds": 0.007621082000014212,
+        "additional_peak_bytes": 88083,
+        "retained_bytes": 22098
+      },
+      "query": {
+        "seconds": 0.0001564560000133497,
+        "additional_peak_bytes": 4838,
+        "retained_bytes": 689
+      },
+      "review": {
+        "seconds": 0.0001273829999490772,
+        "additional_peak_bytes": 4302,
+        "retained_bytes": 672
+      },
+      "query_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 2,
+        "constraint_checks": 0,
+        "candidate_checks": 1,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "status": "found",
+      "review_status": "valid"
+    },
+    {
+      "kind": "exhaustive-absence",
+      "backend": "scan",
+      "response_worlds": 512,
+      "construction": {
+        "seconds": 0.001073542000085581,
+        "additional_peak_bytes": 72314,
+        "retained_bytes": 26978
+      },
+      "fingerprints": {
+        "seconds": 0.007732059999966623,
+        "additional_peak_bytes": 88083,
+        "retained_bytes": 594
+      },
+      "query": {
+        "seconds": 0.0017032329999437934,
+        "additional_peak_bytes": 4886,
+        "retained_bytes": 785
+      },
+      "review": {
+        "seconds": 0.003246224000008624,
+        "additional_peak_bytes": 4350,
+        "retained_bytes": 760
+      },
+      "query_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 513,
+        "constraint_checks": 512,
+        "candidate_checks": 512,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 513,
+        "constraint_checks": 512,
+        "candidate_checks": 512,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "absent",
+      "review_status": "valid"
+    },
+    {
+      "kind": "early-witness",
+      "backend": "scan",
+      "response_worlds": 4096,
+      "construction": {
+        "seconds": 0.008970801000032225,
+        "additional_peak_bytes": 514026,
+        "retained_bytes": 317186
+      },
+      "fingerprints": {
+        "seconds": 0.0711021399999936,
+        "additional_peak_bytes": 1050185,
+        "retained_bytes": 183762
+      },
+      "query": {
+        "seconds": 0.00021806999995988008,
+        "additional_peak_bytes": 4838,
+        "retained_bytes": 689
+      },
+      "review": {
+        "seconds": 0.00016105400004562398,
+        "additional_peak_bytes": 4814,
+        "retained_bytes": 656
+      },
+      "query_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 2,
+        "constraint_checks": 0,
+        "candidate_checks": 1,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "status": "found",
+      "review_status": "valid"
+    },
+    {
+      "kind": "exhaustive-absence",
+      "backend": "scan",
+      "response_worlds": 4096,
+      "construction": {
+        "seconds": 0.008819954000045982,
+        "additional_peak_bytes": 514018,
+        "retained_bytes": 317178
+      },
+      "fingerprints": {
+        "seconds": 0.06901425500007008,
+        "additional_peak_bytes": 1050185,
+        "retained_bytes": 112482
+      },
+      "query": {
+        "seconds": 0.016449158999989777,
+        "additional_peak_bytes": 4374,
+        "retained_bytes": 785
+      },
+      "review": {
+        "seconds": 0.029864223999993555,
+        "additional_peak_bytes": 4350,
+        "retained_bytes": 744
+      },
+      "query_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 4097,
+        "constraint_checks": 4096,
+        "candidate_checks": 4096,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 4097,
+        "constraint_checks": 4096,
+        "candidate_checks": 4096,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "absent",
+      "review_status": "valid"
+    },
+    {
+      "kind": "workflow-lifecycle",
+      "backend": "indexed",
+      "candidates": 3,
+      "states_per_candidate": 3,
+      "experiments": 3,
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 0.0009125179999500688,
+        "additional_peak_bytes": 9877,
+        "retained_bytes": 7241
+      },
+      "fingerprints": {
+        "seconds": 0.003337531999932253,
+        "additional_peak_bytes": 14261,
+        "retained_bytes": 1892
+      },
+      "prediction": {
+        "seconds": 0.11321162199999435,
+        "additional_peak_bytes": 49086,
+        "retained_bytes": 19468
+      },
+      "initialization": {
+        "seconds": 0.0039389309999933175,
+        "additional_peak_bytes": 83698,
+        "retained_bytes": 19862
+      },
+      "search": {
+        "seconds": 0.0027145010000140246,
+        "additional_peak_bytes": 8742,
+        "retained_bytes": 3168
+      },
+      "query": {
+        "seconds": 0.00020042300002387492,
+        "additional_peak_bytes": 5122,
+        "retained_bytes": 601
+      },
+      "review": {
+        "seconds": 0.0002362569999831976,
+        "additional_peak_bytes": 5098,
+        "retained_bytes": 616
+      },
+      "archive": {
+        "seconds": 0.13517676300000403,
+        "additional_peak_bytes": 194895,
+        "retained_bytes": 43281
+      },
+      "replay": {
+        "seconds": 0.12916254800006755,
+        "additional_peak_bytes": 117765,
+        "retained_bytes": 27134
+      },
+      "archive_bytes": 21858,
+      "updates": [
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0008975050000117335,
+            "additional_peak_bytes": 4390,
+            "retained_bytes": 683
+          },
+          "search": {
+            "seconds": 0.0007071579999546884,
+            "additional_peak_bytes": 5254,
+            "retained_bytes": 1400
+          },
+          "operations": 92,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007246840000334487,
+            "additional_peak_bytes": 4902,
+            "retained_bytes": 538
+          },
+          "search": {
+            "seconds": 0.0017615309999428064,
+            "additional_peak_bytes": 6734,
+            "retained_bytes": 1672
+          },
+          "operations": 131,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0008903750000399668,
+            "additional_peak_bytes": 4966,
+            "retained_bytes": 675
+          },
+          "search": {
+            "seconds": 0.0006661359999498018,
+            "additional_peak_bytes": 4934,
+            "retained_bytes": 1424
+          },
+          "operations": 92,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007137389999343213,
+            "additional_peak_bytes": 4902,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.0017511959999865212,
+            "additional_peak_bytes": 6674,
+            "retained_bytes": 1560
+          },
+          "operations": 131,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0009056979999968462,
+            "additional_peak_bytes": 4966,
+            "retained_bytes": 707
+          },
+          "search": {
+            "seconds": 0.0006833620000179508,
+            "additional_peak_bytes": 5446,
+            "retained_bytes": 1424
+          },
+          "operations": 92,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007178550000617179,
+            "additional_peak_bytes": 4390,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.00176792000002024,
+            "additional_peak_bytes": 6674,
+            "retained_bytes": 1496
+          },
+          "operations": 131,
+          "stop_reason": "determined",
+          "undecided": []
+        }
+      ],
+      "simulations_used": 18,
+      "search_work": {
+        "index_entries": 0,
+        "index_operations": 39,
+        "world_queries": 15,
+        "response_checks": 3,
+        "constraint_checks": 0,
+        "candidate_checks": 17,
+        "certificate_checks": 4,
+        "partition_checks": 18,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 14
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 12,
+        "constraint_checks": 8,
+        "candidate_checks": 8,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "completed",
+      "seconds": 0.40196653600003174
+    },
+    {
+      "kind": "workflow-lifecycle",
+      "backend": "indexed",
+      "candidates": 10,
+      "states_per_candidate": 3,
+      "experiments": 3,
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 0.001435127999911856,
+        "additional_peak_bytes": 16172,
+        "retained_bytes": 13504
+      },
+      "fingerprints": {
+        "seconds": 0.010037983000074746,
+        "additional_peak_bytes": 22684,
+        "retained_bytes": 10315
+      },
+      "prediction": {
+        "seconds": 0.3776711040000009,
+        "additional_peak_bytes": 60783,
+        "retained_bytes": 31325
+      },
+      "initialization": {
+        "seconds": 0.0016410189999760405,
+        "additional_peak_bytes": 12686,
+        "retained_bytes": 1642
+      },
+      "search": {
+        "seconds": 0.0028533799999195253,
+        "additional_peak_bytes": 7530,
+        "retained_bytes": 1816
+      },
+      "query": {
+        "seconds": 0.00021829000002071552,
+        "additional_peak_bytes": 5122,
+        "retained_bytes": 537
+      },
+      "review": {
+        "seconds": 0.00023950199999944743,
+        "additional_peak_bytes": 5098,
+        "retained_bytes": 560
+      },
+      "archive": {
+        "seconds": 0.4232781299999715,
+        "additional_peak_bytes": 460147,
+        "retained_bytes": 104536
+      },
+      "replay": {
+        "seconds": 0.4194117509999842,
+        "additional_peak_bytes": 638195,
+        "retained_bytes": 479342
+      },
+      "archive_bytes": 50204,
+      "updates": [
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0008884019999868542,
+            "additional_peak_bytes": 4902,
+            "retained_bytes": 683
+          },
+          "search": {
+            "seconds": 0.000884255999949346,
+            "additional_peak_bytes": 5446,
+            "retained_bytes": 1464
+          },
+          "operations": 155,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007044440000072427,
+            "additional_peak_bytes": 4790,
+            "retained_bytes": 482
+          },
+          "search": {
+            "seconds": 0.0019547620000821553,
+            "additional_peak_bytes": 6626,
+            "retained_bytes": 1464
+          },
+          "operations": 208,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0008964740000010352,
+            "additional_peak_bytes": 4966,
+            "retained_bytes": 675
+          },
+          "search": {
+            "seconds": 0.0008372339999596079,
+            "additional_peak_bytes": 5446,
+            "retained_bytes": 1488
+          },
+          "operations": 155,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007101730000158568,
+            "additional_peak_bytes": 4902,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.001946811000038906,
+            "additional_peak_bytes": 6626,
+            "retained_bytes": 1400
+          },
+          "operations": 208,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0008968249999270483,
+            "additional_peak_bytes": 4966,
+            "retained_bytes": 707
+          },
+          "search": {
+            "seconds": 0.000853509999956259,
+            "additional_peak_bytes": 5254,
+            "retained_bytes": 1488
+          },
+          "operations": 155,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007074579999652997,
+            "additional_peak_bytes": 4790,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.001958719000072051,
+            "additional_peak_bytes": 6626,
+            "retained_bytes": 1400
+          },
+          "operations": 208,
+          "stop_reason": "determined",
+          "undecided": []
+        }
+      ],
+      "simulations_used": 60,
+      "search_work": {
+        "index_entries": 0,
+        "index_operations": 39,
+        "world_queries": 15,
+        "response_checks": 3,
+        "constraint_checks": 0,
+        "candidate_checks": 38,
+        "certificate_checks": 18,
+        "partition_checks": 60,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 14
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 12,
+        "constraint_checks": 8,
+        "candidate_checks": 8,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "completed",
+      "seconds": 1.2505939369999624
+    },
+    {
+      "kind": "workflow-lifecycle",
+      "backend": "indexed",
+      "candidates": 34,
+      "states_per_candidate": 3,
+      "experiments": 3,
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 0.0038673730000482465,
+        "additional_peak_bytes": 40714,
+        "retained_bytes": 37958
+      },
+      "fingerprints": {
+        "seconds": 0.034520528000030026,
+        "additional_peak_bytes": 63829,
+        "retained_bytes": 51507
+      },
+      "prediction": {
+        "seconds": 1.311521895999931,
+        "additional_peak_bytes": 444143,
+        "retained_bytes": 415821
+      },
+      "initialization": {
+        "seconds": 0.003983057000027657,
+        "additional_peak_bytes": 39242,
+        "retained_bytes": 14322
+      },
+      "search": {
+        "seconds": 0.0036641149999923073,
+        "additional_peak_bytes": 20432,
+        "retained_bytes": 14368
+      },
+      "query": {
+        "seconds": 0.00020568000002185727,
+        "additional_peak_bytes": 5122,
+        "retained_bytes": 537
+      },
+      "review": {
+        "seconds": 0.0002397129999280878,
+        "additional_peak_bytes": 5098,
+        "retained_bytes": 552
+      },
+      "archive": {
+        "seconds": 1.4284251520000453,
+        "additional_peak_bytes": 1618395,
+        "retained_bytes": 569194
+      },
+      "replay": {
+        "seconds": 1.4279345090000106,
+        "additional_peak_bytes": 997405,
+        "retained_bytes": 159684
+      },
+      "archive_bytes": 147542,
+      "updates": [
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0009064700000180892,
+            "additional_peak_bytes": 4902,
+            "retained_bytes": 683
+          },
+          "search": {
+            "seconds": 0.0018054580000352871,
+            "additional_peak_bytes": 21768,
+            "retained_bytes": 14448
+          },
+          "operations": 371,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0008328179999352869,
+            "additional_peak_bytes": 4902,
+            "retained_bytes": 482
+          },
+          "search": {
+            "seconds": 0.002788402999954087,
+            "additional_peak_bytes": 19560,
+            "retained_bytes": 14056
+          },
+          "operations": 472,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.0008820529999411519,
+            "additional_peak_bytes": 4454,
+            "retained_bytes": 675
+          },
+          "search": {
+            "seconds": 0.0015067260000023452,
+            "additional_peak_bytes": 21768,
+            "retained_bytes": 14472
+          },
+          "operations": 371,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007493420000628248,
+            "additional_peak_bytes": 4902,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.0027230229999304356,
+            "additional_peak_bytes": 19560,
+            "retained_bytes": 13992
+          },
+          "operations": 472,
+          "stop_reason": "determined",
+          "undecided": []
+        },
+        {
+          "revoked": 1,
+          "update": {
+            "seconds": 0.000867440999968494,
+            "additional_peak_bytes": 4790,
+            "retained_bytes": 707
+          },
+          "search": {
+            "seconds": 0.0015083689999073613,
+            "additional_peak_bytes": 21768,
+            "retained_bytes": 14472
+          },
+          "operations": 371,
+          "stop_reason": "macro_ambiguous",
+          "undecided": []
+        },
+        {
+          "revoked": 0,
+          "update": {
+            "seconds": 0.0007198369999059651,
+            "additional_peak_bytes": 4902,
+            "retained_bytes": 426
+          },
+          "search": {
+            "seconds": 0.0027317270000821736,
+            "additional_peak_bytes": 19560,
+            "retained_bytes": 13992
+          },
+          "operations": 472,
+          "stop_reason": "determined",
+          "undecided": []
+        }
+      ],
+      "simulations_used": 204,
+      "search_work": {
+        "index_entries": 0,
+        "index_operations": 39,
+        "world_queries": 15,
+        "response_checks": 3,
+        "constraint_checks": 0,
+        "candidate_checks": 110,
+        "certificate_checks": 66,
+        "partition_checks": 204,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 14
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 12,
+        "constraint_checks": 8,
+        "candidate_checks": 8,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "completed",
+      "seconds": 4.2331789080000135
+    },
+    {
+      "kind": "early-witness",
+      "backend": "indexed",
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 7.480299996132089e-05,
+        "additional_peak_bytes": 1696,
+        "retained_bytes": 816
+      },
+      "fingerprints": {
+        "seconds": 0.00031371399995805405,
+        "additional_peak_bytes": 4794,
+        "retained_bytes": 570
+      },
+      "query": {
+        "seconds": 0.0003246210000042993,
+        "additional_peak_bytes": 4326,
+        "retained_bytes": 1289
+      },
+      "review": {
+        "seconds": 0.00013549500010867632,
+        "additional_peak_bytes": 4814,
+        "retained_bytes": 544
+      },
+      "query_work": {
+        "index_entries": 9,
+        "index_operations": 2,
+        "world_queries": 1,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 1,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "status": "found",
+      "review_status": "valid"
+    },
+    {
+      "kind": "exhaustive-absence",
+      "backend": "indexed",
+      "response_worlds": 8,
+      "construction": {
+        "seconds": 7.74769999907221e-05,
+        "additional_peak_bytes": 1696,
+        "retained_bytes": 816
+      },
+      "fingerprints": {
+        "seconds": 0.00032232700004897197,
+        "additional_peak_bytes": 4794,
+        "retained_bytes": 594
+      },
+      "query": {
+        "seconds": 0.00017265999997562176,
+        "additional_peak_bytes": 4374,
+        "retained_bytes": 1257
+      },
+      "review": {
+        "seconds": 0.00017117800007326878,
+        "additional_peak_bytes": 4862,
+        "retained_bytes": 600
+      },
+      "query_work": {
+        "index_entries": 9,
+        "index_operations": 3,
+        "world_queries": 1,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 9,
+        "constraint_checks": 8,
+        "candidate_checks": 8,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "absent",
+      "review_status": "valid"
+    },
+    {
+      "kind": "early-witness",
+      "backend": "indexed",
+      "response_worlds": 64,
+      "construction": {
+        "seconds": 0.00016783299997769063,
+        "additional_peak_bytes": 7046,
+        "retained_bytes": 3694
+      },
+      "fingerprints": {
+        "seconds": 0.0010978779999959443,
+        "additional_peak_bytes": 12228,
+        "retained_bytes": 3282
+      },
+      "query": {
+        "seconds": 0.0004207059999998819,
+        "additional_peak_bytes": 6965,
+        "retained_bytes": 4973
+      },
+      "review": {
+        "seconds": 0.00013520400000288646,
+        "additional_peak_bytes": 4814,
+        "retained_bytes": 592
+      },
+      "query_work": {
+        "index_entries": 65,
+        "index_operations": 2,
+        "world_queries": 1,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 1,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "status": "found",
+      "review_status": "valid"
+    },
+    {
+      "kind": "exhaustive-absence",
+      "backend": "indexed",
+      "response_worlds": 64,
+      "construction": {
+        "seconds": 0.0001735529999677965,
+        "additional_peak_bytes": 7046,
+        "retained_bytes": 3694
+      },
+      "fingerprints": {
+        "seconds": 0.0011310989999628873,
+        "additional_peak_bytes": 12228,
+        "retained_bytes": 594
+      },
+      "query": {
+        "seconds": 0.00033495599996058445,
+        "additional_peak_bytes": 6581,
+        "retained_bytes": 4957
+      },
+      "review": {
+        "seconds": 0.0003933839999490374,
+        "additional_peak_bytes": 4862,
+        "retained_bytes": 584
+      },
+      "query_work": {
+        "index_entries": 65,
+        "index_operations": 3,
+        "world_queries": 1,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 65,
+        "constraint_checks": 64,
+        "candidate_checks": 64,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "absent",
+      "review_status": "valid"
+    },
+    {
+      "kind": "early-witness",
+      "backend": "indexed",
+      "response_worlds": 512,
+      "construction": {
+        "seconds": 0.0010948139999982232,
+        "additional_peak_bytes": 72290,
+        "retained_bytes": 26954
+      },
+      "fingerprints": {
+        "seconds": 0.007632119000049897,
+        "additional_peak_bytes": 88083,
+        "retained_bytes": 22098
+      },
+      "query": {
+        "seconds": 0.001902574000041568,
+        "additional_peak_bytes": 52161,
+        "retained_bytes": 50137
+      },
+      "review": {
+        "seconds": 0.00013675699995019386,
+        "additional_peak_bytes": 4814,
+        "retained_bytes": 576
+      },
+      "query_work": {
+        "index_entries": 513,
+        "index_operations": 2,
+        "world_queries": 1,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 1,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "status": "found",
+      "review_status": "valid"
+    },
+    {
+      "kind": "exhaustive-absence",
+      "backend": "indexed",
+      "response_worlds": 512,
+      "construction": {
+        "seconds": 0.0011141030000771934,
+        "additional_peak_bytes": 72290,
+        "retained_bytes": 26954
+      },
+      "fingerprints": {
+        "seconds": 0.007810458999983894,
+        "additional_peak_bytes": 88083,
+        "retained_bytes": 594
+      },
+      "query": {
+        "seconds": 0.001865358000031847,
+        "additional_peak_bytes": 51785,
+        "retained_bytes": 50129
+      },
+      "review": {
+        "seconds": 0.0034483989999216647,
+        "additional_peak_bytes": 4350,
+        "retained_bytes": 664
+      },
+      "query_work": {
+        "index_entries": 513,
+        "index_operations": 3,
+        "world_queries": 1,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 513,
+        "constraint_checks": 512,
+        "candidate_checks": 512,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "absent",
+      "review_status": "valid"
+    },
+    {
+      "kind": "early-witness",
+      "backend": "indexed",
+      "response_worlds": 4096,
+      "construction": {
+        "seconds": 0.009554862999948455,
+        "additional_peak_bytes": 514010,
+        "retained_bytes": 317170
+      },
+      "fingerprints": {
+        "seconds": 0.07114091400001143,
+        "additional_peak_bytes": 1050185,
+        "retained_bytes": 183762
+      },
+      "query": {
+        "seconds": 0.019958179000013843,
+        "additional_peak_bytes": 1493453,
+        "retained_bytes": 1491429
+      },
+      "review": {
+        "seconds": 0.000194272999920031,
+        "additional_peak_bytes": 4638,
+        "retained_bytes": 952
+      },
+      "query_work": {
+        "index_entries": 4097,
+        "index_operations": 2,
+        "world_queries": 1,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 1,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "status": "found",
+      "review_status": "valid"
+    },
+    {
+      "kind": "exhaustive-absence",
+      "backend": "indexed",
+      "response_worlds": 4096,
+      "construction": {
+        "seconds": 0.009493249999991349,
+        "additional_peak_bytes": 514010,
+        "retained_bytes": 317170
+      },
+      "fingerprints": {
+        "seconds": 0.0731953680000288,
+        "additional_peak_bytes": 1050185,
+        "retained_bytes": 112482
+      },
+      "query": {
+        "seconds": 0.01948181900002055,
+        "additional_peak_bytes": 1493193,
+        "retained_bytes": 1491421
+      },
+      "review": {
+        "seconds": 0.03000537599996278,
+        "additional_peak_bytes": 4742,
+        "retained_bytes": 1096
+      },
+      "query_work": {
+        "index_entries": 4097,
+        "index_operations": 3,
+        "world_queries": 1,
+        "response_checks": 1,
+        "constraint_checks": 0,
+        "candidate_checks": 0,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 1
+      },
+      "review_work": {
+        "index_entries": 0,
+        "index_operations": 0,
+        "world_queries": 0,
+        "response_checks": 4097,
+        "constraint_checks": 4096,
+        "candidate_checks": 4096,
+        "certificate_checks": 0,
+        "partition_checks": 0,
+        "pair_checks": 0,
+        "subset_checks": 0,
+        "query_checks": 2
+      },
+      "status": "absent",
+      "review_status": "valid"
+    }
+  ],
+  "budget_cutoff_sample": {
+    "schema_version": 1,
+    "python": "3.12.14",
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+    "max_operations_per_query_or_update_cycle": 100,
+    "fixture_observations": true,
+    "collection_latency_included": false,
+    "prediction_preparation_included": true,
+    "constructor_cost_included": true,
+    "fingerprint_cost_included": true,
+    "memory": "tracemalloc Python allocations; per-phase additional peaks; not process RSS",
+    "timings": "single diagnostic sample with tracing overhead; no speed threshold",
+    "results": [
+      {
+        "kind": "early-witness",
+        "backend": "scan",
+        "response_worlds": 4096,
+        "construction": {
+          "seconds": 0.01025334400014799,
+          "additional_peak_bytes": 612092,
+          "retained_bytes": 415228
+        },
+        "fingerprints": {
+          "seconds": 0.07255136599997059,
+          "additional_peak_bytes": 1159049,
+          "retained_bytes": 208562
+        },
+        "query": {
+          "seconds": 0.00025313200012533343,
+          "additional_peak_bytes": 5294,
+          "retained_bytes": 1113
+        },
+        "review": {
+          "seconds": 0.00017889000014292833,
+          "additional_peak_bytes": 4502,
+          "retained_bytes": 992
+        },
+        "query_work": {
+          "index_entries": 0,
+          "index_operations": 0,
+          "world_queries": 0,
+          "response_checks": 2,
+          "constraint_checks": 0,
+          "candidate_checks": 1,
+          "certificate_checks": 0,
+          "partition_checks": 0,
+          "pair_checks": 0,
+          "subset_checks": 0,
+          "query_checks": 1
+        },
+        "review_work": {
+          "index_entries": 0,
+          "index_operations": 0,
+          "world_queries": 0,
+          "response_checks": 1,
+          "constraint_checks": 0,
+          "candidate_checks": 0,
+          "certificate_checks": 0,
+          "partition_checks": 0,
+          "pair_checks": 0,
+          "subset_checks": 0,
+          "query_checks": 1
+        },
+        "status": "found",
+        "review_status": "valid"
+      },
+      {
+        "kind": "exhaustive-absence",
+        "backend": "scan",
+        "response_worlds": 4096,
+        "construction": {
+          "seconds": 0.009396760999834441,
+          "additional_peak_bytes": 514634,
+          "retained_bytes": 317794
+        },
+        "fingerprints": {
+          "seconds": 0.07057897000004232,
+          "additional_peak_bytes": 1050185,
+          "retained_bytes": 112634
+        },
+        "query": {
+          "seconds": 0.0002735630000643141,
+          "additional_peak_bytes": 5318,
+          "retained_bytes": 977
+        },
+        "review": {
+          "seconds": 0.00013214000000516535,
+          "additional_peak_bytes": 5046,
+          "retained_bytes": 1032
+        },
+        "query_work": {
+          "index_entries": 0,
+          "index_operations": 0,
+          "world_queries": 0,
+          "response_checks": 99,
+          "constraint_checks": 0,
+          "candidate_checks": 0,
+          "certificate_checks": 0,
+          "partition_checks": 0,
+          "pair_checks": 0,
+          "subset_checks": 0,
+          "query_checks": 1
+        },
+        "review_work": {
+          "index_entries": 0,
+          "index_operations": 0,
+          "world_queries": 0,
+          "response_checks": 0,
+          "constraint_checks": 0,
+          "candidate_checks": 0,
+          "certificate_checks": 0,
+          "partition_checks": 0,
+          "pair_checks": 0,
+          "subset_checks": 0,
+          "query_checks": 0
+        },
+        "status": "unknown",
+        "review_status": "undecided"
+      },
+      {
+        "kind": "early-witness",
+        "backend": "indexed",
+        "response_worlds": 4096,
+        "construction": {
+          "seconds": 0.00882717100012087,
+          "additional_peak_bytes": 514610,
+          "retained_bytes": 317770
+        },
+        "fingerprints": {
+          "seconds": 0.07045962999995936,
+          "additional_peak_bytes": 1050185,
+          "retained_bytes": 112634
+        },
+        "query": {
+          "seconds": 0.0036167120001664443,
+          "additional_peak_bytes": 84465,
+          "retained_bytes": 20973
+        },
+        "review": {
+          "seconds": 0.0003312610001557914,
+          "additional_peak_bytes": 4862,
+          "retained_bytes": 896
+        },
+        "query_work": {
+          "index_entries": 98,
+          "index_operations": 1,
+          "world_queries": 0,
+          "response_checks": 0,
+          "constraint_checks": 0,
+          "candidate_checks": 0,
+          "certificate_checks": 0,
+          "partition_checks": 0,
+          "pair_checks": 0,
+          "subset_checks": 0,
+          "query_checks": 1
+        },
+        "review_work": {
+          "index_entries": 0,
+          "index_operations": 0,
+          "world_queries": 0,
+          "response_checks": 0,
+          "constraint_checks": 0,
+          "candidate_checks": 0,
+          "certificate_checks": 0,
+          "partition_checks": 0,
+          "pair_checks": 0,
+          "subset_checks": 0,
+          "query_checks": 0
+        },
+        "status": "unknown",
+        "review_status": "undecided"
+      },
+      {
+        "kind": "exhaustive-absence",
+        "backend": "indexed",
+        "response_worlds": 4096,
+        "construction": {
+          "seconds": 0.009338653999975577,
+          "additional_peak_bytes": 514922,
+          "retained_bytes": 318058
+        },
+        "fingerprints": {
+          "seconds": 0.06890115599981073,
+          "additional_peak_bytes": 1050857,
+          "retained_bytes": 112610
+        },
+        "query": {
+          "seconds": 0.0005139059999237361,
+          "additional_peak_bytes": 13413,
+          "retained_bytes": 905
+        },
+        "review": {
+          "seconds": 0.0001288440000735136,
+          "additional_peak_bytes": 5006,
+          "retained_bytes": 960
+        },
+        "query_work": {
+          "index_entries": 98,
+          "index_operations": 1,
+          "world_queries": 0,
+          "response_checks": 0,
+          "constraint_checks": 0,
+          "candidate_checks": 0,
+          "certificate_checks": 0,
+          "partition_checks": 0,
+          "pair_checks": 0,
+          "subset_checks": 0,
+          "query_checks": 1
+        },
+        "review_work": {
+          "index_entries": 0,
+          "index_operations": 0,
+          "world_queries": 0,
+          "response_checks": 0,
+          "constraint_checks": 0,
+          "candidate_checks": 0,
+          "certificate_checks": 0,
+          "partition_checks": 0,
+          "pair_checks": 0,
+          "subset_checks": 0,
+          "query_checks": 0
+        },
+        "status": "unknown",
+        "review_status": "undecided"
+      }
+    ]
+  }
+}

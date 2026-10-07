@@ -9,6 +9,7 @@ from .search import (ConflictCertificate, DescriptionLength, ExperimentHypothesi
                      ResponseConstraint, SearchExperiment, SearchHypothesis,
                      SearchObservation, SearchProtocol, SearchWorkBudget, SearchBudgetExceeded)
 from .structural import fingerprint_value, validate_fingerprint, ordered_tuple
+from .versions import SESSION_SCHEMA_VERSION
 
 
 class SearchSession:
@@ -93,7 +94,7 @@ class SearchSession:
         return migrate_session(self, target_search, transition, target_evidence, evidence_links, budget=budget)
 
     def to_json(self):
-        payload = dict(schema_version=2, world_answers=self.search.world_answers, backend=self.search.backend, protocol=asdict(self.search.protocol),
+        payload = dict(schema_version=SESSION_SCHEMA_VERSION, world_answers=self.search.world_answers, backend=self.search.backend, protocol=asdict(self.search.protocol),
                        hypotheses=[asdict(h) for h in self.search.hypotheses],
                        target=self.search.target,
                        problem_fingerprint=self.search.fingerprint,
@@ -114,7 +115,7 @@ class SearchSession:
         payload = document['payload']
         if document['checksum'] != fingerprint_value(payload):
             raise ValueError('session checksum mismatch')
-        if type(payload['schema_version']) is not int or payload['schema_version'] != 2:
+        if type(payload['schema_version']) is not int or payload['schema_version'] != SESSION_SCHEMA_VERSION:
             raise ValueError('unsupported session schema')
         p = payload['protocol']
         protocol = SearchProtocol(p['scope'],p['coding'],

@@ -1,0 +1,59 @@
+{
+  "revision": 1,
+  "contracts": [
+    {
+      "id": "C-PASS",
+      "sources": ["core.py", "evaluation.py", "realization.py", "provenance.py"],
+      "docs": ["core_contracts.md", "certificate_migration.md", "version_policy.md"],
+      "tests": ["test_model_certificate_binding.ModelCertificateBinding.test_cost_50_limit_10_reproduction_is_not_accepted", "test_model_certificate_binding.ModelCertificateBinding.test_unavailable_declaration_is_an_unresolved_native_verdict", "test_final_binding_contracts.ProbeContracts.test_empty_required_probe_is_pending_and_empty_advisory_preserves_base"]
+    },
+    {
+      "id": "C-EXCLUDE",
+      "sources": ["search.py", "interpretation.py", "search_explanations.py", "search_partial.py"],
+      "docs": ["core_contracts.md", "search_partial.md", "application_evaluation.md"],
+      "tests": ["test_finite_relation_reference.TinyRelationReference.test_all_small_two_commitment_domains_agree_with_independent_sets", "test_evidence_lifecycle.ScreeningLifecycleTests.test_interpretation_and_screening_agree_without_conflating_receipts"]
+    },
+    {
+      "id": "C-FOUND",
+      "sources": ["search_queries.py", "_query_review.py"],
+      "docs": ["core_contracts.md", "search_queries.md"],
+      "tests": ["test_search_queries.QueryTests.test_exhaustive_queries_match_independent_truth_table", "test_core_contract_review.IndependentQueryReview.test_faulty_generator_cannot_establish_absence_or_false_witness"]
+    },
+    {
+      "id": "C-ABSENT",
+      "sources": ["search_queries.py", "_query_review.py", "search_index.py"],
+      "docs": ["core_contracts.md", "search_queries.md", "performance_lifecycle.md"],
+      "tests": ["test_search_queries.QueryTests.test_lower_catalogue_is_explicit_and_finite", "test_core_contract_review.IndependentQueryReview.test_review_does_not_call_generator_matcher_or_filters", "test_redundancy_costs.AbsenceWorkBoundaries.test_absence_replay_ignores_faulty_index"]
+    },
+    {
+      "id": "C-UNIQUE",
+      "sources": ["search.py", "core.py", "interpretation.py", "_generation.py"],
+      "docs": ["core_contracts.md", "set_interpretation.md"],
+      "tests": ["test_interpretation_status.InterpretationStatusTests.test_execution_error_is_undecided_not_a_uniqueness_proof", "test_search_queries.QueryTests.test_macro_absence_distinguishes_empty_catalogue", "test_execution_contracts.GenerationBoundaryTests.test_unknown_length_at_exact_limit_does_not_claim_exhaustion"]
+    },
+    {
+      "id": "C-UNDECIDED",
+      "sources": ["search.py", "evaluation.py", "search_adapter.py", "search_lazy.py", "_query_review.py"],
+      "docs": ["core_contracts.md", "search_lazy.md", "performance_lifecycle.md"],
+      "tests": ["test_search_queries.QueryTests.test_partial_work_at_every_cutoff_is_conservative", "test_claim_boundaries.WorkAccountingTests.test_internal_failure_cannot_run_three_candidates_for_one_credit", "test_core_contract_review.IndependentQueryReview.test_absence_metadata_and_unknowns_against_independent_catalogue", "test_finite_replay.FiniteReplayContracts.test_lifecycle_costs_record_partial_updates_as_undecided"]
+    },
+    {
+      "id": "C-LIVE",
+      "sources": ["search_session.py", "certificate_transport.py", "context_network.py", "search_explanations.py"],
+      "docs": ["core_contracts.md", "context_network.md", "application_evaluation.md"],
+      "tests": ["test_session_transition_reference.SessionTransitionReference.test_all_short_histories_preserve_claim_boundaries", "test_evidence_lifecycle.MigrationLifecycleTests.test_every_work_budget_boundary_is_transactional", "test_finite_replay.FiniteReplayContracts.test_lifecycle_restores_candidate_after_withdrawal"]
+    },
+    {
+      "id": "C-SUFFICIENCY",
+      "sources": ["macro_certificates.py", "search.py"],
+      "docs": ["core_contracts.md", "context_network.md"],
+      "tests": ["test_macro_sufficiency.MacroSufficiencyTests.test_unknown_empty_and_multiple_answers_do_not_prove_sufficiency", "test_macro_sufficiency.MacroSufficiencyTests.test_weighted_cover_is_sufficient_without_an_optimality_claim"]
+    },
+    {
+      "id": "C-REPLAY",
+      "sources": ["finite_replay.py", "versions.py", "search_session.py", "structural.py"],
+      "docs": ["core_contracts.md", "finite_replay.md", "version_policy.md"],
+      "tests": ["test_finite_replay.FiniteReplayContracts.test_all_small_partial_tables_match_plain_state_machine", "test_finite_replay.FiniteReplayContracts.test_replay_in_new_process_with_different_hash_seeds", "test_finite_replay.FiniteReplayContracts.test_versioned_fixture_and_package_version_is_advisory", "test_finite_replay.FiniteReplayContracts.test_declaration_and_provenance_tampering_is_not_accepted", "test_finite_replay.FiniteReplayContracts.test_bounded_replay_does_not_promote_unknown"]
+    }
+  ]
+}

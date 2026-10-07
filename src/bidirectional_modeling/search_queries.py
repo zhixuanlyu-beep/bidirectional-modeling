@@ -10,6 +10,7 @@ from typing import Optional, Protocol, Tuple, Union
 from .search import (ExperimentHypothesisSearch, SearchBudgetExceeded,
                      SearchObservation, SearchWork, SearchWorkBudget, _name)
 from .structural import fingerprint_value, ordered_tuple
+from ._query_review import review_absence, review_world
 
 
 class QueryStatus(str, Enum):
@@ -257,7 +258,7 @@ def verify_query_result(problem, query, receipt, *, budget=None):
                 evidence=query.evidence
                 if any(o.experiment not in known_experiments for o in evidence):
                     return verdict('invalid', 'witness_violates_query')
-                if not _world_matcher(problem, query.commitments, evidence, budget)(world):
+                if not review_world(problem, world, query.commitments, evidence, budget):
                     return verdict('invalid','witness_violates_query')
             else:
                 candidates={h.name:h for h in problem.hypotheses}
@@ -270,7 +271,7 @@ def verify_query_result(problem, query, receipt, *, budget=None):
                     if any(o.experiment not in known_experiments for o in evidence):
                         return verdict('invalid', 'witness_violates_query')
                     if (receipt.compatible_catalogue_nonempty is not True or h.macro_answer == query.answer
-                            or not _world_matcher(problem, (), evidence, budget)(world)):
+                            or not review_world(problem, world, (), evidence, budget)):
                         return verdict('invalid','witness_violates_query')
                 else:
                     if (receipt.compatible_catalogue_nonempty is not None
@@ -280,13 +281,11 @@ def verify_query_result(problem, query, receipt, *, budget=None):
             return verdict('valid','witness_checked')
         if receipt.witness_world is not None or receipt.witness_candidate is not None:
             return verdict('invalid','absent_with_witness')
-        replay=FiniteSearchQueryBackend()._execute(problem,query,budget=budget,force_scan=True)
-        if replay.status is QueryStatus.UNKNOWN:
-            return verdict('undecided',replay.reason)
-        if (replay.status is not QueryStatus.ABSENT
-                or replay.compatible_catalogue_nonempty is not receipt.compatible_catalogue_nonempty):
+        absent, nonempty = review_absence(problem, query, budget)
+        if absent is None:
+            return verdict('undecided', 'unknown_prediction_or_reference_class')
+        if not absent or nonempty is not receipt.compatible_catalogue_nonempty:
             return verdict('invalid','replay_disagrees')
         return verdict('valid','absence_replayed')
     except SearchBudgetExceeded as error:
         return verdict('undecided',error.reason)
-
