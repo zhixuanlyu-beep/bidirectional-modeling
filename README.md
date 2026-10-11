@@ -17,6 +17,7 @@
 | 分析一个模型的状态 | `ClosureAnalyzer`、`ResidualQuotientAnalyzer` | 闭合反例或有限残差商 |
 | 在多个模型间搜索 | `ExperimentHypothesisSearch.query` | 相容、宏观异义或低阶替代查询 |
 | 按需执行候选 | `LazyExecutableSearch` | 完整查询及证据限定的部分筛查 |
+| 按自主计算成本寻找架构 | `computation_search.search_computations` | 有界枚举、完整有限验收及成本最优性复核 |
 | 更换实验协议 | `ContextTransition`、`SearchSession.migrate_context` | 转换验证、冲突重证及新会话 |
 | 减少证据复核 | `certify_macro_sufficiency` | 可仅读取保留观测的充分性证书 |
 
@@ -24,7 +25,9 @@
 
 目的解释按名称展示相容候选，不使用先验或综合可信度排序；实验按最坏结果下可排除的响应类数与成本选择。
 
-描述复杂度决定搜索顺序，矛盾继承决定可剪除的候选。共同材料、相似名称或父子关系本身都不能传播反例。
+已有目录查询使用描述复杂度安排搜索，矛盾继承决定可剪除的候选。共同材料、相似名称或父子关系本身都不能传播反例。新增的自主计算路径固定有限指令语言，将候选程序、初态装载、执行和输出全部计费，再按计算成本逐层枚举；描述长度和自报指标不替代这份运行计费。
+
+历史尝试用于积累可靠的实验信息、反例与证明约束。违反这些信息的架构不能继续充当可信基础；后续候选不必继承其结构。完整目标独立于候选设定，符合已知样例只是先决条件，完整验收与排除更低成本候选分别复核。详见[自主计算搜索](docs/autonomous_computation.md)。
 
 ## 安装与运行
 
@@ -35,6 +38,7 @@ python3 -m pip install -e '.[test]'
 bidirectional-modeling demo --json
 bidirectional-modeling search-demo --json
 bidirectional-modeling context-demo --json
+bidirectional-modeling computation-demo --json
 ```
 
 不安装时可使用 `PYTHONPATH=src python3 -m bidirectional_modeling.cli search-demo --json`。
@@ -87,6 +91,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 |---|---|
 | 建模、对应、闭合和残差商示例 | [完整用法与边界](docs/usage.md) |
 | 实验域、冲突继承与宏观证据 | [实验限定搜索](docs/experiment_relative_search.md) |
+| 自主架构、完整资源计费与有限成本最优性 | [自主计算搜索](docs/autonomous_computation.md) |
 | 统一判断与独立复核 | [查询接口](docs/search_queries.md) |
 | 按候选执行与缓存 | [惰性预测](docs/search_lazy.md) |
 | 按实验预测与排除 | [部分响应](docs/search_partial.md) |
@@ -101,6 +106,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 ## 证明边界
 
 - 结论相对于声明的有限候选、响应域、动作、上下文和证据；不推广为开放世界或无限语言的完备性。
+- 自主计算的最优性相对于 `autonomous-bit-stack-v1` 的固定语言、完整有限输入域与计费；搜索试验或复核截断不能证明不存在或最优。有限运行实验不受单个不停机程序阻塞，但无限问题类的完整验收仍需独立依据。
 - 满足性证书另绑定可核验的模型声明身份，覆盖有限模型状态、初态、动作、回调及资源指标；同名不同模型或成本不能沿用旧通过/失败。新格式与旧证书重新生成方式见 [证书迁移](docs/certificate_migration.md)。
 - 证书绑定具体问题、协议和证据。哈希保证一致性检查，不证明来源真实；独立数据和校准声明由实验方负责。
 - 回调边界隔离状态，证明型执行重放转移与读出。显式无定义转移是合法偏函数，普通异常与预算截断保留未知。

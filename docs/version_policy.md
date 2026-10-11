@@ -12,6 +12,8 @@
 
 新 `finite-model-table-v1`、有限模型 `schema_version=1` 与重放包 `schema_version=1` 是另外两种受控数据格式。`versions.py` 集中声明会话和重放所需的版本号及身份域清单；它不是全部模块格式的自动迁移注册表。
 
+`computation_search` 同样是显式导入的实验 API，不改变既有搜索目录、会话或满足性证书。计算证书绑定 `autonomous-bit-stack-v1` 语言与成本语义；规格及证据指纹分别使用 `task-v1`、`computation-evidence-v1`。新增原语、计费或输入背景时升级语言身份，不能复用旧最优性结论。当前计算回执仅提供 Python 数据对象与 JSON 演示输出，未提供长期归档读取器。
+
 ## 收敛当前未发布改动
 
 | 改动 | 兼容影响 | 必需动作 |

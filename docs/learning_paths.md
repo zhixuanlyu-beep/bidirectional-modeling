@@ -6,6 +6,8 @@
 
 接着运行[审批工作流评估](application_evaluation.md)的完整证据生命周期，查看 action_path、predicted、actual 三列反例。只在需要执行模型时读[有限状态重放](finite_replay.md)。这一流程中不需要概念记忆、拼接或布尔扩展。
 
+需要实际枚举预设架构时，运行 `computation-demo` 并读[自主计算搜索](autonomous_computation.md)。示例区分“符合已知样例”“完整有限目标通过”“排除全部更低成本方案”，并说明初态装载和无限运行候选怎样计费。
+
 ## 应用集成
 
 按[查询接口](search_queries.md)声明有限响应域、候选域、目标答案与未知预测；在 [惰性预测](search_lazy.md)和[部分响应](search_partial.md)之间选择采集方式。将预测和外部观测分别保存，观测来源改变时调用 `search_session.SearchSession.replace_evidence` 并处理事务中断。

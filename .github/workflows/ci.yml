@@ -54,6 +54,8 @@ jobs:
           python -m json.tool search-demo.json > /dev/null
           bidirectional-modeling context-demo --json > context-demo.json
           python -m json.tool context-demo.json > /dev/null
+          bidirectional-modeling computation-demo --json > computation-demo.json
+          python -m json.tool computation-demo.json > /dev/null
 
   package:
     name: Build and inspect package
@@ -99,6 +101,7 @@ jobs:
               "bidirectional_modeling/search_queries.py",
               "bidirectional_modeling/_query_review.py",
               "bidirectional_modeling/finite_replay.py",
+              "bidirectional_modeling/computation_search.py",
               "bidirectional_modeling/versions.py",
               "bidirectional_modeling/search_lazy.py",
               "bidirectional_modeling/search_repairs.py",
@@ -127,6 +130,7 @@ jobs:
           bidirectional-modeling demo --json > /dev/null
           bidirectional-modeling search-demo --json > /dev/null
           bidirectional-modeling context-demo --json > /dev/null
+          bidirectional-modeling computation-demo --json > /dev/null
           bidirectional-modeling search-benchmark --json > /dev/null
           bidirectional-modeling search-updates-benchmark --json > /dev/null
           python - <<'PYCODE'
