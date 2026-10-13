@@ -12,6 +12,21 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('task abstraction ignores differing judgments', 'task_abstraction.py',
+     'if problem.responses[state][column] != problem.responses[first][column]:',
+     'if False:', 'test_task_abstraction.TaskAbstractionContracts'),
+    ('task abstraction ignores composition conflicts', 'task_abstraction.py',
+     'if key in projected and projected[key][1] != value:',
+     'if False:', 'test_task_abstraction.TaskAbstractionContracts'),
+    ('task abstraction certifies incomplete scope', 'task_abstraction.py',
+     'if not problem.complete:', 'if False:',
+     'test_task_abstraction.TaskAbstractionContracts'),
+    ('task abstraction review ignores old specification binding', 'task_abstraction.py',
+     'certificate.problem_fingerprint != problem.fingerprint',
+     'False', 'test_task_abstraction.TaskAbstractionContracts'),
+    ('task abstraction review accepts forged operation factor', 'task_abstraction.py',
+     'if factor.outputs[_offset(abstract_inputs, m)] != expected:',
+     'if False:', 'test_task_abstraction.TaskAbstractionContracts'),
     ('autonomous computation treats initial data as free', 'computation_search.py',
      'load = len(program.code) + len(program.initial)', 'load = len(program.code)',
      'test_computation_search.ComputationContracts.test_loading_output_and_loop_costs_at_every_cutoff'),

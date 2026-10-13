@@ -8,12 +8,15 @@
 
 目的由任务方在情境中声明，观察协议规定可检验的对应关系。计算保留相容候选、具体反例及未决边界；候选名称、描述长度、人工判断和调度分数都不能替代结构证据。满足性结论由非空场景中的检查结果和验证完整性派生，不能独立设置为通过。
 
+高层交互采用[可验证的语义委托](docs/semantic_delegation.md)：人提出目标和需要保留的差异，机器给出合适尺度的实现与保证。每个细节有目的归属只说明可追溯性；任务相对的语义完备性要求相同宏观描述不能产生不同任务判断，承担组合计算时还须保持操作结果和可适用性。具体方案正确、模型语义完备与求解方法完备分别验收。
+
 ## 核心概念与主要路径
 
 | 任务 | 入口 | 结果 |
 |---|---|---|
 | 从目的寻找实现 | `MacroSpec`、`Realizer` | 帕累托候选及满足性证书 |
 | 检查跨尺度关系 | `CorrespondenceValidator` | 绑定映射、轨迹和协议的对应证书 |
+| 检查抽象是否保留任务判断及组合 | `task_abstraction.analyze_task_abstraction` | 有限因子表证书或可重放的成对反例 |
 | 分析一个模型的状态 | `ClosureAnalyzer`、`ResidualQuotientAnalyzer` | 闭合反例或有限残差商 |
 | 在多个模型间搜索 | `ExperimentHypothesisSearch.query` | 相容、宏观异义或低阶替代查询 |
 | 按需执行候选 | `LazyExecutableSearch` | 完整查询及证据限定的部分筛查 |
@@ -39,6 +42,7 @@ bidirectional-modeling demo --json
 bidirectional-modeling search-demo --json
 bidirectional-modeling context-demo --json
 bidirectional-modeling computation-demo --json
+bidirectional-modeling abstraction-demo --json
 ```
 
 不安装时可使用 `PYTHONPATH=src python3 -m bidirectional_modeling.cli search-demo --json`。
@@ -89,6 +93,8 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 
 | 内容 | 文档 |
 |---|---|
+| 宏观等价、目的拓扑、三类完备性与模糊规格细化 | [可验证的语义委托](docs/semantic_delegation.md) |
+| 数据表驱动的判断保持、操作同余与反例重放 | [有限任务抽象](docs/task_abstraction.md) |
 | 建模、对应、闭合和残差商示例 | [完整用法与边界](docs/usage.md) |
 | 实验域、冲突继承与宏观证据 | [实验限定搜索](docs/experiment_relative_search.md) |
 | 自主架构、完整资源计费与有限成本最优性 | [自主计算搜索](docs/autonomous_computation.md) |
@@ -106,6 +112,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 ## 证明边界
 
 - 结论相对于声明的有限候选、响应域、动作、上下文和证据；不推广为开放世界或无限语言的完备性。
+- 任务抽象的通过仅证明声明判断与操作能在宏观层因子化；不证明方案成功、划分最粗或方法求解完备。完整范围由调用方明确声明，规格细化后旧绑定失效；宏观操作表及具体表复核可能指数增长。
 - 自主计算的最优性相对于 `autonomous-bit-stack-v1` 的固定语言、完整有限输入域与计费；搜索试验或复核截断不能证明不存在或最优。有限运行实验不受单个不停机程序阻塞，但无限问题类的完整验收仍需独立依据。
 - 满足性证书另绑定可核验的模型声明身份，覆盖有限模型状态、初态、动作、回调及资源指标；同名不同模型或成本不能沿用旧通过/失败。新格式与旧证书重新生成方式见 [证书迁移](docs/certificate_migration.md)。
 - 证书绑定具体问题、协议和证据。哈希保证一致性检查，不证明来源真实；独立数据和校准声明由实验方负责。

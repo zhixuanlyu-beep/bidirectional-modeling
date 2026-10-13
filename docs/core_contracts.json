@@ -1,5 +1,5 @@
 {
-  "revision": 2,
+  "revision": 3,
   "contracts": [
     {
       "id": "C-PASS",
@@ -60,6 +60,12 @@
       "sources": ["computation_search.py"],
       "docs": ["core_contracts.md", "autonomous_computation.md", "version_policy.md"],
       "tests": ["test_computation_search.ComputationContracts.test_all_small_truth_tables_against_independent_reference", "test_computation_search.ComputationContracts.test_full_target_not_just_known_samples", "test_computation_search.ComputationContracts.test_review_replays_without_generator_acceptance", "test_computation_search.ComputationContracts.test_certificate_tampering_and_errors_stay_unresolved", "test_computation_search.ComputationContracts.test_trial_limits_cannot_establish_absence_or_minimality"]
+    },
+    {
+      "id": "C-ABSTRACTION",
+      "sources": ["task_abstraction.py"],
+      "docs": ["core_contracts.md", "semantic_delegation.md", "task_abstraction.md", "version_policy.md"],
+      "tests": ["test_task_abstraction.TaskAbstractionContracts.test_all_small_tables_against_pairwise_reference", "test_task_abstraction.TaskAbstractionContracts.test_semantic_refinement_does_not_reuse_old_specification", "test_task_abstraction.TaskAbstractionContracts.test_static_factorization_does_not_imply_composition", "test_task_abstraction.TaskAbstractionContracts.test_definedness_must_be_preserved_but_micro_outputs_can_differ", "test_task_abstraction.TaskAbstractionContracts.test_every_budget_cutoff_stays_conservative", "test_task_abstraction.TaskAbstractionContracts.test_incomplete_scope_does_not_prove_but_retains_real_refuters", "test_task_abstraction.TaskAbstractionContracts.test_certificate_review_ignores_generator_and_rejects_forgery"]
     }
   ]
 }
