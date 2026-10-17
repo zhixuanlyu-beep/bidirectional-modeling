@@ -9,7 +9,7 @@ from types import MappingProxyType
 
 from ..computation_search import (
     LANGUAGE, DEFAULT_REVIEW_COST, BitEvidence, BitProgram, FiniteBitTask, _natural,
-    _validate_program, run_bit_program, search_computations,
+    _task_output, _validate_program, run_bit_program, search_computations,
 )
 from ..search import SearchBudgetExceeded, SearchWorkBudget, _name
 from ..structural import fingerprint_value, ordered_tuple
@@ -43,17 +43,22 @@ class LocalBitTheory:
             self.witness.fingerprint))
 
 
+def _declarations(theories):
+    theories = ordered_tuple(theories)
+    if any(type(t) is not LocalBitTheory for t in theories):
+        raise TypeError('expected LocalBitTheory declarations')
+    if len({t.name for t in theories}) != len(theories):
+        raise ValueError('duplicate theory name')
+    return theories
+
+
 @dataclass(frozen=True)
 class LocalTheoryLibrary:
     theories: tuple = ()
 
     def __post_init__(self):
-        theories = ordered_tuple(self.theories)
+        theories = _declarations(self.theories)
         object.__setattr__(self, 'theories', theories)
-        if any(type(t) is not LocalBitTheory for t in theories):
-            raise TypeError('expected LocalBitTheory declarations')
-        if len({t.name for t in theories}) != len(theories):
-            raise ValueError('duplicate theory name')
         index = {}
         for theory in theories:
             index.setdefault((theory.scope, theory.width), []).append(theory)
@@ -74,8 +79,7 @@ class LocalTheoryLibrary:
 def _theories(task, theories):
     if type(task) is not FiniteBitTask:
         raise TypeError('expected FiniteBitTask')
-    # Reuse declaration validation, never activate foreign modules silently.
-    theories = LocalTheoryLibrary(theories).theories
+    theories = _declarations(theories)
     if any((t.scope, t.width) != (task.scope, task.width) for t in theories):
         raise ValueError('theory outside task applicability scope')
     return theories
@@ -173,7 +177,6 @@ def verify_local_cover(task, theories, certificate, *, budget=None,
             if (type(row) is not tuple or len(row) != 2 or row[0] != theory.name
                     or type(row[1]) is not int or row[1] < 0):
                 return 'invalid'
-        expected = dict(task.cases)
         covered = set()
         for theory, (_, bound) in zip(theories, certificate.local_costs):
             actual_cost = 0
@@ -182,7 +185,7 @@ def verify_local_cover(task, theories, certificate, *, budget=None,
                 run = run_bit_program(theory.witness, case.inputs, max_cost=min(bound, max_cost))
                 if run.status != 'completed':
                     return 'undecided'
-                if run.output != case.expected or run.output != expected[case.inputs]:
+                if run.output != case.expected or run.output != _task_output(task, case.inputs):
                     return 'invalid'
                 covered.add(case.inputs)
                 actual_cost = max(actual_cost, run.cost)

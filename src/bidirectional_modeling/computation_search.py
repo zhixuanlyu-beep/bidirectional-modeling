@@ -202,11 +202,19 @@ def enumerate_bit_programs(width, max_cost):
                         yield program
 
 
+def _task_output(task, inputs):
+    if len(inputs) != task.width:
+        return None
+    offset = 0
+    for bit in inputs:
+        offset = 2 * offset + bit
+    return task.outputs[offset]
+
+
 def _evidence(task, evidence):
     if type(task) is not FiniteBitTask:
         raise TypeError('expected a complete FiniteBitTask')
     evidence = ordered_tuple(evidence)
-    expected = dict(task.cases)
     seen = set()
     for item in evidence:
         if type(item) is not BitEvidence:
@@ -214,7 +222,7 @@ def _evidence(task, evidence):
         if item.inputs in seen:
             raise ValueError('duplicate evidence input')
         seen.add(item.inputs)
-        if expected.get(item.inputs) != item.expected:
+        if _task_output(task, item.inputs) != item.expected:
             raise ValueError('evidence contradicts the task or is outside its domain')
     return evidence
 
@@ -253,9 +261,7 @@ class ComputationSearchResult:
     reason: str
 
 
-def _check_program(task, evidence, program, bound):
-    cases = tuple((e.inputs, e.expected, 'evidence:' + e.source) for e in evidence)
-    cases += tuple((inputs, output, 'complete_specification') for inputs, output in task.cases)
+def _check_program(cases, program, bound):
     worst_cost = 0
     for inputs, expected, authority in cases:
         run = run_bit_program(program, inputs, max_cost=bound)
@@ -296,6 +302,10 @@ def search_computations(task, evidence=(), *, max_cost, max_trials=100000,
     hints = tuple(dict.fromkeys(ordered_tuple(hints)))
     for program in hints:
         _validate_program(program, task.width)
+    known = {e.inputs for e in evidence}
+    cases = tuple((e.inputs, e.expected, 'evidence:' + e.source) for e in evidence)
+    cases += tuple((inputs, output, 'complete_specification')
+                   for inputs, output in task.cases if inputs not in known)
     trials = limits = 0
     counterexamples = []
     for bound in range(max_cost + 1):
@@ -304,7 +314,7 @@ def search_computations(task, evidence=(), *, max_cost, max_trials=100000,
                 return ComputationSearchResult('unknown', None, bound - 1, trials, limits,
                     tuple(counterexamples), 'search_trials_exhausted')
             trials += 1
-            status, counterexample, cost = _check_program(task, evidence, program, bound)
+            status, counterexample, cost = _check_program(cases, program, bound)
             if status not in ('passed', 'refuted', 'resource_limit'):
                 return ComputationSearchResult('unknown', None, bound - 1, trials, limits,
                     tuple(counterexamples), 'interpreter_error')
@@ -351,10 +361,11 @@ def verify_computation_certificate(task, evidence, certificate, *, max_trials=10
     if max_trials == 0:
         return ComputationReview('undecided', 'undecided', 0, 'review_trials_exhausted')
     trials = 1
+    cases = task.cases
     cost = 0
     try:
         _validate_program(certificate.program, task.width)
-        for inputs, expected in task.cases:
+        for inputs, expected in cases:
             run = run_bit_program(certificate.program, inputs, max_cost=min(certificate.cost, max_cost))
             if run.status != 'completed':
                 return ComputationReview('undecided', 'undecided', trials, run.status)
@@ -370,7 +381,7 @@ def verify_computation_certificate(task, evidence, certificate, *, max_trials=10
             return ComputationReview('valid', 'undecided', trials, 'review_trials_exhausted')
         trials += 1
         fits = True
-        for inputs, expected in task.cases:
+        for inputs, expected in cases:
             run = run_bit_program(program, inputs, max_cost=cost - 1)
             if run.status == 'execution_error':
                 return ComputationReview('valid', 'undecided', trials, 'interpreter_error')

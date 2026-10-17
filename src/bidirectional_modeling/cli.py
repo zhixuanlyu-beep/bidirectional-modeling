@@ -477,37 +477,33 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "abstraction-demo":
         from .task_abstraction_examples import build_abstraction_demo_report
-        print(json.dumps(build_abstraction_demo_report(), ensure_ascii=False, indent=2, sort_keys=True))
-        return
-    if args.command == "computation-demo":
+        report = build_abstraction_demo_report()
+    elif args.command == "computation-demo":
         from .computation_search import build_computation_demo_report
-        print(json.dumps(build_computation_demo_report(), ensure_ascii=False, indent=2, sort_keys=True))
-        return
-    if args.command == "context-demo":
+        report = build_computation_demo_report()
+    elif args.command == "context-demo":
         from .context_examples import build_context_demo_report
-        print(json.dumps(build_context_demo_report(), ensure_ascii=False, indent=2, sort_keys=True))
-        return
-    if args.command == "search-updates-benchmark":
+        report = build_context_demo_report()
+    elif args.command == "search-updates-benchmark":
         from .search_examples import dynamic_search_scenario
         from .search_benchmark import benchmark_search_updates
         search, steps = dynamic_search_scenario()
-        print(json.dumps(benchmark_search_updates(search, steps), ensure_ascii=False, indent=2))
-        return
-    if args.command == "search-benchmark":
+        report = benchmark_search_updates(search, steps)
+    elif args.command == "search-benchmark":
         from .search_examples import conflict_search_scenario
         from .search_benchmark import benchmark_search
         search, evidence = conflict_search_scenario()
-        print(json.dumps(benchmark_search(search, evidence), ensure_ascii=False, indent=2))
-        return
-    if args.command == "search-demo":
+        report = benchmark_search(search, evidence)
+    elif args.command == "search-demo":
         from .search_examples import build_search_demo_report
-        print(json.dumps(build_search_demo_report(), ensure_ascii=False, indent=2, sort_keys=True))
-        return
-    report = build_demo_report()
-    if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+        report = build_search_demo_report()
     else:
+        report = build_demo_report()
+    if args.command == "demo" and not args.json:
         _print_human(report)
+    else:
+        sort_keys = args.command not in ("search-benchmark", "search-updates-benchmark")
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=sort_keys))
 
 
 if __name__ == "__main__":

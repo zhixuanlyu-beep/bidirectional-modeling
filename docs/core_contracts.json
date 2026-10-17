@@ -59,7 +59,7 @@
       "id": "C-COMPUTATION",
       "sources": ["computation_search.py"],
       "docs": ["core_contracts.md", "autonomous_computation.md", "version_policy.md"],
-      "tests": ["test_computation_search.ComputationContracts.test_all_small_truth_tables_against_independent_reference", "test_computation_search.ComputationContracts.test_full_target_not_just_known_samples", "test_computation_search.ComputationContracts.test_review_replays_without_generator_acceptance", "test_computation_search.ComputationContracts.test_certificate_tampering_and_errors_stay_unresolved", "test_computation_search.ComputationContracts.test_trial_limits_cannot_establish_absence_or_minimality", "test_review_hardening.ReviewHardening.test_computation_review_owns_the_run_ceiling"]
+      "tests": ["test_computation_search.ComputationContracts.test_all_small_truth_tables_against_independent_reference", "test_computation_search.ComputationContracts.test_full_target_not_just_known_samples", "test_computation_search.ComputationContracts.test_review_replays_without_generator_acceptance", "test_computation_search.ComputationContracts.test_certificate_tampering_and_errors_stay_unresolved", "test_computation_search.ComputationContracts.test_trial_limits_cannot_establish_absence_or_minimality", "test_review_hardening.ReviewHardening.test_computation_review_owns_the_run_ceiling", "test_computation_work_simplification.ComputationWorkSimplification.test_review_prepares_once_and_replays_the_complete_domain", "test_computation_work_simplification.ComputationWorkSimplification.test_search_prepares_once_and_does_not_repeat_known_inputs"]
     },
     {
       "id": "C-ABSTRACTION",

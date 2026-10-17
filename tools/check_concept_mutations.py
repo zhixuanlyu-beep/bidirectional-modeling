@@ -12,6 +12,17 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('computation repeats known inputs in complete acceptance', 'computation_search.py',
+     'for inputs, output in task.cases if inputs not in known)',
+     'for inputs, output in task.cases)',
+     'test_computation_work_simplification.ComputationWorkSimplification.test_search_prepares_once_and_does_not_repeat_known_inputs'),
+    ('evidence validation rebuilds the whole input domain', 'computation_search.py',
+     '_task_output(task, item.inputs)', 'dict(task.cases).get(item.inputs)',
+     'test_computation_work_simplification.ComputationWorkSimplification.test_evidence_uses_direct_table_lookup_without_materializing_the_domain'),
+    ('local validation constructs an unused query index', 'extensions/local_theories.py',
+     '    theories = _declarations(theories)',
+     '    theories = LocalTheoryLibrary(theories).theories',
+     'test_computation_work_simplification.ComputationWorkSimplification.test_cover_validation_does_not_construct_a_query_library'),
     ('compact sufficiency ignores new evidence excluding its witness', 'macro_certificates.py',
      'if any(disagrees(witness, o) for o in evidence):',
      'if any(disagrees(witness, o) for o in certificate.evidence):',
@@ -67,7 +78,7 @@ MUTATIONS = (
      'load = len(program.code) + len(program.initial)', 'load = len(program.code)',
      'test_computation_search.ComputationContracts.test_loading_output_and_loop_costs_at_every_cutoff'),
     ('known samples replace the complete computation target', 'computation_search.py',
-     "cases += tuple((inputs, output, 'complete_specification') for inputs, output in task.cases)",
+     "cases += tuple((inputs, output, 'complete_specification')\n                   for inputs, output in task.cases if inputs not in known)",
      'cases += ()',
      'test_computation_search.ComputationContracts.test_full_target_not_just_known_samples'),
     ('computation certificate omits evidence provenance', 'computation_search.py',
