@@ -58,6 +58,8 @@ jobs:
           python -m json.tool computation-demo.json > /dev/null
           bidirectional-modeling abstraction-demo --json > abstraction-demo.json
           python -m json.tool abstraction-demo.json > /dev/null
+          python examples/local_theories.py > local-theories-demo.json
+          python -m json.tool local-theories-demo.json > /dev/null
 
   package:
     name: Build and inspect package
@@ -104,6 +106,7 @@ jobs:
               "bidirectional_modeling/_query_review.py",
               "bidirectional_modeling/finite_replay.py",
               "bidirectional_modeling/computation_search.py",
+              "bidirectional_modeling/extensions/local_theories.py",
               "bidirectional_modeling/task_abstraction.py",
               "bidirectional_modeling/task_abstraction_examples.py",
               "bidirectional_modeling/versions.py",

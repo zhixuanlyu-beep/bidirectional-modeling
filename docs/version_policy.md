@@ -16,6 +16,8 @@
 
 `task_abstraction` 是新增显式导入的实验 API，绑定域 `finite-task-abstraction-v1`。判断列、环境范围、投影、操作语义、覆盖声明及假设都参与身份；更改这些材料需重新生成和复核。当前仅支持 Python 数据对象及 JSON 演示，没有通用证书归档读取器，也不改变满足性证书、会话 schema 或残差商的保证。
 
+`extensions.local_theories` 是显式导入的实验 API，绑定域 `local-bit-theory-v1` 与 `local-bit-cover-v1`；局部来源、范围、有序清单、见证和实测成本必须重验。`search_computations` 的可选 `hints` 只改变同层发现顺序及试验消耗，不改变机器、目标验收或计算证书格式。覆盖证书没有最优性主张或长期归档读取器。
+
 ## 收敛当前未发布改动
 
 | 改动 | 兼容影响 | 必需动作 |

@@ -20,6 +20,7 @@
 | 分析一个模型的状态 | `ClosureAnalyzer`、`ResidualQuotientAnalyzer` | 闭合反例或有限残差商 |
 | 在多个模型间搜索 | `ExperimentHypothesisSearch.query` | 相容、宏观异义或低阶替代查询 |
 | 按需执行候选 | `LazyExecutableSearch` | 完整查询及证据限定的部分筛查 |
+| 按需启用局部理论并验证整体提取 | `extensions.local_theories` | 绑定范围的覆盖证书、成本保持复核及保留基础枚举的搜索 |
 | 按自主计算成本寻找架构 | `computation_search.search_computations` | 有界枚举、完整有限验收及成本最优性复核 |
 | 更换实验协议 | `ContextTransition`、`SearchSession.migrate_context` | 转换验证、冲突重证及新会话 |
 | 减少证据复核 | `certify_macro_sufficiency` | 可仅读取保留观测的充分性证书 |
@@ -77,6 +78,8 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 
 通用包导入和查询链不加载这两个领域模块。布尔搜索找到替代即停止；布尔与拼接的存在性证书直接验证见证。拼接默认仅请求整体存在性，重叠检查和核极小化须分别显式启用。不存在及极小性主张仍需相应的穷尽检查。
 
+局部理论从 `extensions.local_theories` 显式导入，按任务作用域与输入宽度索引启用；检查局部见证、重叠一致、完整覆盖和整体程序提取。局部程序仅作搜索提示，基础枚举保持完整，最优性另行复核；成本保持翻译逐对检查。见[局部理论与覆盖](docs/local_theories.md)及 `examples/local_theories.py`。
+
 概念记忆从 `extensions.concepts` 按需加载，保存人工判断来源，不能作为结构证明。组合规则验证默认保留全部认证候选，最短描述选择须显式启用。
 
 区分见证可通过 `residual.verify_distinguishing_context` 独立重放局部路径；经验冲突的最小承诺撤回由可选 `search_repairs` 枚举和复核；有限属性蕴涵由 `extensions.implications` 探索及反驳。后两者不进入通用查询链。见 [概念实验对应](docs/concept_experiments.md) 的主张与预算边界。
@@ -97,6 +100,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 | 数据表驱动的判断保持、操作同余与反例重放 | [有限任务抽象](docs/task_abstraction.md) |
 | 建模、对应、闭合和残差商示例 | [完整用法与边界](docs/usage.md) |
 | 实验域、冲突继承与宏观证据 | [实验限定搜索](docs/experiment_relative_search.md) |
+| 局部概念的按需启用、有限覆盖、整体提取与成本保持 | [局部理论与覆盖](docs/local_theories.md) |
 | 自主架构、完整资源计费与有限成本最优性 | [自主计算搜索](docs/autonomous_computation.md) |
 | 统一判断与独立复核 | [查询接口](docs/search_queries.md) |
 | 按候选执行与缓存 | [惰性预测](docs/search_lazy.md) |

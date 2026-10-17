@@ -1,5 +1,5 @@
 {
-  "revision": 3,
+  "revision": 4,
   "contracts": [
     {
       "id": "C-PASS",
@@ -66,6 +66,12 @@
       "sources": ["task_abstraction.py"],
       "docs": ["core_contracts.md", "semantic_delegation.md", "task_abstraction.md", "version_policy.md"],
       "tests": ["test_task_abstraction.TaskAbstractionContracts.test_all_small_tables_against_pairwise_reference", "test_task_abstraction.TaskAbstractionContracts.test_semantic_refinement_does_not_reuse_old_specification", "test_task_abstraction.TaskAbstractionContracts.test_static_factorization_does_not_imply_composition", "test_task_abstraction.TaskAbstractionContracts.test_definedness_must_be_preserved_but_micro_outputs_can_differ", "test_task_abstraction.TaskAbstractionContracts.test_every_budget_cutoff_stays_conservative", "test_task_abstraction.TaskAbstractionContracts.test_incomplete_scope_does_not_prove_but_retains_real_refuters", "test_task_abstraction.TaskAbstractionContracts.test_certificate_review_ignores_generator_and_rejects_forgery"]
+    },
+    {
+      "id": "C-LOCAL",
+      "sources": ["extensions/local_theories.py", "computation_search.py"],
+      "docs": ["core_contracts.md", "local_theories.md", "version_policy.md"],
+      "tests": ["test_local_theories.LocalTheoryContracts.test_small_covers_against_plain_function_reference", "test_local_theories.LocalTheoryContracts.test_complete_cover_extraction_and_independent_review", "test_local_theories.LocalTheoryContracts.test_coverage_overlap_target_and_extraction_are_distinct", "test_local_theories.LocalTheoryContracts.test_every_budget_and_runtime_cutoff_stays_conservative", "test_local_theories.LocalTheoryContracts.test_fair_base_path_and_all_small_targets", "test_local_theories.LocalTheoryContracts.test_forged_stale_and_incomplete_certificates_cannot_pass", "test_local_theories.LocalTheoryContracts.test_translation_checks_behavior_and_cost_without_optimality"]
     }
   ]
 }

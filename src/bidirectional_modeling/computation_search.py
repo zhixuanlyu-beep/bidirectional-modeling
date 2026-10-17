@@ -267,20 +267,38 @@ def _check_program(task, evidence, program, bound):
     return 'passed', None, worst_cost
 
 
-def search_computations(task, evidence=(), *, max_cost, max_trials=100000):
+def _guided_programs(width, bound, hints):
+    # Each finite hint gets one turn, interleaved with the complete base path.
+    # No hint can prune, rewrite, or indefinitely postpone a base candidate.
+    active = iter(p for p in hints if 2 * len(p.code) + len(p.initial) + 1 <= bound)
+    for program in enumerate_bit_programs(width, bound):
+        hint = next(active, None)
+        if hint is not None and hint != program:
+            yield hint
+        yield program
+
+
+def search_computations(task, evidence=(), *, max_cost, max_trials=100000,
+                        hints=()):
     """Restart from the language at each cost layer; inherit only active evidence.
 
     max_cost bounds individual autonomous runs. max_trials separately limits
     candidate experiments in this search, not Python time/memory or generation.
     No structure from a failed candidate is privileged or mutated into a patch.
+    Optional finite data-only hints accelerate discovery, with at most one hint
+    trial before each base trial. Full target acceptance and the base language
+    are unchanged. Hints are not proofs and can consume the trial budget.
     """
     evidence = _evidence(task, evidence)
     _natural(max_cost)
     _natural(max_trials)
+    hints = tuple(dict.fromkeys(ordered_tuple(hints)))
+    for program in hints:
+        _validate_program(program, task.width)
     trials = limits = 0
     counterexamples = []
     for bound in range(max_cost + 1):
-        for program in enumerate_bit_programs(task.width, bound):
+        for program in _guided_programs(task.width, bound, hints):
             if trials >= max_trials:
                 return ComputationSearchResult('unknown', None, bound - 1, trials, limits,
                     tuple(counterexamples), 'search_trials_exhausted')

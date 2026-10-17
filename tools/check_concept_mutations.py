@@ -12,6 +12,23 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('local cover ignores overlap conflicts', 'extensions/local_theories.py',
+     'if case.inputs in glued and glued[case.inputs] != run.output:',
+     'if False:',
+     'test_local_theories.LocalTheoryContracts.test_coverage_overlap_target_and_extraction_are_distinct'),
+    ('local cover substitutes local declarations for the target', 'extensions/local_theories.py',
+     'if glued[inputs] != expected:', 'if False:',
+     'test_local_theories.LocalTheoryContracts.test_coverage_overlap_target_and_extraction_are_distinct'),
+    ('local certificate review ignores provenance binding', 'extensions/local_theories.py',
+     'certificate.theories_fingerprint != _binding(theories)', 'False',
+     'test_local_theories.LocalTheoryContracts.test_forged_stale_and_incomplete_certificates_cannot_pass'),
+    ('translation accepts a cost increase', 'extensions/local_theories.py',
+     "status = 'valid' if costs[1] <= costs[0] else 'invalid'", "status = 'valid'",
+     'test_local_theories.LocalTheoryContracts.test_translation_checks_behavior_and_cost_without_optimality'),
+    ('hint scheduling deletes the base language', 'computation_search.py',
+     '        yield program\n\n\ndef search_computations',
+     '        if not hints:\n            yield program\n\n\ndef search_computations',
+     'test_local_theories.LocalTheoryContracts.test_fair_base_path_and_all_small_targets'),
     ('task abstraction ignores differing judgments', 'task_abstraction.py',
      'if problem.responses[state][column] != problem.responses[first][column]:',
      'if False:', 'test_task_abstraction.TaskAbstractionContracts'),
