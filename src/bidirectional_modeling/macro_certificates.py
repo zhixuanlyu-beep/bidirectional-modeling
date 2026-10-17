@@ -104,6 +104,8 @@ def verify_macro_sufficiency(problem, certificate, evidence, *, budget=None):
 
     Hash binding is not a proof of evidence authenticity. Callers own the data
     provenance and must check it before supplying the retained records here.
+    The positive witness must survive every supplied live record. Passing only
+    retained records certifies that subset, not an unseen expanded evidence set.
     """
     budget = budget if budget is not None else SearchWorkBudget()
     if not _well_formed_certificate(certificate):
@@ -125,7 +127,7 @@ def verify_macro_sufficiency(problem, certificate, evidence, *, budget=None):
         def disagrees(h, o):
             budget.consume('response_checks')
             return problem.protocol.worlds[h.world][indices[o.experiment]] != o.response
-        if any(disagrees(witness, o) for o in certificate.evidence):
+        if any(disagrees(witness, o) for o in evidence):
             return 'invalid'
         excluded = dict(certificate.exclusions)
         expected = {h.name for h in problem.hypotheses if h.macro_answer != certificate.answer}

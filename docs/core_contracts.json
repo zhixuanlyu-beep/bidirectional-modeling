@@ -47,19 +47,19 @@
       "id": "C-SUFFICIENCY",
       "sources": ["macro_certificates.py", "search.py"],
       "docs": ["core_contracts.md", "context_network.md"],
-      "tests": ["test_macro_sufficiency.MacroSufficiencyTests.test_unknown_empty_and_multiple_answers_do_not_prove_sufficiency", "test_macro_sufficiency.MacroSufficiencyTests.test_weighted_cover_is_sufficient_without_an_optimality_claim"]
+      "tests": ["test_macro_sufficiency.MacroSufficiencyTests.test_unknown_empty_and_multiple_answers_do_not_prove_sufficiency", "test_macro_sufficiency.MacroSufficiencyTests.test_weighted_cover_is_sufficient_without_an_optimality_claim", "test_review_hardening.ReviewHardening.test_new_evidence_cannot_leave_an_empty_space_with_valid_sufficiency"]
     },
     {
       "id": "C-REPLAY",
       "sources": ["finite_replay.py", "versions.py", "search_session.py", "structural.py"],
       "docs": ["core_contracts.md", "finite_replay.md", "version_policy.md"],
-      "tests": ["test_finite_replay.FiniteReplayContracts.test_all_small_partial_tables_match_plain_state_machine", "test_finite_replay.FiniteReplayContracts.test_replay_in_new_process_with_different_hash_seeds", "test_finite_replay.FiniteReplayContracts.test_versioned_fixture_and_package_version_is_advisory", "test_finite_replay.FiniteReplayContracts.test_declaration_and_provenance_tampering_is_not_accepted", "test_finite_replay.FiniteReplayContracts.test_bounded_replay_does_not_promote_unknown"]
+      "tests": ["test_finite_replay.FiniteReplayContracts.test_all_small_partial_tables_match_plain_state_machine", "test_finite_replay.FiniteReplayContracts.test_replay_in_new_process_with_different_hash_seeds", "test_finite_replay.FiniteReplayContracts.test_versioned_fixture_and_package_version_is_advisory", "test_finite_replay.FiniteReplayContracts.test_declaration_and_provenance_tampering_is_not_accepted", "test_finite_replay.FiniteReplayContracts.test_bounded_replay_does_not_promote_unknown", "test_review_hardening.ReviewHardening.test_replay_limits_are_independent_of_archive_requests"]
     },
     {
       "id": "C-COMPUTATION",
       "sources": ["computation_search.py"],
       "docs": ["core_contracts.md", "autonomous_computation.md", "version_policy.md"],
-      "tests": ["test_computation_search.ComputationContracts.test_all_small_truth_tables_against_independent_reference", "test_computation_search.ComputationContracts.test_full_target_not_just_known_samples", "test_computation_search.ComputationContracts.test_review_replays_without_generator_acceptance", "test_computation_search.ComputationContracts.test_certificate_tampering_and_errors_stay_unresolved", "test_computation_search.ComputationContracts.test_trial_limits_cannot_establish_absence_or_minimality"]
+      "tests": ["test_computation_search.ComputationContracts.test_all_small_truth_tables_against_independent_reference", "test_computation_search.ComputationContracts.test_full_target_not_just_known_samples", "test_computation_search.ComputationContracts.test_review_replays_without_generator_acceptance", "test_computation_search.ComputationContracts.test_certificate_tampering_and_errors_stay_unresolved", "test_computation_search.ComputationContracts.test_trial_limits_cannot_establish_absence_or_minimality", "test_review_hardening.ReviewHardening.test_computation_review_owns_the_run_ceiling"]
     },
     {
       "id": "C-ABSTRACTION",
@@ -71,7 +71,7 @@
       "id": "C-LOCAL",
       "sources": ["extensions/local_theories.py", "computation_search.py"],
       "docs": ["core_contracts.md", "local_theories.md", "version_policy.md"],
-      "tests": ["test_local_theories.LocalTheoryContracts.test_small_covers_against_plain_function_reference", "test_local_theories.LocalTheoryContracts.test_complete_cover_extraction_and_independent_review", "test_local_theories.LocalTheoryContracts.test_coverage_overlap_target_and_extraction_are_distinct", "test_local_theories.LocalTheoryContracts.test_every_budget_and_runtime_cutoff_stays_conservative", "test_local_theories.LocalTheoryContracts.test_fair_base_path_and_all_small_targets", "test_local_theories.LocalTheoryContracts.test_forged_stale_and_incomplete_certificates_cannot_pass", "test_local_theories.LocalTheoryContracts.test_translation_checks_behavior_and_cost_without_optimality"]
+      "tests": ["test_local_theories.LocalTheoryContracts.test_small_covers_against_plain_function_reference", "test_local_theories.LocalTheoryContracts.test_complete_cover_extraction_and_independent_review", "test_local_theories.LocalTheoryContracts.test_coverage_overlap_target_and_extraction_are_distinct", "test_local_theories.LocalTheoryContracts.test_every_budget_and_runtime_cutoff_stays_conservative", "test_local_theories.LocalTheoryContracts.test_fair_base_path_and_all_small_targets", "test_local_theories.LocalTheoryContracts.test_forged_stale_and_incomplete_certificates_cannot_pass", "test_local_theories.LocalTheoryContracts.test_translation_checks_behavior_and_cost_without_optimality", "test_review_hardening.ReviewHardening.test_local_review_caps_both_local_and_extracted_programs"]
     }
   ]
 }

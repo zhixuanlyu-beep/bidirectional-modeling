@@ -3,7 +3,7 @@
 SESSION_SCHEMA_VERSION = 2
 FINITE_MODEL_SCHEMA_VERSION = 1
 REPLAY_SCHEMA_VERSION = 1
-CORE_CONTRACT_REVISION = 1
+CORE_CONTRACT_REVISION = 4
 
 # These are identity domains, not a generic certificate serialization schema.
 REPLAY_IDENTITY_DOMAINS = {

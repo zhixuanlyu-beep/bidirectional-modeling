@@ -12,6 +12,7 @@ from .structural import fingerprint_value, ordered_tuple
 
 
 LANGUAGE = 'autonomous-bit-stack-v1'
+DEFAULT_REVIEW_COST = 100000
 
 
 def _natural(value):
@@ -328,15 +329,19 @@ class ComputationReview:
     reason: str
 
 
-def verify_computation_certificate(task, evidence, certificate, *, max_trials=100000):
+def verify_computation_certificate(task, evidence, certificate, *, max_trials=100000,
+                                   max_cost=DEFAULT_REVIEW_COST):
     """Replay the witness and independently exhaust the cheaper finite layer.
 
     Does not call search_computations or its acceptance helper. Enumeration,
     machine execution, structural encoding and task declarations remain trusted.
     A verified witness survives a review budget limit; optimality stays undecided.
+    max_cost is a reviewer-owned per-run ceiling, independent of untrusted
+    certificate costs. It limits witness replay and therefore the cheaper layer.
     """
     evidence = _evidence(task, evidence)
     _natural(max_trials)
+    _natural(max_cost)
     if (type(certificate) is not ComputationCertificate
             or certificate.language != LANGUAGE
             or certificate.task_fingerprint != task.fingerprint
@@ -350,7 +355,7 @@ def verify_computation_certificate(task, evidence, certificate, *, max_trials=10
     try:
         _validate_program(certificate.program, task.width)
         for inputs, expected in task.cases:
-            run = run_bit_program(certificate.program, inputs, max_cost=certificate.cost)
+            run = run_bit_program(certificate.program, inputs, max_cost=min(certificate.cost, max_cost))
             if run.status != 'completed':
                 return ComputationReview('undecided', 'undecided', trials, run.status)
             if run.output != expected:

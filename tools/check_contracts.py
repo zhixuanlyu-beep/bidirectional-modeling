@@ -7,6 +7,12 @@ from pathlib import Path
 def main():
     root = Path(__file__).resolve().parents[1]
     manifest = json.loads((root / 'docs/core_contracts.json').read_text(encoding='utf-8'))
+    versions = ast.parse((root / 'src/bidirectional_modeling/versions.py').read_text(encoding='utf-8'))
+    revision = next(ast.literal_eval(node.value) for node in versions.body
+        if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name)
+            and target.id == 'CORE_CONTRACT_REVISION' for target in node.targets))
+    if manifest['revision'] != revision:
+        raise ValueError('core contract revision differs from runtime metadata')
     contracts = manifest['contracts']
     identifiers = [contract['id'] for contract in contracts]
     if len(set(identifiers)) != len(identifiers):

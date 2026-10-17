@@ -189,15 +189,19 @@ class ReplayResult:
     simulations_used: int = 0
 
 
-def replay_bundle(text, *, max_bytes=5000000):
+def replay_bundle(text, *, max_bytes=5000000, max_simulations=10000,
+                  max_operations=1000000, max_horizon=1000):
     """Rebuild predictions and revalidate evidence; never restore executable code.
 
     Package versions are advisory. Unknown format/identity versions require
     explicit regeneration. Each validation/search phase receives the recorded
     operation cap; prediction collection shares the recorded simulation cap.
+    Reviewer-owned ceilings reject excessive recorded budgets or horizons as
+    undecided before rebuilding models. Explicit overrides do not change bindings.
     """
     from .search import ResponseConstraint, SearchExperiment, SearchProtocol
-    _natural(max_bytes)
+    for limit in (max_bytes, max_simulations, max_operations, max_horizon):
+        _natural(limit)
     if len(text.encode('utf-8')) > max_bytes:
         raise ValueError('replay bundle exceeds input limit')
     document = json.loads(text)
@@ -211,6 +215,13 @@ def replay_bundle(text, *, max_bytes=5000000):
     budgets = p['budgets']
     _natural(budgets['max_simulations'])
     _natural(budgets['max_operations'])
+    if (budgets['max_simulations'] > max_simulations
+            or budgets['max_operations'] > max_operations):
+        return ReplayResult('undecided', 'review_resource_limit')
+    for case in p['cases']:
+        _natural(case['horizon'])
+        if case['horizon'] > max_horizon:
+            return ReplayResult('undecided', 'review_horizon_limit')
     raw = p['protocol']
     protocol = SearchProtocol(raw['scope'], raw['coding'],
         tuple(SearchExperiment(**e) for e in raw['experiments']), raw['worlds'],

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from ..computation_search import (
-    LANGUAGE, BitEvidence, BitProgram, FiniteBitTask, _natural,
+    LANGUAGE, DEFAULT_REVIEW_COST, BitEvidence, BitProgram, FiniteBitTask, _natural,
     _validate_program, run_bit_program, search_computations,
 )
 from ..search import SearchBudgetExceeded, SearchWorkBudget, _name
@@ -148,14 +148,17 @@ def certify_local_cover(task, theories, program, *, max_cost, budget=None):
     return LocalCoverReport('valid', 'complete_finite_cover', certificate)
 
 
-def verify_local_cover(task, theories, certificate, *, budget=None):
+def verify_local_cover(task, theories, certificate, *, budget=None,
+                       max_cost=DEFAULT_REVIEW_COST):
     """Replay original declarations; do not trust the generating report/helper.
 
     The machine, declaration checks, finite task domain and codec remain trusted.
     Review executes each witness at its certified bound, and validates exact
-    costs independently of any caller-supplied discovery budget.
+    costs independently of any caller-supplied discovery budget. A separate
+    reviewer-owned max_cost caps each run, even if a certificate requests more.
     """
     theories = _theories(task, theories)
+    _natural(max_cost)
     if (type(certificate) is not LocalCoverCertificate
             or certificate.task_fingerprint != task.fingerprint
             or certificate.theories_fingerprint != _binding(theories)
@@ -176,7 +179,7 @@ def verify_local_cover(task, theories, certificate, *, budget=None):
             actual_cost = 0
             for case in theory.cases:
                 budget.consume('response_checks')
-                run = run_bit_program(theory.witness, case.inputs, max_cost=bound)
+                run = run_bit_program(theory.witness, case.inputs, max_cost=min(bound, max_cost))
                 if run.status != 'completed':
                     return 'undecided'
                 if run.output != case.expected or run.output != expected[case.inputs]:
@@ -190,7 +193,7 @@ def verify_local_cover(task, theories, certificate, *, budget=None):
             budget.consume('constraint_checks')
             if inputs not in covered:
                 return 'invalid'
-            run = run_bit_program(certificate.program, inputs, max_cost=certificate.cost)
+            run = run_bit_program(certificate.program, inputs, max_cost=min(certificate.cost, max_cost))
             if run.status != 'completed':
                 return 'undecided'
             if run.output != output:
