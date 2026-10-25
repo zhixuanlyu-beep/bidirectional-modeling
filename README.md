@@ -33,6 +33,8 @@
 
 历史尝试用于积累可靠的实验信息、反例与证明约束。违反这些信息的架构不能继续充当可信基础；后续候选不必继承其结构。完整目标独立于候选设定，符合已知样例只是先决条件，完整验收与排除更低成本候选分别复核。详见[自主计算搜索](docs/autonomous_computation.md)。
 
+规则可以替代逐题答案表，但必要的领域规则、事实输入和计算状态仍须存在。无限题库的可计算地址不保证答案可计算；有限答案集也不保证统一可判定。新增[规则压缩与信息边界](docs/compression_and_computability.md)，用初态内联和不可区分历史展示信息、终止性与成本的区别。
+
 ## 安装与运行
 
 支持 Python 3.9+，核心没有第三方运行依赖。在仓库目录执行：
@@ -102,6 +104,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 | 实验域、冲突继承与宏观证据 | [实验限定搜索](docs/experiment_relative_search.md) |
 | 局部概念的按需启用、有限覆盖、整体提取与成本保持 | [局部理论与覆盖](docs/local_theories.md) |
 | 自主架构、完整资源计费与有限成本最优性 | [自主计算搜索](docs/autonomous_computation.md) |
+| 规则替代答案表、事实充分性与有限参数内联 | [规则压缩与信息边界](docs/compression_and_computability.md) |
 | 统一判断与独立复核 | [查询接口](docs/search_queries.md) |
 | 按候选执行与缓存 | [惰性预测](docs/search_lazy.md) |
 | 按实验预测与排除 | [部分响应](docs/search_partial.md) |
@@ -118,6 +121,7 @@ from bidirectional_modeling.extensions.gluing import GluingProblem, solve_gluing
 - 结论相对于声明的有限候选、响应域、动作、上下文和证据；不推广为开放世界或无限语言的完备性。
 - 任务抽象的通过仅证明声明判断与操作能在宏观层因子化；不证明方案成功、划分最粗或方法求解完备。完整范围由调用方明确声明，规格细化后旧绑定失效；宏观操作表及具体表复核可能指数增长。
 - 自主计算的最优性相对于 `autonomous-bit-stack-v1` 的固定语言、完整有限输入域与计费；搜索试验或复核截断不能证明不存在或最优。有限运行实验不受单个不停机程序阻塞，但无限问题类的完整验收仍需独立依据。
+- 初态内联保留信息及输出行为，不保留原成本和最优性；规则无法恢复相同可用输入下不同历史的目标差异。有限判断因子化不证明无限域的可计算性。
 - 满足性证书另绑定可核验的模型声明身份，覆盖有限模型状态、初态、动作、回调及资源指标；同名不同模型或成本不能沿用旧通过/失败。新格式与旧证书重新生成方式见 [证书迁移](docs/certificate_migration.md)。
 - 计算及局部覆盖证书复核有独立运行上限，有限归档重放有独立模拟、操作和步长上限；超限保留未决，详见相应模块文档。
 - 证书绑定具体问题、协议和证据。哈希保证一致性检查，不证明来源真实；独立数据和校准声明由实验方负责。
@@ -138,6 +142,7 @@ coverage json -o coverage.json
 python3 tools/check_coverage.py coverage.json
 python3 tools/check_concept_mutations.py
 python3 tools/check_contracts.py
+PYTHONPATH=src python3 examples/compression_and_information.py
 bidirectional-modeling search-benchmark --json
 bidirectional-modeling search-updates-benchmark --json
 PYTHONPATH=src python3 benchmarks/review_costs.py

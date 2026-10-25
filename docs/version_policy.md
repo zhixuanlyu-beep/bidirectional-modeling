@@ -14,6 +14,8 @@
 
 `computation_search` 同样是显式导入的实验 API，不改变既有搜索目录、会话或满足性证书。计算证书绑定 `autonomous-bit-stack-v1` 语言与成本语义；规格及证据指纹分别使用 `task-v1`、`computation-evidence-v1`。新增原语、计费或输入背景时升级语言身份，不能复用旧最优性结论。当前计算回执仅提供 Python 数据对象与 JSON 演示输出，未提供长期归档读取器。
 
+新增实验函数 `inline_initial_bits(program, *, width)` 仅生成现有语言中的另一程序，不改指令、计费、枚举或证书格式。内联后重新执行和计费，不能把原程序的成本或最优性直接复制过去；保持包版本和语言身份不变。
+
 `task_abstraction` 是新增显式导入的实验 API，绑定域 `finite-task-abstraction-v1`。判断列、环境范围、投影、操作语义、覆盖声明及假设都参与身份；更改这些材料需重新生成和复核。当前仅支持 Python 数据对象及 JSON 演示，没有通用证书归档读取器，也不改变满足性证书、会话 schema 或残差商的保证。
 
 `extensions.local_theories` 是显式导入的实验 API，绑定域 `local-bit-theory-v1` 与 `local-bit-cover-v1`；局部来源、范围、有序清单、见证和实测成本必须重验。`search_computations` 的可选 `hints` 只改变同层发现顺序及试验消耗，不改变机器、目标验收或计算证书格式。覆盖证书没有最优性主张或长期归档读取器。

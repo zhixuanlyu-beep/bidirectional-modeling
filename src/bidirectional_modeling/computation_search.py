@@ -124,6 +124,22 @@ def _validate_program(program, width):
         raise ValueError('terminal instruction requires exactly one output bit')
 
 
+def inline_initial_bits(program, *, width):
+    """Move finite initial data into literal instructions, preserving behavior.
+
+    The original stack order is retained. Each pass (including after `again`)
+    reconstructs that stack before executing the original body. This transfers
+    information into code; it neither removes it nor compresses it. A halting
+    run costs len(program.initial) extra units in this fixed machine. Bounded
+    runs need not have identical status at the same budget, and certificates
+    and optimality claims must be checked for the resulting program afresh.
+    """
+    _natural(width)
+    _validate_program(program, width)
+    literals = tuple('one' if bit else 'zero' for bit in program.initial)
+    return BitProgram(literals + program.code)
+
+
 def run_bit_program(program, inputs, *, max_cost):
     """Execute bounded instructions without external intervention.
 

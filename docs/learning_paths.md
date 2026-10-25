@@ -8,6 +8,8 @@
 
 需要实际枚举预设架构时，运行 `computation-demo` 并读[自主计算搜索](autonomous_computation.md)。示例区分“符合已知样例”“完整有限目标通过”“排除全部更低成本方案”，并说明初态装载和无限运行候选怎样计费。
 
+讨论“规则替代记忆”时，读[规则压缩与信息边界](compression_and_computability.md)，运行 `examples/compression_and_information.py`。区分可计算地址与答案来源、有限答案与终止保证，以及事实缺失与预算不足；再查看初态信息进入代码后保留行为却改变成本的例子。
+
 ## 应用集成
 
 按[查询接口](search_queries.md)声明有限响应域、候选域、目标答案与未知预测；在 [惰性预测](search_lazy.md)和[部分响应](search_partial.md)之间选择采集方式。将预测和外部观测分别保存，观测来源改变时调用 `search_session.SearchSession.replace_evidence` 并处理事务中断。

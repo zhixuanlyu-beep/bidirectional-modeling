@@ -12,6 +12,18 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATIONS = (
+    ('initial parameter contents are erased instead of preserved', 'computation_search.py',
+     'return BitProgram(literals + program.code)',
+     "return BitProgram(('zero',) * len(program.initial) + program.code)",
+     'test_compression_information.CompressionInformationContracts.test_order_parameter_information_and_budget_are_not_erased'),
+    ('inlined initial stack order is reversed', 'computation_search.py',
+     "literals = tuple('one' if bit else 'zero' for bit in program.initial)",
+     "literals = tuple('one' if bit else 'zero' for bit in reversed(program.initial))",
+     'test_compression_information.CompressionInformationContracts.test_order_parameter_information_and_budget_are_not_erased'),
+    ('initial data is duplicated in code and stack', 'computation_search.py',
+     'return BitProgram(literals + program.code)',
+     'return BitProgram(literals + program.code, program.initial)',
+     'test_compression_information.CompressionInformationContracts.test_inlining_preserves_small_program_outputs_and_charges_extra_work'),
     ('computation repeats known inputs in complete acceptance', 'computation_search.py',
      'for inputs, output in task.cases if inputs not in known)',
      'for inputs, output in task.cases)',
