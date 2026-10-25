@@ -824,7 +824,7 @@ class FiniteStateModel:
                 )
 
     def with_promoted_observables(self, fields: Iterable[str]) -> "FiniteStateModel":
-        promoted = tuple(dict.fromkeys(fields))
+        promoted = tuple(dict.fromkeys(ordered_tuple(fields)))
         missing = [
             field_name
             for field_name in promoted
@@ -1138,15 +1138,20 @@ class Experiment:
     name: str
     question: str
     outcomes: Tuple[str, ...]
-    cost: float = 0.0
+    cost: Numeric = 0.0
 
     def __post_init__(self):
         _labels((self.name,), 'experiment')
         object.__setattr__(self, 'outcomes', _labels(self.outcomes, 'experiment outcomes'))
-        cost = float(self.cost)
-        if not math.isfinite(cost) or cost < 0:
-            raise ValueError('experiment cost must be finite and non-negative')
-        object.__setattr__(self, 'cost', cost)
+        _nonnegative_number(self.cost, label='experiment cost')
+
+    def to_dict(self):
+        """JSON-safe audit data, retaining exact rational cost when declared."""
+        cost = self.cost
+        if type(cost) is Fraction:
+            cost = dict(numerator=cost.numerator, denominator=cost.denominator)
+        return dict(name=self.name, question=self.question,
+                    outcomes=self.outcomes, cost=cost)
 
 
 @dataclass(frozen=True)
@@ -1197,8 +1202,7 @@ class DiscriminatingQuery:
             raise ValueError('query candidates must match outcome declarations')
 
     def to_dict(self):
-        from dataclasses import asdict
-        return dict(experiment=asdict(self.experiment), candidate_names=list(self.candidate_names),
+        return dict(experiment=self.experiment.to_dict(), candidate_names=list(self.candidate_names),
                     allowed_outcomes={k: list(v) for k, v in self.allowed_outcomes.items()},
                     guaranteed_class_eliminations=self.guaranteed_class_eliminations,
                     separated_class_pairs=self.separated_class_pairs,
@@ -1263,7 +1267,7 @@ class InterpretationResult:
                 raise ValueError("cannot export a changed hypothesis specification")
         def binding(certificate):
             return {name: getattr(certificate, name) for name in (
-                'spec_fingerprint', 'model_fingerprint', 'context_fingerprint',
+                'spec_fingerprint', 'model_fingerprint', 'model_declaration_fingerprint', 'context_fingerprint',
                 'trace_batch_fingerprint', 'protocol_fingerprint')}
         return dict(
             model_name=self.model_name, identification_status=self.identification_status,
@@ -1278,7 +1282,7 @@ class InterpretationResult:
                              caveats=list(c.caveats)) for c in self.candidates],
             equivalent_explanations=[list(group) for group in self.equivalent_explanations],
             observations=[asdict(o) for o in self.observations],
-            excluded=[asdict(item) for item in self.excluded],
+            excluded=[dict(asdict(item), experiment=item.experiment.to_dict()) for item in self.excluded],
             rejected=[dict(candidate=name, binding=binding(certificate),
                            failed_checks=[check.name for check in certificate.checks if not check.passed])
                       for name, certificate in self.rejected],

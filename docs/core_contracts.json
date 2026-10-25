@@ -5,7 +5,7 @@
       "id": "C-PASS",
       "sources": ["core.py", "evaluation.py", "realization.py", "provenance.py", "computation_search.py"],
       "docs": ["core_contracts.md", "certificate_migration.md", "version_policy.md", "autonomous_computation.md"],
-      "tests": ["test_model_certificate_binding.ModelCertificateBinding.test_cost_50_limit_10_reproduction_is_not_accepted", "test_model_certificate_binding.ModelCertificateBinding.test_unavailable_declaration_is_an_unresolved_native_verdict", "test_final_binding_contracts.ProbeContracts.test_empty_required_probe_is_pending_and_empty_advisory_preserves_base", "test_computation_search.ComputationContracts.test_full_target_not_just_known_samples"]
+      "tests": ["test_audit_numeric_scenarios.AuditNumericScenarioContracts.test_audit_export_keeps_model_declaration_for_pass_and_failure", "test_model_certificate_binding.ModelCertificateBinding.test_cost_50_limit_10_reproduction_is_not_accepted", "test_model_certificate_binding.ModelCertificateBinding.test_unavailable_declaration_is_an_unresolved_native_verdict", "test_final_binding_contracts.ProbeContracts.test_empty_required_probe_is_pending_and_empty_advisory_preserves_base", "test_computation_search.ComputationContracts.test_full_target_not_just_known_samples"]
     },
     {
       "id": "C-EXCLUDE",
@@ -29,13 +29,13 @@
       "id": "C-UNIQUE",
       "sources": ["search.py", "core.py", "interpretation.py", "_generation.py"],
       "docs": ["core_contracts.md", "set_interpretation.md"],
-      "tests": ["test_interpretation_status.InterpretationStatusTests.test_execution_error_is_undecided_not_a_uniqueness_proof", "test_search_queries.QueryTests.test_macro_absence_distinguishes_empty_catalogue", "test_execution_contracts.GenerationBoundaryTests.test_unknown_length_at_exact_limit_does_not_claim_exhaustion"]
+      "tests": ["test_audit_numeric_scenarios.AuditNumericScenarioContracts.test_exact_costs_cannot_collapse_to_a_more_expensive_tie", "test_audit_numeric_scenarios.AuditNumericScenarioContracts.test_exact_ratio_precedes_separated_pairs_in_scheduling", "test_audit_numeric_scenarios.AuditNumericScenarioContracts.test_rational_audit_export_and_invalid_costs", "test_interpretation_status.InterpretationStatusTests.test_execution_error_is_undecided_not_a_uniqueness_proof", "test_search_queries.QueryTests.test_macro_absence_distinguishes_empty_catalogue", "test_execution_contracts.GenerationBoundaryTests.test_unknown_length_at_exact_limit_does_not_claim_exhaustion"]
     },
     {
       "id": "C-UNDECIDED",
       "sources": ["search.py", "evaluation.py", "search_adapter.py", "search_lazy.py", "_query_review.py", "computation_search.py"],
       "docs": ["core_contracts.md", "search_lazy.md", "performance_lifecycle.md", "autonomous_computation.md"],
-      "tests": ["test_search_queries.QueryTests.test_partial_work_at_every_cutoff_is_conservative", "test_claim_boundaries.WorkAccountingTests.test_internal_failure_cannot_run_three_candidates_for_one_credit", "test_core_contract_review.IndependentQueryReview.test_absence_metadata_and_unknowns_against_independent_catalogue", "test_finite_replay.FiniteReplayContracts.test_lifecycle_costs_record_partial_updates_as_undecided", "test_computation_search.ComputationContracts.test_trial_limits_cannot_establish_absence_or_minimality"]
+      "tests": ["test_audit_numeric_scenarios.AuditNumericScenarioContracts.test_promoted_observables_preserve_declared_order_and_reject_sets", "test_audit_numeric_scenarios.AuditNumericScenarioContracts.test_unordered_certificates_fail_before_budget_or_iteration", "test_search_queries.QueryTests.test_partial_work_at_every_cutoff_is_conservative", "test_claim_boundaries.WorkAccountingTests.test_internal_failure_cannot_run_three_candidates_for_one_credit", "test_core_contract_review.IndependentQueryReview.test_absence_metadata_and_unknowns_against_independent_catalogue", "test_finite_replay.FiniteReplayContracts.test_lifecycle_costs_record_partial_updates_as_undecided", "test_computation_search.ComputationContracts.test_trial_limits_cannot_establish_absence_or_minimality"]
     },
     {
       "id": "C-LIVE",
@@ -53,7 +53,7 @@
       "id": "C-REPLAY",
       "sources": ["finite_replay.py", "versions.py", "search_session.py", "structural.py"],
       "docs": ["core_contracts.md", "finite_replay.md", "version_policy.md"],
-      "tests": ["test_finite_replay.FiniteReplayContracts.test_all_small_partial_tables_match_plain_state_machine", "test_finite_replay.FiniteReplayContracts.test_replay_in_new_process_with_different_hash_seeds", "test_finite_replay.FiniteReplayContracts.test_versioned_fixture_and_package_version_is_advisory", "test_finite_replay.FiniteReplayContracts.test_declaration_and_provenance_tampering_is_not_accepted", "test_finite_replay.FiniteReplayContracts.test_bounded_replay_does_not_promote_unknown", "test_review_hardening.ReviewHardening.test_replay_limits_are_independent_of_archive_requests"]
+      "tests": ["test_audit_numeric_scenarios.AuditNumericScenarioContracts.test_explicit_baseline_runs_once_and_retains_its_actions", "test_audit_numeric_scenarios.AuditNumericScenarioContracts.test_explicit_baseline_bundle_roundtrip", "test_finite_replay.FiniteReplayContracts.test_all_small_partial_tables_match_plain_state_machine", "test_finite_replay.FiniteReplayContracts.test_replay_in_new_process_with_different_hash_seeds", "test_finite_replay.FiniteReplayContracts.test_versioned_fixture_and_package_version_is_advisory", "test_finite_replay.FiniteReplayContracts.test_declaration_and_provenance_tampering_is_not_accepted", "test_finite_replay.FiniteReplayContracts.test_bounded_replay_does_not_promote_unknown", "test_review_hardening.ReviewHardening.test_replay_limits_are_independent_of_archive_requests"]
     },
     {
       "id": "C-COMPUTATION",

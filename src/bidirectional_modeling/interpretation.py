@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import replace
+from fractions import Fraction
 from typing import Iterable, Optional, Protocol, Sequence, Union
 
 from .core import (
@@ -173,12 +174,12 @@ def _select_experiment(candidates, experiments, observed):
                         for i, left in enumerate(signatures) for right in signatures[i+1:])
         if not guaranteed:
             continue
-        score = guaranteed / (1.0 + experiment.cost)
+        score = Fraction(guaranteed) / (1 + Fraction(experiment.cost))
         key = (score, separated, -experiment.cost)
         if best_key is None or key > best_key:
             best_key = key
             best = DiscriminatingQuery(experiment, tuple(sorted(allowed)),
-                allowed, guaranteed, separated, score)
+                allowed, guaranteed, separated, float(score))
     return best
 
 

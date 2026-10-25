@@ -104,7 +104,7 @@ class DeclaredFiniteModel:
     def simulate(self, context, horizon):
         _natural(horizon)
         interventions = context.interventions
-        if context.include_baseline:
+        if context.include_baseline and not any(i.name == 'baseline' for i in interventions):
             interventions = (Intervention('baseline'),) + interventions
         if not interventions:
             interventions = (Intervention('baseline'),)

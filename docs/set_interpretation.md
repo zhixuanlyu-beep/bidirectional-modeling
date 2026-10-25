@@ -47,6 +47,8 @@ result = engine.interpret(
 
 按调度分数、分离类对数、较低成本、实验名字顺序破同分。若没有实验保证排除任何类，则不提出实验；这不表示候选已被识别。域内但所有候选都禁止的结果一旦实际发生，会排除全部候选，表明需要重构候选空间。
 
+`Experiment.cost` 接受有限非负 `int`、`float`、`Fraction`，保留原值及类型；拒绝布尔值、字符串和无穷。调度按精确有理数比较收益比，浮点成本使用其已表示的二进制值，不猜测原始十进制意图。`selection_score` 只作浮点展示，极小值可显示为 0，不能据此重建实验排序。`Experiment.to_dict()` 以及查询/排除审计导出中的有理成本使用 `{"numerator": 1, "denominator": 3}`，整数和浮点仍为 JSON 数值；这是审计格式，不是实验对象的通用归档读取器。
+
 这些计数不是概率、熵或最优性证明。该解释层区分声明响应类；`ExperimentHypothesisSearch.next_experiment` 仍是面向宏观异义响应对的另一种明确任务政策。
 
 `equivalent_explanations` 仅列出在全部给定实验上具有相同显式允许集合的候选。未知声明不作为等价证据；相同声明也不证明真实结构相同或对未声明实验等价。
@@ -56,6 +58,8 @@ result = engine.interpret(
 候选按名字稳定展示，不按信念程度排序。证书提供 `verification.coverage` 场景覆盖率；探测证书的最小覆盖率可通过 `CandidateEvaluation.verification` 获取。具体数值要求的 `CheckResult.margin` 和 `tolerance` 保留原单位，不跨要求合成为稳健度或可信度评分。
 
 `SatisfactionCertificate.requirements_passed` 从非空已验证场景和全部检查结果派生，`satisfied` 再要求 `complete`；这两个属性不能通过构造或 `dataclasses.replace` 单独赋值。完整证书进入实现或解释链前须匹配当前规范、模型名称、情境及成本上限；解释还核对具体轨迹批次。该检查约束回执的适用范围，不认证任意自定义评估器的内部算法。
+
+解释结果的通过及失败审计记录均保留 `model_declaration_fingerprint`，与观测轨迹身份 `model_fingerprint` 分别展示。它们用于定位绑定的声明和证据，不把审计 JSON 升级为可执行证书。
 
 `Realizer` 的默认帕累托比较仅使用显式 `ModelMetrics`，不使用声明可靠度或验证分数。指标语义仍由任务方负责；例如 risk 不应隐含为未经声明的概率。
 

@@ -585,6 +585,7 @@ class ExperimentHypothesisSearch:
         if max_replays is not None:
             _natural(max_replays)
         evidence = ordered_tuple(evidence)
+        certificates = ordered_tuple(certificates)
         compatible, pruned, rejected = [], [], []
         reasons = {}
         active = []
